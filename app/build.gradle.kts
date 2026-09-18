@@ -29,17 +29,41 @@ if (!keystorePropsFile.exists()) {
     // 报错还会被包成难以定位的 "keystore password was incorrect"（密码错、别名错、
     // 占位符未替换三者在 keytool 层长得一模一样）。此处直接失败可把反馈压到几秒。
     //
-    // 但**只在本次真的请求了 release 任务时才失败**：debug 构建不需要任何签名凭据，
-    // 若一并挡住，贡献者 clone 下来连 assembleDebug 都跑不了，得不偿失。
+    // 但下列两种情况下**绝不能失败**，否则会把本来能成功的构建挡死：
+    //
+    // ① 本次请求的不是 release 任务 —— debug 构建不需要任何签名凭据，
+    //    若一并挡住，贡献者 clone 下来连 assembleDebug 都跑不了。
+    //
+    // ② Android Studio 的「Generate Signed Bundle / APK」签名向导在驱动本次构建 ——
+    //    向导**不读本文件**，而是为这一次构建注入 android.injected.signing.*，
+    //    并由 AGP 用它覆盖项目里声明的 signingConfig（这正是向导的意义：
+    //    即使项目自带一份签名配置也能被覆盖）。此时凭据由向导提供，
+    //    keystore.properties 里是否还留着占位符与本次构建**无关**，必须放行。
+    //
+    // ⚠️ 属性名是**点号**分隔（`store.password` 而非 `storePassword`）——
+    // 取自 AGP 内部常量，已在 gradle 缓存里反查确认：
+    //   android.injected.signing.store.file / store.password /
+    //   key.alias / key.password（另有 store.type、v1、v2）
+    val injectedSigning = gradle.startParameter.projectProperties
+    val wizardDriven = listOf(
+        "android.injected.signing.store.password",
+        "android.injected.signing.key.alias",
+        "android.injected.signing.key.password",
+    ).all { !injectedSigning[it].isNullOrBlank() }
+
     val pending = listOf("storePassword", "keyAlias", "keyPassword")
         .filter { keystoreProps.getProperty(it)?.contains("<<") == true }
     val wantsRelease = gradle.startParameter.taskNames.any {
         it.contains("Release", ignoreCase = true) && !it.contains("Debug", ignoreCase = true)
     }
-    if (pending.isNotEmpty() && wantsRelease) {
+    if (pending.isNotEmpty() && wantsRelease && !wizardDriven) {
         throw GradleException(
-            "keystore.properties 中 ${pending.joinToString(" / ")} 仍为占位符，release 签名必定失败。" +
-                "请填入真实值；别名可用 keytool -list -v -keystore <路径> -storepass <store 密码> 查询。"
+            "keystore.properties 中 ${pending.joinToString(" / ")} 仍为占位符，命令行 release 签名必定失败。\n" +
+                "二选一即可：\n" +
+                "  1) 填入真实值。别名可用 " +
+                "keytool -list -v -keystore <storeFile 路径> -storepass <store 密码> 查询；\n" +
+                "  2) 改用 Android Studio 的「Build → Generate Signed Bundle / APK」向导，" +
+                "它自带凭据输入、不读本文件，因此无需修改这里。"
         )
     }
 }
