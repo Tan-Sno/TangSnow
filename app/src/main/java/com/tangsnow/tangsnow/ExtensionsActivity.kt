@@ -411,6 +411,10 @@ class ExtensionsActivity : AppCompatActivity() {
             binding.customMethods.isVisible = open
             binding.arrowCustom.text = if (open) "▾" else "▸"
         }
+        // 前往官方扩展商店：独立可点，不触发上面那一行的展开/收起（子 View 可点会拦下事件）
+        binding.linkOfficialStore.setOnClickListener {
+            BrowserOpener.open(this, ExtensionCatalog.OFFICIAL_STORE_URL)
+        }
         fun setPanel(panel: View?, arrow: TextView, open: Boolean) {
             panel?.isVisible = open
             arrow.text = if (open) "▾" else "▸"

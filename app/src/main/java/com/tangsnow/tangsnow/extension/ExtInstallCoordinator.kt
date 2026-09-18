@@ -36,12 +36,14 @@ import java.util.concurrent.ConcurrentHashMap
  *    （按 [Source.candidateUrls] 逐候选尝试，每个 `callTimeout(45s)`），
  *    再 `install(file://, INSTALLATION_METHOD_FROM_FILE)`（Mozilla 签名仍由内核校验，合规不变）。
  *
- * ## 真正踩过的坑是「地址形式」，不是安装通道
- * AMO 有两种供包地址，真机实测差异极大：
- *  - `…/downloads/latest/<slug>/addon-<id>-latest.xpi` —— AMO 直接供包，**可下载**；
- *  - API 返回的 `…/downloads/file/<id>/<name>.xpi` —— 会跳 CDN，某些网络下**黑洞**
- *    （连接既不返回也不断开）⇒ 内核下载零回应、自建下载连超时都出不来。
- * 因此 [ExtensionCatalog.bestUrl] **优先 latest 形式**，API 形式仅作最后备选。
+ * ## 两个候选 URL 其实指向同一端点（2026-09-18 实测更正）
+ * AMO 的两种供包地址**不是两条独立通路**：
+ *  - `…/downloads/latest/<slug>/addon-<id>-latest.xpi` —— 会 **302** 跳到下面那个地址；
+ *  - `…/downloads/file/<fileId>/<name>.xpi` —— 302 的落点。
+ * 两者**同域名、同端点**，只差一次跳转，**不具备网络冗余**。
+ * （原注释称前者「AMO 直接供包可下载」、后者「跳 CDN 会黑洞」，与实测不符。）
+ * 因此 [ExtensionCatalog.bestUrl] 优先 latest 的真正理由是：它不依赖 API 解析结果、
+ * 且始终指向最新版；真正的第二条通路是上文第 ② 步「交给内核安装」。
  *
  * ## 三条必须守住的排障纪律（血泪换来的）
  * 1. **排查网络问题必须用出问题的那台设备验证** —— PC 端 curl 通不代表手机能通；
@@ -75,13 +77,12 @@ class ExtInstallCoordinator(
         open val slug: String? = null
 
         /**
-         * 自建下载可依次尝试的官方直链（按优先级）。
+         * 自建下载可依次尝试的官方直链。
          *
-         * 为什么要"多个候选"：AMO 有两种供包地址——
-         * 目录里拼出的 `…/downloads/latest/<slug>/addon-<id>-latest.xpi`（AMO 直接供包），
-         * 与 API 返回的 `…/downloads/file/<id>/<name>.xpi`（常跳 CDN）。
-         * 实测某些网络下后者会**慢滴/黑洞**（连着既不返回也不断开），而前者直连可用，
-         * 故 **latest 形式优先**、API 形式作备选。
+         * ⚠️ 这两个候选**不是两条独立通路**（2026-09-18 实测）：目录里拼出的
+         * `…/downloads/latest/<slug>/addon-<id>-latest.xpi` 会 302 跳到 API 返回的
+         * `…/downloads/file/<fileId>/<name>.xpi`，**同域名同端点**，只差一次跳转。
+         * 保留两者只为「API 解析失败时仍有可用地址」，并非网络冗余。
          */
         open val candidateUrls: List<String> = emptyList()
 
