@@ -24,12 +24,22 @@ if (!keystorePropsFile.exists()) {
             "该产物不可分发、不可上架。"
     )
 } else {
+    // 占位符检测必须在**配置期**硬失败，不能只警告：
+    // 若放行，错误会推迟到几分钟后的 packageRelease 深处才炸，
+    // 报错还会被包成难以定位的 "keystore password was incorrect"（密码错、别名错、
+    // 占位符未替换三者在 keytool 层长得一模一样）。此处直接失败可把反馈压到几秒。
+    //
+    // 但**只在本次真的请求了 release 任务时才失败**：debug 构建不需要任何签名凭据，
+    // 若一并挡住，贡献者 clone 下来连 assembleDebug 都跑不了，得不偿失。
     val pending = listOf("storePassword", "keyAlias", "keyPassword")
         .filter { keystoreProps.getProperty(it)?.contains("<<") == true }
-    if (pending.isNotEmpty()) {
-        logger.warn(
-            "keystore.properties 中 ${pending.joinToString(" / ")} 仍为占位符，" +
-                "release 签名必定失败；别名可用 keytool -list 查询。"
+    val wantsRelease = gradle.startParameter.taskNames.any {
+        it.contains("Release", ignoreCase = true) && !it.contains("Debug", ignoreCase = true)
+    }
+    if (pending.isNotEmpty() && wantsRelease) {
+        throw GradleException(
+            "keystore.properties 中 ${pending.joinToString(" / ")} 仍为占位符，release 签名必定失败。" +
+                "请填入真实值；别名可用 keytool -list -v -keystore <路径> -storepass <store 密码> 查询。"
         )
     }
 }
