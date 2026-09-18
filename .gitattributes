@@ -1,0 +1,43 @@
+# ============================================================
+# 换行符规范化
+#
+# 为什么现在就加：本机 core.autocrlf=true，而仓库里既有 CRLF 也有 LF 文件。
+# 若不在**首次提交前**定下规则，之后任何一次 checkout 都可能把工作区文件改写成
+# CRLF，导致「什么都没改却整个仓库显示已修改」——做大规模重构时这类噪声会
+# 淹没真正的 diff，非常危险。规则一旦提交，越早越省事（晚加要多一次全库重归一化提交）。
+#
+# 规则：仓库内一律存 LF；工作区检出也用 LF，与 Android Studio 及各平台工具一致。
+# 例外：Windows 批处理脚本必须 CRLF，否则 cmd 解析异常。
+# ============================================================
+* text=auto eol=lf
+
+# ---- Windows 批处理：必须 CRLF ----
+*.bat text eol=crlf
+gradlew.bat text eol=crlf
+
+# ---- 二进制：禁止换行转换与文本 diff ----
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.bmp binary
+*.jar binary
+*.aar binary
+*.zip binary
+*.apk binary
+*.aab binary
+*.so binary
+*.dex binary
+*.jks binary
+*.keystore binary
+*.p12 binary
+*.pepk binary
+*.pem binary
+*.der binary
+
+# ---- 生成物：在 diff 与语言统计里显式标注，避免污染 review ----
+# gradle wrapper 脚本是自动生成的，但对仓库必需，故仍跟踪
+gradlew text eol=lf
+*.pro text

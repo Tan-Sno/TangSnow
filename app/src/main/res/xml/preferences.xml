@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/prefs_cat_general">
+
+        <Preference
+            app:key="engine_manager"
+            app:title="@string/pref_engine_title"
+            app:summary="@string/pref_engine_summary" />
+
+        <ListPreference
+            app:key="theme"
+            app:title="@string/pref_theme_title"
+            app:entries="@array/theme_entries"
+            app:entryValues="@array/theme_values"
+            app:defaultValue="system"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            app:key="font_size"
+            app:title="@string/pref_font_size_title"
+            app:entries="@array/font_size_entries"
+            app:entryValues="@array/font_size_values"
+            app:defaultValue="1.0"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            app:key="desktop_mode"
+            app:title="@string/pref_desktop_mode_title"
+            app:summary="@string/pref_desktop_mode_summary"
+            app:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            app:key="javascript"
+            app:title="@string/pref_javascript_title"
+            app:summary="@string/pref_javascript_summary"
+            app:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            app:key="session_restore_enabled"
+            app:title="@string/pref_session_restore_title"
+            app:summary="@string/pref_session_restore_summary"
+            app:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            app:key="toolbar_bottom"
+            app:title="@string/pref_toolbar_bottom_title"
+            app:summary="@string/pref_toolbar_bottom_summary"
+            app:defaultValue="false" />
+
+        <SwitchPreferenceCompat
+            app:key="ask_before_download"
+            app:title="@string/pref_ask_download_title"
+            app:summary="@string/pref_ask_download_summary"
+            app:defaultValue="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/prefs_cat_privacy">
+
+        <SwitchPreferenceCompat
+            app:key="private_mode"
+            app:title="@string/pref_private_mode_title"
+            app:summary="@string/pref_private_mode_summary"
+            app:defaultValue="false" />
+
+        <!-- 跟踪保护：分档（标准/严格/自定义），细粒度配置在内核运行时启动时注入。
+             useSimpleSummaryProvider 会直接展示所选档位，故不设静态 summary -->
+        <ListPreference
+            app:key="tracking_mode"
+            app:title="@string/pref_tracking_mode_title"
+            app:entries="@array/tracking_mode_entries"
+            app:entryValues="@array/tracking_mode_values"
+            app:defaultValue="standard"
+            app:useSimpleSummaryProvider="true" />
+
+        <!-- 自定义档的分项开关：非自定义档时置灰（见 SettingsFragment） -->
+        <PreferenceCategory
+            app:key="tracking_custom"
+            app:title="@string/prefs_cat_tracking_custom">
+
+            <SwitchPreferenceCompat
+                app:key="tracking_custom_content"
+                app:title="@string/tracking_custom_content_title"
+                app:summary="@string/tracking_custom_content_summary"
+                app:defaultValue="true" />
+
+            <SwitchPreferenceCompat
+                app:key="tracking_custom_fingerprint"
+                app:title="@string/tracking_custom_fp_title"
+                app:summary="@string/tracking_custom_fp_summary"
+                app:defaultValue="true" />
+
+            <SwitchPreferenceCompat
+                app:key="tracking_custom_crypto"
+                app:title="@string/tracking_custom_crypto_title"
+                app:summary="@string/tracking_custom_crypto_summary"
+                app:defaultValue="true" />
+
+            <SwitchPreferenceCompat
+                app:key="tracking_custom_cookie"
+                app:title="@string/tracking_custom_cookie_title"
+                app:summary="@string/tracking_custom_cookie_summary"
+                app:defaultValue="false" />
+        </PreferenceCategory>
+
+        <!-- 内核自带、可独立调整的隐私能力：与跟踪保护档位无关 -->
+        <SwitchPreferenceCompat
+            app:key="privacy_gpc_enabled"
+            app:title="@string/pref_gpc_title"
+            app:summary="@string/pref_gpc_summary"
+            app:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            app:key="privacy_param_stripping"
+            app:title="@string/pref_param_stripping_title"
+            app:summary="@string/pref_param_stripping_summary"
+            app:defaultValue="true" />
+
+        <!-- 防截屏：默认关闭。FLAG_SECURE 对用户自己也生效（自己截不了图），
+             属"看敏感页面时才需要"的能力，不该默认剥夺用户截图能力 -->
+        <SwitchPreferenceCompat
+            app:key="secure_screen"
+            app:title="@string/pref_secure_screen_title"
+            app:summary="@string/pref_secure_screen_summary"
+            app:defaultValue="false" />
+
+        <Preference
+            app:key="clear_data"
+            app:title="@string/pref_clear_data_title"
+            app:summary="@string/pref_clear_data_summary" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/prefs_cat_advanced">
+
+        <Preference
+            app:key="set_default_browser"
+            app:title="@string/pref_default_browser_title"
+            app:summary="@string/pref_default_browser_summary" />
+
+        <ListPreference
+            app:key="app_locale"
+            app:title="@string/pref_language_title"
+            app:summary="@string/pref_language_summary"
+            app:entries="@array/language_entries"
+            app:entryValues="@array/language_values"
+            app:defaultValue="" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/prefs_cat_about">
+
+        <Preference
+            app:key="about_tangsnow"
+            app:title="@string/pref_about_title"
+            app:summary="@string/pref_about_summary" />
+
+        <Preference
+            app:key="check_update"
+            app:title="@string/pref_check_update_title"
+            app:summary="@string/pref_check_update_summary" />
+
+        <Preference
+            app:key="version"
+            app:title="@string/pref_version_title"
+            app:enabled="false" />
+
+        <Preference
+            app:key="open_source"
+            app:title="@string/pref_open_source_title"
+            app:summary="@string/pref_open_source_summary" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

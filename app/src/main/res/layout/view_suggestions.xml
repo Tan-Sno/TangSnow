@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 地址栏联想面板：显示本地历史/书签匹配 + 末行「用当前引擎搜索」，点击即跳转 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/suggestionPanel"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="14dp"
+    android:orientation="vertical"
+    android:background="@drawable/bg_search_bar"
+        android:clipToOutline="true"
+    tools:targetApi="31"
+    android:elevation="6dp"
+    android:paddingVertical="2dp"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:id="@+id/suggestionList"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+</LinearLayout>

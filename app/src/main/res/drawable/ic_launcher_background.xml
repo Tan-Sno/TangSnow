@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    棠雪启动图标背景：初雪冷白 → 淡蓝的对角渐变（蓝白基调）。
+
+    取色与 app 内一致：page_bg（纯白）→ accent_container（Blue 100 #D3E3FD）。
+    雪花前景为强调色蓝，落在该渐变上对比充分；图标是品牌资产，
+    不随应用内明暗主题变化，故此处固定引用浅色色值。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:type="linear">
+                <item android:color="#FFFFFFFF" android:offset="0.0" />
+                <item android:color="#FFD3E3FD" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- 落雪点缀 -->
+    <path android:pathData="M22,26 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 Z" android:fillColor="#FF1A73E8" android:fillAlpha="0.45" />
+    <path android:pathData="M84,80 a2.4,2.4 0 1,0 4.8,0 a2.4,2.4 0 1,0 -4.8,0 Z" android:fillColor="#FF1A73E8" android:fillAlpha="0.38" />
+    <path android:pathData="M82,22 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0 Z" android:fillColor="#FF1A73E8" android:fillAlpha="0.35" />
+    <path android:pathData="M20,86 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" android:fillColor="#FF1A73E8" android:fillAlpha="0.38" />
+</vector>

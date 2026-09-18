@@ -1,0 +1,53 @@
+*.iml
+.gradle
+/kotlin
+.kotlin
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+# IDE 本地化文件：不同 IDE 版本会反复改写，不该进公开仓库
+# （`.idea/codeStyles/` 刻意保留 —— 对外贡献者需要同一套代码风格）
+/.idea/misc.xml
+/.idea/compiler.xml
+/.idea/gradle.xml
+/.idea/vcs.xml
+/.idea/runConfigurations.xml
+/.idea/deploymentTargetSelector.xml
+/.idea/AndroidProjectSystem.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# 构建日志等临时产物
+*.log
+.workbuddy-tmp/
+
+# ============================================================
+# 签名密钥与发布凭据 —— 绝不允许进入版本库
+# 私钥一旦进入 git 历史即无法彻底删除；若推送远程等于
+# 公开签名私钥，他人可签发伪装成本应用的 APK，只能换包名补救。
+# ============================================================
+*.jks
+*.keystore
+*.p12
+*.pepk
+*.pem
+*.der
+keystore.properties
+signing.properties
+signing/
+/keystore/
+/release/
+# Android Studio「Generate Signed App Bundle or APK」的默认输出目录。
+# 注意上面那行 `/release/` 开头的斜杠表示**锚定仓库根目录**，只匹配 TangSnow/release/，
+# 管不到 app/release/ —— 而那里躺着 3 个 APK（约 550MB）与 42MB 的 mapping.txt，
+# 一次 `git add .` 就会把它们整个推上去且永久留在历史里，故必须单独忽略。
+/app/release/
+

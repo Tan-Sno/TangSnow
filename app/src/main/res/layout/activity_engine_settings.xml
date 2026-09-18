@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true"
+    android:background="?attr/colorSurface">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/title_bar_height"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/title_bar_padding_h"
+        android:background="?attr/colorSurfaceVariant">
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="@dimen/title_action_size"
+            android:layout_height="@dimen/title_action_size"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="?attr/colorOnSurfaceVariant"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/btn_back" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/engine_manager_title"
+            android:textSize="@dimen/title_text_size"
+            android:textColor="?attr/colorOnSurface" />
+
+        <View
+            android:layout_width="@dimen/title_action_size"
+            android:layout_height="1dp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="14dp"
+        android:text="@string/engine_settings_help"
+        android:textSize="12sp"
+        android:textColor="?attr/colorOnSurfaceVariant" />
+
+    <ListView
+        android:id="@+id/engineList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="?attr/colorOutlineVariant"
+        android:dividerHeight="1dp" />
+
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/btnAddEngine"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="?attr/selectableItemBackground"
+        android:src="@drawable/ic_add"
+        app:tint="?attr/colorPrimary"
+        android:scaleType="centerInside"
+        android:contentDescription="@string/btn_custom_engine" />
+
+</LinearLayout>

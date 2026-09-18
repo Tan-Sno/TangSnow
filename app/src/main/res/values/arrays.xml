@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主题 -->
+    <string-array name="theme_entries">
+        <item>跟随系统</item>
+        <item>浅色</item>
+        <item>深色</item>
+    </string-array>
+    <string-array name="theme_values">
+        <item>system</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+
+    <!-- 字体大小 -->
+    <string-array name="font_size_entries">
+        <item>小</item>
+        <item>正常</item>
+        <item>大</item>
+        <item>特大</item>
+    </string-array>
+    <string-array name="font_size_values">
+        <item>0.85</item>
+        <item>1.0</item>
+        <item>1.15</item>
+        <item>1.35</item>
+    </string-array>
+
+    <!-- 跟踪保护模式 -->
+    <string-array name="tracking_mode_entries">
+        <item>关闭</item>
+        <item>标准（推荐）</item>
+        <item>严格</item>
+        <item>自定义</item>
+    </string-array>
+    <string-array name="tracking_mode_values">
+        <item>off</item>
+        <item>standard</item>
+        <item>strict</item>
+        <item>custom</item>
+    </string-array>
+
+    <!-- 语言 -->
+    <string-array name="language_entries">
+        <item>跟随系统</item>
+        <item>中文</item>
+        <item>English</item>
+    </string-array>
+    <string-array name="language_values">
+        <item></item>
+        <item>zh</item>
+        <item>en</item>
+    </string-array>
+    <!-- 扩展权限 API 名 → 人话说明（"api|说明" 成对；中英各一份，键集合必须一致） -->
+    <string-array name="extension_api_permissions">
+        <item>activeTab|临时访问当前打开的标签页</item>
+        <item>alarms|安排定时任务</item>
+        <item>bookmarks|读取和修改书签</item>
+        <item>browserSettings|修改浏览器设置</item>
+        <item>browsingData|清除浏览数据</item>
+        <item>clipboardRead|读取剪贴板内容</item>
+        <item>clipboardWrite|向剪贴板写入内容</item>
+        <item>contentSettings|调整网站的内容设置</item>
+        <item>contextMenus|在长按/右键菜单中添加项目</item>
+        <item>cookies|读取和修改 Cookie</item>
+        <item>debugger|调试网页</item>
+        <item>declarativeNetRequest|按规则拦截或修改网络请求</item>
+        <item>downloads|管理浏览器的下载</item>
+        <item>downloads.open|打开系统已下载的文件</item>
+        <item>geolocation|获取位置信息</item>
+        <item>history|读取和修改浏览历史</item>
+        <item>identity|连接第三方账号服务</item>
+        <item>idle|检测设备是否空闲</item>
+        <item>management|管理浏览器内的其它扩展</item>
+        <item>nativeMessaging|与设备上的本机程序通信</item>
+        <item>notifications|显示系统通知</item>
+        <item>privacy|读取浏览器的隐私设置</item>
+        <item>proxy|控制浏览器使用的网络代理</item>
+        <item>scripting|向网页注入或读取脚本与样式</item>
+        <item>search|读取搜索建议</item>
+        <item>sessions|读取最近关闭的标签页与窗口</item>
+        <item>storage|保存该扩展自身的设置与数据</item>
+        <item>tabs|读取标签页相关信息</item>
+        <item>theme|修改浏览器的外观主题</item>
+        <item>topSites|读取您最常访问的网站</item>
+        <item>unlimitedStorage|使用不受限的本地数据存储</item>
+        <item>webNavigation|观察网页的打开与跳转过程</item>
+        <item>webRequest|查看网页发出的网络请求</item>
+        <item>webRequestBlocking|拦截并修改网页发出的网络请求</item>
+        <item>userData|处理您在使用该扩展时产生的数据</item>
+    </string-array>
+
+</resources>

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme -->
+    <string-array name="theme_entries">
+        <item>System default</item>
+        <item>Light</item>
+        <item>Dark</item>
+    </string-array>
+    <string-array name="theme_values">
+        <item>system</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+
+    <!-- Font size -->
+    <string-array name="font_size_entries">
+        <item>Small</item>
+        <item>Normal</item>
+        <item>Large</item>
+        <item>Largest</item>
+    </string-array>
+    <string-array name="font_size_values">
+        <item>0.85</item>
+        <item>1.0</item>
+        <item>1.15</item>
+        <item>1.35</item>
+    </string-array>
+
+    <!-- Language -->
+    <string-array name="language_entries">
+        <item>System default</item>
+        <item>中文</item>
+        <item>English</item>
+    </string-array>
+    <string-array name="language_values">
+        <item></item>
+        <item>zh</item>
+        <item>en</item>
+    </string-array>
+
+    <!-- Tracking protection mode -->
+    <string-array name="tracking_mode_entries">
+        <item>Off</item>
+        <item>Standard (recommended)</item>
+        <item>Strict</item>
+        <item>Custom</item>
+    </string-array>
+    <string-array name="tracking_mode_values">
+        <item>off</item>
+        <item>standard</item>
+        <item>strict</item>
+        <item>custom</item>
+    </string-array>
+    <!-- WebExtension API name -> plain-language description ("api|text" pairs; keys must match the Chinese file) -->
+    <string-array name="extension_api_permissions">
+        <item>activeTab|Temporarily access the currently open tab</item>
+        <item>alarms|Schedule timed tasks</item>
+        <item>bookmarks|Read and modify bookmarks</item>
+        <item>browserSettings|Change browser settings</item>
+        <item>browsingData|Clear browsing data</item>
+        <item>clipboardRead|Read clipboard contents</item>
+        <item>clipboardWrite|Write to the clipboard</item>
+        <item>contentSettings|Adjust per-site content settings</item>
+        <item>contextMenus|Add items to the long-press / right-click menu</item>
+        <item>cookies|Read and modify cookies</item>
+        <item>debugger|Debug web pages</item>
+        <item>declarativeNetRequest|Block or modify network requests by rules</item>
+        <item>downloads|Manage browser downloads</item>
+        <item>downloads.open|Open files already downloaded on the device</item>
+        <item>geolocation|Access your location</item>
+        <item>history|Read and modify browsing history</item>
+        <item>identity|Connect to third-party account services</item>
+        <item>idle|Detect whether the device is idle</item>
+        <item>management|Manage other extensions in the browser</item>
+        <item>nativeMessaging|Communicate with native programs on the device</item>
+        <item>notifications|Show system notifications</item>
+        <item>privacy|Read the browser\'s privacy settings</item>
+        <item>proxy|Control the proxy the browser uses</item>
+        <item>scripting|Inject or read scripts and styles in pages</item>
+        <item>search|Read search suggestions</item>
+        <item>sessions|Read recently closed tabs and windows</item>
+        <item>storage|Store this extension\'s own settings and data</item>
+        <item>tabs|Read information about tabs</item>
+        <item>theme|Change the browser\'s visual theme</item>
+        <item>topSites|Read the sites you visit most</item>
+        <item>unlimitedStorage|Use unlimited local storage</item>
+        <item>webNavigation|Observe how pages open and navigate</item>
+        <item>webRequest|View network requests made by pages</item>
+        <item>webRequestBlocking|Intercept and modify network requests from pages</item>
+        <item>userData|Handle data produced while you use this extension</item>
+    </string-array>
+
+</resources>

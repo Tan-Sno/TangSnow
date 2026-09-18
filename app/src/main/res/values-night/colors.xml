@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    棠雪配色（深色）—— 蓝色体系的夜间映射。
+
+    映射规则遵循 M3：浅色 primary = tone40 → 夜间 primary = tone80；
+    primaryContainer tone90 → tone30。因此 #1A73E8 在夜间取 #8AB4F8
+    （与深底 #1F1F1F 对比度约 7.7:1，超 WCAG AAA）。
+
+    注：品牌识别色（tile_* / ext_avatar_*）刻意不在此定义 —— 它们不应随明暗主题漂移，
+    由 values/colors.xml 统一提供。
+-->
+<resources>
+
+    <!-- ============ 强调色 ============ -->
+    <color name="accent">#8AB4F8</color>
+    <color name="accent_muted">#9AA0A6</color>
+    <color name="accent_container">#0B3A75</color>
+    <color name="on_accent">#0A2E63</color>
+    <color name="on_accent_container">#D3E3FD</color>
+
+    <!-- ============ 页面底色 ============ -->
+    <color name="page_bg">#1F1F1F</color>
+    <color name="on_page">#E8EAED</color>
+
+    <!-- ============ M3 语义补充 ============ -->
+    <color name="surface_variant">#2D2E31</color>
+    <color name="on_surface_variant">#9AA0A6</color>
+    <color name="secondary_container">#2D2E31</color>
+    <color name="on_secondary_container">#E8EAED</color>
+    <color name="outline">#8E9099</color>
+    <color name="outline_variant">#44474E</color>
+    <color name="error">#FFB4AB</color>
+    <color name="on_error">#690005</color>
+    <color name="error_container">#93000A</color>
+    <color name="on_error_container">#FFDAD6</color>
+    <color name="surface_container_low">#1B1C1E</color>
+    <color name="surface_container">#232427</color>
+    <color name="surface_container_high">#2A2B2F</color>
+
+    <!-- ============ 首页「棠雪」风格：墨蓝底 → 更深 ============ -->
+    <color name="home_bg_top">#15181D</color>
+    <color name="home_bg_bottom">#0F1114</color>
+    <color name="home_blob_accent">#168AB4F8</color>
+    <color name="home_blob_cool">#1290B4E8</color>
+    <color name="home_blob_transparent">#008AB4F8</color>
+    <color name="home_wordmark">#E8EAED</color>
+    <color name="home_tagline">#9AA0A6</color>
+
+    <!-- ============ 首页「薄雾」风格：深灰蓝 ============ -->
+    <color name="mist_bg_top">#15181D</color>
+    <color name="mist_bg_bottom">#111418</color>
+    <color name="mist_blob_cool">#1290B4E8</color>
+    <color name="mist_blob_transparent">#0090B4E8</color>
+
+    <!-- ============ 云母 / 玻璃层（深色） ============ -->
+    <color name="chrome_bar_bg">#F21B1D22</color>
+    <color name="sheet_panel_bg">#F01D2026</color>
+    <color name="overlay_panel_bg">#F2191C22</color>
+
+    <!-- ============ 标签页玻璃图标（描边加亮，深色主题下更清晰） ============ -->
+    <color name="glass_fill">#3D8AB4F8</color>
+    <color name="glass_stroke">#BFD3E3FD</color>
+
+    <!-- ============ 控件中性色 ============ -->
+    <color name="style_stroke">#3D9AA0A6</color>
+    <color name="accent_disabled">#3D9AA0A6</color>
+    <color name="avatar_default">#7A8FA6</color>
+</resources>

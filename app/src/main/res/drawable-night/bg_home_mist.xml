@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 首页背景（薄雾风格，深色）：同名色彩资源经 values-night 自动切换 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="@color/mist_bg_top"
+                android:endColor="@color/mist_bg_bottom" />
+        </shape>
+    </item>
+    <item android:left="-140dp" android:bottom="-120dp">
+        <shape android:shape="oval">
+            <size
+                android:width="380dp"
+                android:height="380dp" />
+            <gradient
+                android:type="radial"
+                android:gradientRadius="190dp"
+                android:startColor="@color/mist_blob_cool"
+                android:endColor="@color/mist_blob_transparent" />
+        </shape>
+    </item>
+</layer-list>

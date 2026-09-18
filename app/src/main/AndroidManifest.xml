@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- 相机仅在扫码时按需申请；无摄像头设备（含部分 ChromeOS）可正常安装 -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+    <application
+        android:name=".TangSnowApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.TangSnow">
+
+        <!-- 启动入口 = 隐私同意页：未同意或政策更新前不得进入浏览器主界面 -->
+        <activity
+            android:name=".ConsentActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.TangSnow">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:supportsPictureInPicture="true"
+            android:theme="@style/Theme.TangSnow">
+            <!-- 默认浏览器能力：系统点击 http/https 链接可调起棠雪（配合 ROLE_BROWSER） -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TangSnow" />
+
+        <activity
+            android:name=".LibraryActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TangSnow" />
+
+        <activity
+            android:name=".EngineSettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TangSnow" />
+
+        <activity
+            android:name=".ExtensionsActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Theme.TangSnow" />
+
+        <activity
+            android:name=".HomeCustomizeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TangSnow" />
+
+        <activity
+            android:name=".AboutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TangSnow" />
+
+        <activity
+            android:name=".LegalActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TangSnow" />
+
+        <!-- 二维码扫描（ZXing Embed 自带取景页；右下角含“相册识别”按钮） -->
+        <activity
+            android:name="com.journeyapps.barcodescanner.CaptureActivity"
+            android:exported="false"
+            android:screenOrientation="fullSensor"
+            tools:ignore="DiscouragedApi"
+            tools:replace="android:screenOrientation" />
+
+        <activity
+            android:name=".ui.ScanImageActivity"
+            android:exported="false"
+            android:screenOrientation="fullSensor"
+            tools:ignore="DiscouragedApi" />
+
+        <!--
+            下载文件对外「打开 / 分享」的唯一出口。
+            Android 7.0 起直接传 file:// 给外部应用会抛 FileUriExposedException，
+            故统一以 content:// + 按次读取授权交付；authority 跟随 applicationId，
+            避免多环境安装冲突。不申请任何存储权限，守住「仅 INTERNET + CAMERA」的承诺。
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    棠雪配色（浅色）—— Google 亮蓝体系（蓝白色调）。
+
+    设计依据：
+      1. Material Design 3 色彩系统：种子色 → 色调板 → 语义角色；
+         浅色 primary = tone40、primaryContainer = tone90。
+      2. Google Blue 体系：主色 Blue 600 #1A73E8，与白字对比度 4.52:1（WCAG AA 正文达标）。
+      3. 命名一律用**语义角色**（accent / page_bg / blob_*），不再用「作用位置」命名
+         （旧名 tab_active 曾被 5 个与标签页无关的模块引用，属误命名，已收敛为 accent）。
+
+    深浅两套见 values-night/colors.xml；品牌色（瓦片、扩展头像）刻意只在浅色定义，
+    因为它们是**品牌识别色**，不应随明暗主题漂移。
+-->
+<resources>
+
+    <!-- ============ 强调色 ============ -->
+    <color name="accent">#1A73E8</color>
+    <color name="accent_muted">#5F6368</color>
+    <color name="accent_container">#D3E3FD</color>
+    <color name="on_accent">#FFFFFF</color>
+    <color name="on_accent_container">#174EA6</color>
+
+    <!-- ============ 页面底色 ============ -->
+    <color name="page_bg">#FFFFFF</color>
+    <color name="on_page">#1F1F1F</color>
+
+    <!-- ============ M3 语义补充 ============ -->
+    <color name="surface_variant">#F1F3F4</color>
+    <color name="on_surface_variant">#5F6368</color>
+    <color name="secondary_container">#E8EAED</color>
+    <color name="on_secondary_container">#1F1F1F</color>
+    <color name="outline">#74777F</color>
+    <color name="outline_variant">#C4C6D0</color>
+    <color name="error">#BA1A1A</color>
+    <color name="on_error">#FFFFFF</color>
+    <color name="error_container">#FFDAD6</color>
+    <color name="on_error_container">#410002</color>
+    <color name="surface_container_low">#F7F9FC</color>
+    <color name="surface_container">#F1F5FC</color>
+    <color name="surface_container_high">#EAF0F9</color>
+
+    <!-- ============ 首页「棠雪」风格：冷白雪 → 淡蓝 ============ -->
+    <color name="home_bg_top">#FFFFFF</color>
+    <color name="home_bg_bottom">#EAF2FE</color>
+    <color name="home_blob_accent">#141A73E8</color>
+    <color name="home_blob_cool">#1490B4E8</color>
+    <color name="home_blob_transparent">#001A73E8</color>
+    <color name="home_wordmark">#1F1F1F</color>
+    <color name="home_tagline">#5F6368</color>
+
+    <!-- ============ 首页「薄雾」风格：白 → 冷灰蓝 ============ -->
+    <color name="mist_bg_top">#FFFFFF</color>
+    <color name="mist_bg_bottom">#E8EEF7</color>
+    <color name="mist_blob_cool">#1490B4E8</color>
+    <color name="mist_blob_transparent">#0090B4E8</color>
+
+    <!-- ============ 云母 / 玻璃层（低透明度表面色，透出下层内容） ============ -->
+    <color name="chrome_bar_bg">#F2F5F8FC</color>
+    <color name="sheet_panel_bg">#F0F7FAFF</color>
+    <color name="overlay_panel_bg">#F2F3F6FB</color>
+
+    <!-- ============ 标签页玻璃图标（描边加深，浅色主题下更清晰） ============ -->
+    <color name="glass_fill">#3D5A6B80</color>
+    <color name="glass_stroke">#B06B7C90</color>
+
+    <!-- ============ 控件中性色 ============ -->
+    <!-- 风格卡片描边（未选中） -->
+    <color name="style_stroke">#1E5F6368</color>
+    <!-- 胶囊按钮禁用底（安装中） -->
+    <color name="accent_disabled">#1E5F6368</color>
+    <!-- 字母头像兜底底色 -->
+    <color name="avatar_default">#5C7A99</color>
+    <!-- 按压涟漪（中性灰，明暗两套通用） -->
+    <color name="press_ripple">#33808080</color>
+    <!-- 按压涟漪（落在强调色实底上时用白） -->
+    <color name="press_ripple_on_accent">#33FFFFFF</color>
+    <!-- 极淡中性底（无痕按钮等轻量容器） -->
+    <color name="neutral_soft">#14808080</color>
+    <!-- 扫码页取景层遮罩：叠在相机画面上，**不随明暗主题变化**，始终压暗以突出二维码 -->
+    <color name="scan_scrim">#66000000</color>
+    <color name="scan_scrim_stroke">#33FFFFFF</color>
+
+    <!-- ============ 首页快捷瓦片（冷色系，与蓝白基调一致；品牌识别色，不随明暗漂移） ============ -->
+    <color name="tile_1">#1A73E8</color>
+    <color name="tile_2">#3E7BFA</color>
+    <color name="tile_3">#2A6FB0</color>
+    <color name="tile_4">#0F8B8D</color>
+    <color name="tile_5">#4A67C4</color>
+    <color name="tile_6">#5878A8</color>
+    <color name="tile_7">#6C8FD6</color>
+    <color name="tile_8">#2E7D9A</color>
+
+    <!-- ============ 扩展头像兜底底色（第三方品牌识别色，整体偏冷） ============ -->
+    <color name="ext_avatar_privacy_badger">#37474F</color>
+    <color name="ext_avatar_clearurls">#00695C</color>
+    <color name="ext_avatar_darkreader">#0E2A38</color>
+    <color name="ext_avatar_tampermonkey">#114F5E</color>
+    <color name="ext_avatar_bitwarden">#175DDC</color>
+    <color name="ext_avatar_simple_translate">#4A67C4</color>
+    <color name="ext_avatar_stylus">#4B3A6E</color>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    FileProvider 授权路径白名单。
+    仅暴露「本应用自己产生的下载文件」，供系统或其它应用在用户点击
+    「打开 / 分享」时按次授权读取（Intent.FLAG_GRANT_READ_URI_PERMISSION）。
+
+    为什么必须用它：Android 7.0（API 24）起，把 file:// 交给外部应用会抛
+    FileUriExposedException；而本应用承诺「仅 INTERNET + CAMERA 两项权限」，
+    不能靠申请存储权限绕过，故走 content:// 按次授权。
+-->
+<paths>
+    <!-- API 26-28 的下载落点：getExternalFilesDir(DIRECTORY_DOWNLOADS) -->
+    <external-files-path
+        name="ext_downloads"
+        path="Download/" />
+
+    <!-- 应用外部私有目录整体（当前未直接使用，避免将来新增落点时遗漏） -->
+    <external-files-path
+        name="ext_files"
+        path="." />
+
+    <!-- 内部 filesDir -->
+    <files-path
+        name="internal_files"
+        path="." />
+
+    <!-- 缓存目录（扩展导入的临时 .xpi 等） -->
+    <cache-path
+        name="cache"
+        path="." />
+</paths>

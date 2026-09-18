@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    共享尺寸。
+
+    为什么只抽这一组：这批值在 7 个详情页顶栏里逐份重复，而且已经**出现漂移**
+    —— 同样的顶栏，左右内边距写成 6dp 的有 5 处、8dp 的有 3 处，标题字号 17sp 与 18sp 各半。
+    这类「同一语义、多处字面量」正是改一次要改一片、还容易漏的根源，故收敛为单一来源。
+
+    刻意**不**把布局里所有 dp/sp 字面量都抽出来：同一个数字在不同位置常代表不同含义
+    （40dp 触控区 vs 40dp 外边距），强行合并只会制造假耦合。单次使用的值留在原地更清楚。
+-->
+<resources>
+
+    <!-- 详情页顶栏（activity_about / _engine_settings / _extensions / _home_customize /
+         _legal / _library / _settings） -->
+    <dimen name="title_bar_height">52dp</dimen>
+    <dimen name="title_bar_padding_h">6dp</dimen>
+    <!-- 顶栏两侧动作位（返回键及对称占位/清空键）的边长 -->
+    <dimen name="title_action_size">40dp</dimen>
+    <dimen name="title_text_size">17sp</dimen>
+</resources>

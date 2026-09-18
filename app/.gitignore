@@ -1,0 +1,9 @@
+/build
+# Android Studio「Generate Signed App Bundle or APK」的输出目录：
+# 选 release 变体 → app/release/，选 debug 变体 → app/debug/。
+# 两处合计约 1.1GB（app/debug 563MB + app/release 563MB），
+# 且 app/release/ 里还有 42MB 的 mapping.txt —— 一次 `git add .` 就会全部进仓库，
+# 二进制一旦进历史就删不干净。注意根 .gitignore 的 /release/ 以斜杠开头 = 锚定仓库
+# 根目录，管不到 app/ 这一层，所以必须在这里再写一次。
+/release
+/debug

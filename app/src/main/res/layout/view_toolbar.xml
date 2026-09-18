@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    顶部导航：单一对称胶囊（含地址输入与扫码键），引擎键平时仅显示图标，
+    深色区域跟随其内容自适应；菜单展开时才显示引擎名称。
+    胶囊 clipToOutline 保证深色引擎键与扫码图标都不越出圆角边界。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginTop="6dp"
+    android:background="@android:color/transparent">
+
+    <!-- 地址栏整体胶囊：扫码键也收进同一边框，颜色左右均衡 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_search_bar"
+                android:clipToOutline="true"
+        tools:targetApi="31"
+        android:elevation="3dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="2dp">
+
+        <!-- 引擎键：平时仅图标；菜单展开显示名称 -->
+        <LinearLayout
+            android:id="@+id/engineChip"
+            android:layout_width="wrap_content"
+            android:layout_height="46dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="6dp"
+            android:background="@drawable/bg_engine_chip"
+            android:contentDescription="@string/action_switch_engine">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/engineIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_magnifier"
+                app:tint="?attr/colorPrimary" />
+
+            <TextView
+                android:id="@+id/engineLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:maxWidth="150dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
+            android:background="?attr/colorOutlineVariant" />
+
+        <!-- 安全指示：只在已知安全状态时显示。
+             锁 = HTTPS 且证书有效；警告 = 未加密，或外壳加密但已加载被替换的主动混合内容。
+             本应用刻意关闭了内核「安全浏览」远程查询（见隐私政策第 4 条），
+             因此这个**纯本地**的指示是用户判断连接是否可信的主要依据。 -->
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/securityIndicator"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="2dp"
+            android:src="@drawable/ic_lock_secure"
+            android:visibility="gone"
+            app:tint="?attr/colorPrimary"
+            android:contentDescription="@string/security_secure_desc" />
+
+        <EditText
+            android:id="@+id/addressBar"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="@string/hint_search"
+            android:importantForAutofill="no"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="15sp"
+            android:paddingHorizontal="8dp"
+            android:singleLine="true"
+            android:gravity="center_vertical"
+            android:imeOptions="actionSearch"
+            android:inputType="textUri" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
+            android:background="?attr/colorOutlineVariant" />
+
+        <!-- 刷新 / 停止：加载中显示停止（可中断），空闲时显示刷新。
+             把这条高频动作从「更多」面板提升到一级入口，与主流浏览器一致。 -->
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/btnReload"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_refresh"
+            app:tint="?attr/colorOnSurfaceVariant"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/more_refresh" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
+            android:background="?attr/colorOutlineVariant" />
+
+        <!-- 扫码键：与地址栏同属一个胶囊，视觉均衡 -->
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/btnScan"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:src="@drawable/ic_qr_scan"
+            app:tint="?attr/colorOnSurfaceVariant"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/btn_scan" />
+    </LinearLayout>
+
+</LinearLayout>
