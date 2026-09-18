@@ -249,6 +249,23 @@ class BrowserSessionManager private constructor(
         }
     }
 
+    // ── 线程模型：本管理器全部可变状态都**只在主线程**读写 ─────────────────────
+    //
+    // 涉及：`tabs` / `active` / `nextId` / `lastLiveKey` / `stateCache` / `saveTask`。
+    // 因此其中唯一的容器 `stateCache` 用普通 `HashMap` 即可（与 `ExtensionCatalog`
+    // 那类真正跨线程的全局状态不同，那边一律 ConcurrentHashMap）。各写入点的线程来源：
+    //   · GeckoSession 委托回调（onHistoryStateChange / onVisited / onLocationChange …）
+    //     —— GeckoView 在打开该 session 的线程上投递，本应用即主线程；
+    //   · `scheduleSave()` 经 `mainHandler`（主 Looper）延时投递；
+    //   · `saveState()` 由 `MainActivity.onPause()` 调用。
+    //
+    // ⚠️ 特别提醒：`saveState()` **看起来**是「后台安全」的——它把落盘交给
+    // `SessionStore.write()`，而那里面确实跑在串行 IO 线程上。但**拼快照这一步仍在
+    // 主线程**（`normalTabs.map { … stateCache[tab.id] }`）。切勿为了「省主线程」把这段
+    // `stateCache` 读取搬进 `SessionStore.write` 的 lambda 里：那会让 `HashMap` 与
+    // 主线程的写入（`onHistoryStateChange`）并发命中，轻则丢条目（恢复出的标签丢会话），
+    // 重则在扩容期间读到环形链表而**死循环**（JDK7 式 HashMap 死循环的经典成因）。
+    // 真要移到后台，先把 `stateCache` 换成 `ConcurrentHashMap`。
     private val mainHandler = Handler(Looper.getMainLooper())
 
     /**
@@ -714,6 +731,18 @@ class BrowserSessionManager private constructor(
             session: GeckoSession,
             historyList: GeckoSession.HistoryDelegate.HistoryList,
         ) {
+            // 这里**当场**取 JSON 字符串（值拷贝），不是留引用。
+            //
+            // 依据（javap 实测 geckoview 155 的 classes.jar，非推测）：
+            //   HistoryList 只是一个接口，其实现就是 `GeckoSession.SessionState`
+            //   —— 声明的类型层次为
+            //   `SessionState extends AbstractSequentialList<HistoryItem>
+            //                    implements HistoryList, Parcelable`；
+            //   而它有一个包内方法 `void updateSessionState(GeckoBundle)`，说明这个
+            //   对象由内核侧**就地刷新**：同一个实例会被后续回调反复改写。
+            // 因此若把 `historyList` 引用存进 `stateCache` 留到落盘时再读，读到的将是
+            // 「最后一次改写后」的内容，而非本次回调时刻的状态；extended 场景下还会
+            // 遇到内核已释放其 GeckoBundle 支撑的情况。存 String 才是快照。
             val json = runCatching { historyList.toString() }.getOrNull() ?: return
             stateCache[tab.id] = json
             scheduleSave()
