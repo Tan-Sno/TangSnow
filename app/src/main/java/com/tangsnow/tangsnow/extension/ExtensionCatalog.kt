@@ -33,6 +33,16 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object ExtensionCatalog {
 
+    /**
+     * AMO 官方扩展商店首页。
+     *
+     * 用途：应用内「前往官方扩展商店」入口。它与本目录的区别是——
+     * 本目录是**精选子集**（只收录隐私保护 / 工具类，见上方合规边界），
+     * 而这里是 Mozilla 官方全量商店，交给用户在浏览内核里自行浏览与安装。
+     * 不预设语言路径段，由 AMO 按浏览器语言自动本地化。
+     */
+    const val OFFICIAL_STORE_URL = "https://addons.mozilla.org/firefox/extensions/"
+
     data class Entry(
         val slug: String,
         val addonId: Int,
@@ -114,18 +124,22 @@ object ExtensionCatalog {
     }
 
     /**
-     * 安装地址：**优先目录里拼出的「latest」直链**，API 解析出的 file 直链只作备选。
+     * 安装地址：**优先目录里拼出的「latest」直链**，API 解析出的 file 直链只作补充候选。
      *
-     * 顺序很关键（2026-09-12 设备实测，用户亲测确认）：
-     *  - `…/downloads/latest/<slug>/addon-<id>-latest.xpi`：AMO 直接供包，**实测可下载**；
-     *  - API 返回的 `…/downloads/file/<id>/<name>.xpi`：会跳 CDN，实测在该网络下**黑洞**
-     *    （连接既不返回也不断开）——正是"点了没反应 / 一直安装中"的成因，
-     *    因为它会让内核下载与自建下载双双卡死。
-     * 两者都是 Mozilla 官方签名的 AMO 资源，故以可用者为先。
+     * ⚠️ 2026-09-18 实测更正（此前本段注释有误，已按实测改写）：
+     *  `…/downloads/latest/<slug>/addon-<id>-latest.xpi` 会 **302** 跳到
+     *  `https://addons.mozilla.org/firefox/downloads/file/<fileId>/<name>.xpi`
+     *  —— **同一域名、同一端点**，两者仅差一次跳转，**不构成网络层面的冗余**。
+     *  （原注释称前者「AMO 直接供包、实测可下载」、后者「会跳 CDN、某些网络下黑洞」，
+     *  与实测不符：两者终点相同，命中同一域名 addons.mozilla.org。）
+     *
+     * 仍然让 latest 优先的理由：它不依赖 API 解析结果（even 解析失败也恒可用），
+     * 且始终指向当前最新版本。真正的**第二条通路**是「把官方直链交给内核安装」那一步
+     * （见 `ExtInstallCoordinator.performInstall` 第 ② 步），而不是这两个 URL 之间。
      */
     fun bestUrl(entry: Entry): String = entry.xpiUrl
 
-    /** API 解析出的当前版本 file 直链（常跳 CDN）；仅作最后备选，可能在某些网络下不可达 */
+    /** API 解析出的当前版本 file 直链；与 [bestUrl] 指向同一端点，仅作补充候选 */
     fun resolvedUrl(entry: Entry): String? = resolvedUrls[entry.slug]
 
     /**

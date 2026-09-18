@@ -129,6 +129,20 @@
                         android:textStyle="bold"
                         android:textColor="?attr/colorOnSurface" />
 
+                    <!-- 前往官方扩展商店：独立可点，不触发本行的展开/收起 -->
+                    <TextView
+                        android:id="@+id/linkOfficialStore"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="6dp"
+                        android:text="@string/extension_official_store"
+                        android:textSize="12sp"
+                        android:textColor="?attr/colorPrimary"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true" />
+
                     <TextView
                         android:id="@+id/arrowCustom"
                         android:layout_width="wrap_content"

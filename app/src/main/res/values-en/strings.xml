@@ -163,6 +163,7 @@
     <string name="extension_list_empty">No installed extensions yet\nPick one in “Installable”</string>
     <string name="extension_custom_install">Custom install</string>
     <string name="extension_custom_url">Install from an official link</string>
+    <string name="extension_official_store">Official add-on store</string>
 
     <!-- Descriptions of installable extensions (mirrors descRes in ExtensionCatalog.kt) -->
     <string name="extension_desc_privacy_badger">Learns and blocks hidden trackers automatically (by the EFF)</string>

@@ -166,6 +166,7 @@
     <string name="extension_list_empty">暂无已安装扩展\n去「可安装」挑一个试试</string>
     <string name="extension_custom_install">自定义安装</string>
     <string name="extension_custom_url">从官方链接安装</string>
+    <string name="extension_official_store">前往官方扩展商店</string>
 
     <!-- 可安装扩展的简介（与 extension/ExtensionCatalog.kt 的 descRes 一一对应） -->
     <string name="extension_desc_privacy_badger">自动学习并屏蔽隐藏跟踪器（电子前哨基金会 EFF 出品）</string>
