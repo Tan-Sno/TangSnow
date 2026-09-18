@@ -2,9 +2,18 @@
 
 感谢你有兴趣为棠雪做出贡献。
 
+参与本项目即表示你同意遵守[社区行为准则](CODE_OF_CONDUCT.md)。
+
 ## 报告问题
 
-请在 [Issues](https://github.com/Tan-Sno/TangSnow/issues) 中提交，并尽量包含：
+请在 [Issues](https://github.com/Tan-Sno/TangSnow/issues) 中提交。仓库已配置好提交模板，
+新建 Issue 时按模板填写即可，模板要求的字段正对应下面的清单：
+
+> **安全漏洞请勿使用公开 Issue。** 请改用
+> [私密漏洞报告入口](https://github.com/Tan-Sno/TangSnow/security/advisories/new)，
+> 详见 [SECURITY.md](SECURITY.md)。
+
+提交时请尽量包含：
 
 - 棠雪版本号（设置 → 关于棠雪）
 - 设备型号与 Android 版本

@@ -1,0 +1,93 @@
+name: 报告问题
+description: 报告一个可复现的缺陷或异常行为
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢花时间报告问题。请尽量把信息填完整——很多问题仅靠「打不开某个网页」无法定位。
+
+        **注意**：如果你要报告的是**安全漏洞**，请立刻停止填写本表单，改用
+        [私密漏洞报告](https://github.com/Tan-Sno/TangSnow/security/advisories/new)，
+        不要把它公开在这里。详见 [安全政策](../blob/main/SECURITY.md)。
+
+  - type: input
+    id: version
+    attributes:
+      label: 棠雪版本
+      description: 应用内「设置 → 关于棠雪」中可以查到
+      placeholder: 例如 2.0.2
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: 设备型号与 Android 版本
+      placeholder: 例如 小米 14 / Android 15
+    validations:
+      required: true
+
+  - type: dropdown
+    id: abi
+    attributes:
+      label: 安装的是哪个架构的包
+      description: 下载页三个 APK 的内容相同、仅 CPU 架构不同。不确定就选「不清楚」。
+      options:
+        - arm64-v8a（绝大多数现代手机）
+        - armeabi-v7a（较老的 32 位设备）
+        - x86_64（模拟器 / 少数 x86 设备）
+        - 不清楚
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请一步一步写清楚，让别人能照着走到你遇到的问题
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 出现……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: 可复现的网址
+      description: 如果涉及网页渲染或网站行为，请务必提供网址，否则通常无法定位
+      placeholder: https://
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图或录屏
+      description: 可直接拖拽图片到此处
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 例如是否必现、是否只在特定网络下出现、是否在无痕模式下也存在
+    validations:
+      required: false

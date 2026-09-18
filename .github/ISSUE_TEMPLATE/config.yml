@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: 报告安全漏洞
+    url: https://github.com/Tan-Sno/TangSnow/security/advisories/new
+    about: 请不要用公开 Issue 报告安全漏洞。这里是只对维护者可见的私密上报入口。
+
+  - name: 查阅贡献指南
+    url: https://github.com/Tan-Sno/TangSnow/blob/main/CONTRIBUTING.md
+    about: 提交 Issue 或 Pull Request 之前，请先阅读贡献指南。
