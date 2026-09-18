@@ -51,8 +51,8 @@ android {
         applicationId = "com.tangsnow.tangsnow"
         minSdk = 26
         targetSdk = 37
-        versionCode = 31
-        versionName = "2.0.1"
+        versionCode = 32
+        versionName = "2.0.2"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
         // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
         // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。
