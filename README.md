@@ -60,10 +60,10 @@
 ./gradlew :app:testDebugUnitTest  # 单元测试
 ```
 
-正式包请用 `:app:assembleRelease`。GeckoView 原生库约占安装包 96%，因此按 ABI 独立分包
-（`arm64-v8a` / `armeabi-v7a` / `x86_64`），不产出 universal APK；各包的 `versionCode` 互不相同，
-以便在同一设备上切换架构安装。签名凭据不放仓库，由本地未跟踪的 `keystore.properties` 提供
-（缺少该文件时 release 会回退 debug 证书并打印警告，产物不可分发）。
+正式包请用 `:app:assembleRelease`。GeckoView 原生库（`libxul.so` 等 `.so`，未压缩存储）约占包体
+86%，因此按 ABI 独立分包（`arm64-v8a` / `armeabi-v7a` / `x86_64`），不产出 universal APK；各包的
+`versionCode` 互不相同，以便在同一设备上切换架构安装。签名凭据不放仓库，由本地未跟踪的
+`keystore.properties` 提供（缺少该文件时 release 会回退 debug 证书并打印警告，产物不可分发）。
 
 ## 参与贡献
 

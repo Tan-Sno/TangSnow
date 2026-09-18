@@ -103,7 +103,7 @@ android {
         }
     }
 
-    // ABI 拆分：GeckoView 原生库约占安装包 96%，按 ABI 独立出包可大幅瘦身；
+    // ABI 拆分：GeckoView 原生库（.so，未压缩存储）约占包体 86%，按 ABI 独立出包可大幅瘦身；
     // 不生成包含全部 ABI 的 universal APK（体积巨大且无必要）。
     splits {
         abi {

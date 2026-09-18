@@ -63,4 +63,4 @@
 
 ## 许可证
 
-向本项目提交贡献即表示你同意以 [Apache License 2.0](../LICENSE) 授权你的贡献。
+向本项目提交贡献即表示你同意以 [Apache License 2.0](LICENSE) 授权你的贡献。

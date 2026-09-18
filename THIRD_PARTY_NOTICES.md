@@ -27,8 +27,6 @@
 - 本应用**未修改** GeckoView 的源码（仅以依赖形式调用其公开 API），因此不产生 MPL 第 3.1 条意义上
   的 Modifications；应用自身代码作为 Larger Work 采用 Apache License 2.0，不受 MPL 2.0 传染性约束。
 - GeckoView 源码中的许可证与版权声明（MPL 2.0 §3.4）均未被移除或改动。
-
-- 本项目仅调用上述组件的公开 API，未修改其源码；应用自身代码不受 MPL 2.0 传染性约束。
 - Apache License 2.0 全文：https://www.apache.org/licenses/LICENSE-2.0
 
 ## 图标与图片素材
