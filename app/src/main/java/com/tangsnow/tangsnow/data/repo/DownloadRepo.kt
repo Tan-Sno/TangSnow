@@ -251,6 +251,11 @@ object DownloadRepo {
                 val id = dm.enqueue(req)
                 rememberId(context, id)
                 id
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 取消必须原样抛：本函数是 suspend，调用方（lifecycleScope）在 Activity
+                // 销毁时会取消协程。若这里被下方 catch 吞成 -1L，调用方会把「已取消」
+                // 误当成「下载失败」而继续走失败分支，在已取消的协程里发起后续动作。
+                throw e
             } catch (e: Exception) {
                 -1L
             }
@@ -336,6 +341,10 @@ object DownloadRepo {
                     true
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 同 launch()：取消要原样传播。此处若吞成 false，调用方 startDownload 会在
+            // 已取消的协程里接着退回系统下载器，用户看到「开始下载」却什么也没发生。
+            throw e
         } catch (e: Exception) {
             false
         }

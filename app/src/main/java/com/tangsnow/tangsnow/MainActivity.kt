@@ -1896,6 +1896,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 java.io.File(dir, name).outputStream().use { out -> input.use { it.copyTo(out) } }
                 true
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 取消要原样传播：本函数是 suspend，Activity 销毁会取消协程，
+            // 若在此吞成 false，调用方会把「已取消」当成「保存失败」而弹出错误提示。
+            throw e
         } catch (e: Exception) {
             false
         }
