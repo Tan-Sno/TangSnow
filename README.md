@@ -69,6 +69,14 @@
 
 欢迎提交 Issue 与 Pull Request，请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
+参与本项目即表示你同意遵守[社区行为准则](CODE_OF_CONDUCT.md)。
+
+## 安全
+
+发现安全漏洞请**不要**通过公开 Issue 报告，改用
+[私密漏洞报告入口](https://github.com/Tan-Sno/TangSnow/security/advisories/new)。
+支持的版本范围与处理流程见 [SECURITY.md](SECURITY.md)。
+
 ## 许可证
 
 应用自身代码采用 [Apache License 2.0](LICENSE)。

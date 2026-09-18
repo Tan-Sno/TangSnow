@@ -1,0 +1,43 @@
+name: 功能建议
+description: 提出一个希望增加或改进的功能
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先说明**使用场景与要解决的问题**，而不只是功能本身。这一点对本项目尤其重要：
+        棠雪以「数据不出设备」为第一原则，脱离场景的功能描述往往无法评估。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决什么问题
+      description: 描述当前的困扰或不便，而不是直接给出功能名
+      placeholder: 例如「我在……的时候，需要……但现在只能……」
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你希望棠雪怎么做
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 你试过的替代方案
+      description: 包括其他浏览器是怎么做的，以及为什么那些做法对你不够用
+    validations:
+      required: false
+
+  - type: textarea
+    id: privacy
+    attributes:
+      label: 对隐私的影响
+      description: |
+        如果该功能需要**新增权限、新增联网行为或引入第三方依赖**，请务必在此说明。
+        这类建议会被更严格地审视，缺少说明通常会被打回。
+    validations:
+      required: false
