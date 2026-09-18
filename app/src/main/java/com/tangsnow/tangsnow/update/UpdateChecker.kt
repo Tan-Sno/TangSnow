@@ -73,6 +73,10 @@ object UpdateChecker {
                     notes = json.optString("notes", "").ifBlank { null },
                 )
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 取消要原样传播，不能降级成 null：「null = 未配置/网络失败」会让调用方
+            // 把已取消的协程当成一次真实失败（例如弹出「检查更新失败」）。
+            throw e
         } catch (e: Exception) {
             null
         }

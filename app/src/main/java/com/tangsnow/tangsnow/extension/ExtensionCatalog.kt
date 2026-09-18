@@ -118,6 +118,10 @@ object ExtensionCatalog {
                     }
                 code
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 取消要原样传播，不能降级成状态码 0：「0 = 网络失败」会让调用方把
+            // 已取消的协程当成一次真实失败而继续走重试/报错分支。
+            throw e
         } catch (e: Exception) {
             0
         }
