@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 首页背景（深色主题）：深夜蓝黑 + 低饱和柔光 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="@color/home_bg_top"
+                android:endColor="@color/home_bg_bottom" />
+        </shape>
+    </item>
+
+    <item android:left="-120dp" android:top="-150dp">
+        <shape android:shape="oval">
+            <size
+                android:width="340dp"
+                android:height="340dp" />
+            <gradient
+                android:type="radial"
+                android:gradientRadius="170dp"
+                android:startColor="@color/home_blob_accent"
+                android:endColor="@color/home_blob_transparent" />
+        </shape>
+    </item>
+
+    <item android:right="-140dp" android:bottom="-120dp">
+        <shape android:shape="oval">
+            <size
+                android:width="380dp"
+                android:height="380dp" />
+            <gradient
+                android:type="radial"
+                android:gradientRadius="190dp"
+                android:startColor="@color/home_blob_cool"
+                android:endColor="@color/home_blob_transparent" />
+        </shape>
+    </item>
+</layer-list>

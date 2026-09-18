@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:background="?attr/colorSurface">
+
+    <!-- 网页层：浏览时可见，上下为顶/底栏留出空间 -->
+    <org.mozilla.geckoview.GeckoView
+        android:id="@+id/geckoView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="70dp"
+        android:layout_marginBottom="78dp"
+        android:visibility="gone" />
+
+    <!-- 加载进度条：贴在顶栏下沿的细线 -->
+    <ProgressBar
+        android:id="@+id/loadProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="top"
+        android:layout_marginTop="70dp"
+        android:max="100"
+        android:progressTint="@color/accent"
+        android:progressBackgroundTint="@android:color/transparent"
+        android:visibility="gone" />
+
+    <!-- 首页：Via 风格全空白 + 中上方唯一搜索栏 -->
+    <include
+        android:id="@+id/home"
+        layout="@layout/view_home"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 浮层置于 home 之后（FrameLayout 后加入者在顶层），保证在首页上可见 -->
+    <!-- 地址栏联想（本地历史/书签）。注意：include 上不能再设 android:id，
+         否则会覆盖被包含布局根 View 的 id（suggestionPanel 将查不到） -->
+    <include
+        layout="@layout/view_suggestions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginTop="72dp" />
+
+    <!-- 页内查找条（浏览时由「更多 → 页内查找」唤起）；同上，不设 include id -->
+    <include
+        layout="@layout/view_find_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginTop="74dp" />
+
+    <!-- 顶栏：后退/前进/地址栏/主页 -->
+    <include
+        android:id="@+id/toolbar"
+        layout="@layout/view_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:visibility="gone" />
+
+    <!-- 底栏：收藏/分享/标签页/更多（浏览时显示，全屏时隐藏） -->
+    <include
+        android:id="@+id/bottomBar"
+        layout="@layout/view_bottombar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:visibility="gone" />
+
+    <!-- 更多面板（覆盖层，默认收起，行由代码填充） -->
+    <FrameLayout
+        android:id="@+id/moreSheet"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:visibility="gone">
+
+        <View
+            android:id="@+id/moreScrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#66000000" />
+
+        <LinearLayout
+            android:id="@+id/morePanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:elevation="20dp"
+            android:background="@drawable/bg_sheet_top" />
+    </FrameLayout>
+
+    <!-- 标签页切换面板（覆盖层） -->
+    <FrameLayout
+        android:id="@+id/tabsPanel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/overlay_panel_bg"
+        android:visibility="gone">
+
+        <include
+            android:id="@+id/tabsContent"
+            layout="@layout/view_tabs_panel"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
+</FrameLayout>

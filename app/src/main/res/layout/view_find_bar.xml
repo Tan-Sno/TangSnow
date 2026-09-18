@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 页内查找条：对接 GeckoView SessionFinder（原生能力） -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/findBar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginTop="4dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_search_bar"
+        android:clipToOutline="true"
+    tools:targetApi="31"
+    android:elevation="4dp"
+    android:paddingStart="8dp"
+    android:paddingEnd="2dp"
+    android:visibility="gone">
+
+    <EditText
+        android:id="@+id/findInput"
+        android:layout_width="0dp"
+        android:layout_height="44dp"
+        android:layout_weight="1"
+        android:background="@null"
+        android:hint="@string/find_hint"
+        android:imeOptions="actionSearch"
+        android:importantForAutofill="no"
+        android:inputType="text"
+        android:singleLine="true"
+        android:textColor="?attr/colorOnSurface"
+        android:textColorHint="?attr/colorOnSurfaceVariant"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/findCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="6dp"
+        android:minWidth="48dp"
+        android:gravity="end"
+        android:textSize="12sp"
+        android:textColor="?attr/colorOnSurfaceVariant" />
+
+    <TextView
+        android:id="@+id/btnFindPrev"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:paddingHorizontal="10dp"
+        android:gravity="center"
+        android:text="@string/find_prev"
+        android:textSize="12sp"
+        android:textColor="?attr/colorPrimary"
+        android:background="?attr/selectableItemBackground" />
+
+    <TextView
+        android:id="@+id/btnFindNext"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:paddingHorizontal="10dp"
+        android:gravity="center"
+        android:text="@string/find_next"
+        android:textSize="12sp"
+        android:textColor="?attr/colorPrimary"
+        android:background="?attr/selectableItemBackground" />
+
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/btnFindClose"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:src="@drawable/ic_close"
+        app:tint="?attr/colorOnSurfaceVariant"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/btn_close" />
+
+</LinearLayout>

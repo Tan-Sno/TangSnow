@@ -1,0 +1,69 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!--
+        棠雪主题（浅色）—— 蓝白色调。
+
+        为什么在这里补齐全量 M3 语义 token：
+          布局与 Kotlin 里已有 170+ 处 `?attr/colorSurface` / `?attr/colorOnSurfaceVariant`
+          这类**语义属性**引用。把 token 定义在主题层，那些引用无需逐一改动即完成换肤，
+          也让「配色只有单一事实来源」得以成立（对比色值定义在 colors.xml）。
+
+        取色：Google 亮蓝体系。主色 #1A73E8 与白字对比度 4.52:1（达 WCAG AA 正文门槛）。
+    -->
+    <style name="Base.Theme.TangSnow" parent="Theme.Material3.DayNight.NoActionBar">
+
+        <!-- == 主色 == -->
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorOnPrimary">@color/on_accent</item>
+        <item name="colorPrimaryContainer">@color/accent_container</item>
+        <item name="colorOnPrimaryContainer">@color/on_accent_container</item>
+        <item name="colorPrimaryInverse">@color/accent</item>
+
+        <!-- == 辅色 == -->
+        <item name="colorSecondary">@color/accent_muted</item>
+        <item name="colorOnSecondary">@color/on_accent</item>
+        <item name="colorSecondaryContainer">@color/secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/on_secondary_container</item>
+
+        <!-- == 表面与文字 == -->
+        <item name="colorSurface">@color/page_bg</item>
+        <item name="colorOnSurface">@color/on_page</item>
+        <item name="colorSurfaceVariant">@color/surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/on_surface_variant</item>
+        <item name="android:colorBackground">@color/page_bg</item>
+        <item name="colorOnBackground">@color/on_page</item>
+        <item name="android:windowBackground">@color/page_bg</item>
+
+        <!-- 表面层级（M3 用容器色表达高度；列表/卡片/面板各取一档） -->
+        <item name="colorSurfaceContainerLowest">@color/page_bg</item>
+        <item name="colorSurfaceContainerLow">@color/surface_container_low</item>
+        <item name="colorSurfaceContainer">@color/surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/surface_container_high</item>
+        <item name="colorSurfaceBright">@color/page_bg</item>
+        <item name="colorSurfaceDim">@color/surface_container_high</item>
+
+        <!-- == 描边 == -->
+        <item name="colorOutline">@color/outline</item>
+        <item name="colorOutlineVariant">@color/outline_variant</item>
+
+        <!-- == 错误态 == -->
+        <item name="colorError">@color/error</item>
+        <item name="colorOnError">@color/on_error</item>
+        <item name="colorErrorContainer">@color/error_container</item>
+        <item name="colorOnErrorContainer">@color/on_error_container</item>
+    </style>
+
+    <style name="Theme.TangSnow" parent="Base.Theme.TangSnow">
+        <!-- 必须：PreferenceFragmentCompat 依赖该属性，缺失会导致打开设置页时崩溃。
+             自定义 overlay 覆盖 scrollbars=none，规避 b/331383944：PreferenceFragmentCompat
+             会把 activity theme 的 scrollbars 改成 vertical，导致其内部 RecyclerView 在
+             首次布局与滑动时反复 awakenScrollbars（Handler.removeCallbacks 开销大），
+             表现为「打开设置页等待久 + 上下滑动卡顿」。 -->
+        <item name="preferenceTheme">@style/PreferenceThemeOverlay.TangSnow</item>
+    </style>
+
+    <!-- 在官方 PreferenceThemeOverlay 基础上关闭垂直滚动条，规避上面的滚动卡顿 bug -->
+    <style name="PreferenceThemeOverlay.TangSnow" parent="PreferenceThemeOverlay">
+        <item name="android:scrollbars">none</item>
+    </style>
+</resources>

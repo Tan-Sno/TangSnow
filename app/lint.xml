@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- 自适应图标 xml 位于 mipmap-anydpi-v26 是 Android 官方模板规范；
+         ObsoleteSdkInt 会误报该目录多余，予以忽略 -->
+    <issue id="ObsoleteSdkInt" severity="ignore" />
+</lint>

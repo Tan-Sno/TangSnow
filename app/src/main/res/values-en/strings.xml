@@ -1,0 +1,512 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="app_name">TangSnow</string>
+
+    <!-- Home / address bar / bottom bar -->
+    <string name="hint_search">Search or enter URL</string>
+    <string name="btn_back">Back</string>
+    <string name="btn_forward">Forward</string>
+    <string name="btn_stop">Stop</string>
+    <string name="btn_scan">Scan</string>
+    <string name="btn_bookmark">Bookmark</string>
+    <string name="btn_share">Share</string>
+    <string name="btn_tabs">Tabs</string>
+    <string name="btn_more">More</string>
+    <string name="btn_close">Close</string>
+    <string name="btn_delete">Delete</string>
+
+    <string name="btn_custom_engine">Custom engine</string>
+    <string name="action_switch_engine">Switch search engine</string>
+
+    <!-- Scan -->
+    <string name="btn_private">Private browsing</string>
+    <string name="toast_private_on">Private tab opened — no history or cookies saved</string>
+    <string name="toast_private_off">Private browsing exited</string>
+    <string name="scan_hint">Align the QR code with the frame</string>
+    <string name="scan_result_title">Scan result</string>
+    <string name="scan_scheme_unsupported">This is a %1$s link, which the browser cannot open:\n\n%2$s</string>
+    <string name="scan_open_external">Open with another app</string>
+    <string name="scan_no_handler">No app can open this link</string>
+    <string name="scan_copy">Copy</string>
+    <string name="scan_copied">Copied to clipboard</string>
+    <string name="clipboard_external_write">Clipboard content was updated</string>
+    <string name="clipboard_clear">Clear</string>
+    <string name="clipboard_read_title">Allow clipboard access?</string>
+    <string name="clipboard_read_message">“%1$s” wants to read your clipboard</string>
+    <string name="clipboard_read_allow">Allow</string>
+    <string name="clipboard_read_deny">Deny</string>
+    <string name="clipboard_unknown_site">This site</string>
+
+    <!-- Crash fallback / external protocols -->
+    <string name="toast_page_crashed">The page crashed. Trying to recover…</string>
+    <string name="toast_external_opening">Opening with another app…</string>
+    <string name="extension_popup_close">Close extension panel</string>
+    <string name="more_scan_image">Scan QR from image</string>
+
+    <string name="scan_no_qr_found">No QR code found in this image</string>
+
+    <!-- Bookmark / share toast -->
+    <string name="toast_bookmarked">Added to bookmarks</string>
+    <string name="toast_bookmark_removed">Bookmark removed</string>
+    <string name="toast_share_empty">Nothing to share on this page</string>
+    <string name="toast_open_file_failed">Cannot open this file</string>
+    <string name="toast_share_file_failed">Cannot share this file</string>
+    <string name="toast_file_not_ready">This file hasn\'t finished downloading yet</string>
+    <string name="toast_file_download_failed">This download didn\'t succeed, so there\'s no file to open</string>
+    <string name="toast_file_missing">The file no longer exists — it may have been deleted or cleaned up</string>
+    <string name="toast_start_download">Download started</string>
+    <string name="download_confirm_title">Download file</string>
+    <string name="download_confirm_message">File: %1$s\n\nDo you want to download it?</string>
+    <string name="download_confirm_ok">Download</string>
+    <string name="download_no_ask">Don\'t ask again</string>
+    <string name="share_via">Share to…</string>
+
+    <!-- More sheet -->
+    <string name="more_extensions">Extensions</string>
+    <string name="more_history">History</string>
+    <string name="more_bookmarks">Bookmarks</string>
+    <string name="more_downloads">Downloads</string>
+    <string name="more_customize_home">Customize home</string>
+    <string name="more_settings">Settings</string>
+    <string name="more_exit">Exit</string>
+    <string name="more_refresh">Reload</string>
+    <string name="more_find">Find in page</string>
+    <string name="find_hint">Find text on page</string>
+    <string name="find_prev">Prev</string>
+    <string name="find_next">Next</string>
+    <string name="find_empty">No results</string>
+    <string name="find_result">%1$d / %2$d</string>
+    <string name="suggestion_search">Search “%2$s” with %1$s</string>
+    <string name="selection_copy">Copy</string>
+    <string name="selection_share">Share</string>
+    <string name="selection_search">Search</string>
+    <string name="more_copy_link">Copy link</string>
+    <string name="more_desktop">Desktop site</string>
+    <string name="more_save_pdf">Save PDF</string>
+    <string name="more_need_page">No page to act on</string>
+    <string name="more_nothing_to_copy">No link to copy</string>
+    <string name="toast_copied">Link copied to clipboard</string>
+    <string name="toast_desktop_on">Desktop site enabled — page reloaded</string>
+    <string name="toast_desktop_off">Mobile site enabled — page reloaded</string>
+    <string name="toast_desktop_on_blank">Desktop site enabled — applies to the next page</string>
+    <string name="toast_desktop_off_blank">Mobile site enabled — applies to the next page</string>
+    <string name="pdf_saved">PDF saved to Downloads</string>
+    <string name="pdf_failed">PDF generation failed. Please try again later.</string>
+    <string name="dlg_exit_title">Exit TangSnow</string>
+    <string name="dlg_exit_message">Are you sure to exit the browser?</string>
+    <string name="toast_exit_again">Press back again to exit</string>
+
+    <!-- Tabs panel -->
+    <string name="tabs_title">Tabs</string>
+    <string name="tabs_new">New tab</string>
+    <string name="tabs_empty">No other tabs</string>
+    <string name="tabs_batch_title">Tab actions</string>
+    <string name="tabs_close_others">Close other tabs</string>
+    <string name="tabs_close_all">Close all tabs</string>
+    <plurals name="tabs_close_others_done">
+        <item quantity="one">Kept %1$d tab</item>
+        <item quantity="other">Kept %1$d tabs</item>
+    </plurals>
+    <string name="tabs_closed_all">All tabs closed</string>
+
+    <!-- Engine manager -->
+    <string name="engine_manager_title">Search engines</string>
+    <string name="engine_settings_help">Pick a default engine; long-press a custom one to delete; add new ones below ({q} = keyword)</string>
+    <string name="engine_add_title">Add custom engine</string>
+    <string name="engine_name_hint">Name (e.g. My Search)</string>
+    <string name="engine_url_hint">Search URL, use {q} as keyword, e.g. https://x.com/s?q={q}</string>
+    <string name="engine_duplicated">This name or URL already exists</string>
+    <string name="engine_url_scheme_invalid">The search URL must start with http:// or https://</string>
+    <string name="engine_delete_confirm">Delete \"%1$s\"? You\'ll need to add it again.</string>
+    <string name="engine_manage">Manage search engines</string>
+    <string name="engine_custom_suffix_format">%1$s (custom)</string>
+    <string name="engine_bing_cn">Bing China</string>
+    <string name="engine_bing">Bing Global</string>
+    <string name="engine_baidu">Baidu</string>
+    <string name="engine_sogou">Sogou</string>
+    <string name="engine_so360">360 Search</string>
+    <string name="engine_sm">Shenma</string>
+    <string name="engine_google">Google</string>
+    <string name="engine_ddg">DuckDuckGo</string>
+
+    <!-- Library -->
+    <string name="library_title">Library</string>
+    <string name="btn_clear">Clear</string>
+    <string name="library_clear_history">browsing history</string>
+    <string name="library_clear_bookmarks">bookmarks</string>
+    <string name="library_clear_downloads">download records</string>
+    <string name="library_clear_confirm">Clear all %1$s? This cannot be undone.</string>
+    <string name="library_clear_downloads_hint">Only the records are cleared; downloaded files are kept.</string>
+    <string name="toast_cleared">Cleared</string>
+    <string name="history_empty">No browsing history yet</string>
+    <string name="bookmarks_empty">No bookmarks yet\nTap ☆ at the bottom of a page to save</string>
+    <string name="downloads_empty">No download records yet</string>
+    <string name="download_state_success">Completed</string>
+    <string name="download_state_running">Downloading %1$d%%</string>
+    <string name="download_state_failed">Failed</string>
+    <string name="download_state_paused">Paused</string>
+    <string name="download_state_pending">Waiting</string>
+
+    <!-- Extensions -->
+    <string name="extensions_title">Extensions</string>
+    <string name="extension_tab_recommend">Installable</string>
+    <string name="extension_tab_installed">Installed</string>
+    <string name="extension_source_note">The extensions below come from the official Mozilla AMO repository. Tap “Get” to install them into this browser.</string>
+    <string name="extension_get">Get</string>
+    <string name="extension_installing">Installing…</string>
+    <string name="extension_error_download">Download failed. Check your network and try again.</string>
+    <string name="extension_installed_label">Installed</string>
+    <string name="extension_install_success">Extension installed</string>
+    <string name="extension_need_runtime">Browser engine not ready. Please return to the home page first.</string>
+    <string name="extension_version">Version %1$s</string>
+    <string name="extension_uninstall_confirm">Remove extension</string>
+    <string name="extension_uninstall_message">Remove “%1$s”? Its saved data will be deleted.</string>
+    <string name="extension_list_empty">No installed extensions yet\nPick one in “Installable”</string>
+    <string name="extension_custom_install">Custom install</string>
+    <string name="extension_custom_url">Install from an official link</string>
+
+    <!-- Descriptions of installable extensions (mirrors descRes in ExtensionCatalog.kt) -->
+    <string name="extension_desc_privacy_badger">Learns and blocks hidden trackers automatically (by the EFF)</string>
+    <string name="extension_desc_clearurls">Strips tracking parameters from URLs to reduce cross-site tracking</string>
+    <string name="extension_desc_darkreader">Generates a comfortable dark mode for any website</string>
+    <string name="extension_desc_tampermonkey">Userscript manager — your starting point for web enhancements</string>
+    <string name="extension_desc_bitwarden">Free and open-source cross-platform password manager</string>
+    <string name="extension_desc_simple_translate">Select text to translate — a straightforward translation helper</string>
+    <string name="extension_desc_stylus">Restyle websites with custom themes</string>
+
+    <string name="extension_url_hint">Paste official AMO .xpi URL (https://addons.mozilla.org/…)</string>
+    <string name="extension_url_install">Install</string>
+    <string name="extension_url_invalid">Please enter an https://addons.mozilla.org install URL (Mozilla official source only)</string>
+    <string name="extension_import_file">Import a local .xpi file</string>
+    <string name="extension_import_hint">Only Mozilla-signed .xpi packages are accepted (same kernel signature check as web installs)</string>
+    <string name="extension_importing">Importing…</string>
+    <string name="extension_import_invalid">Cannot read this file: please choose a valid .xpi package</string>
+    <string name="extension_import_failed_message">File import failed: %1$s</string>
+
+    <!-- Extension install failure / confirmation -->
+    <string name="extension_install_failed_title">Installation failed</string>
+    <string name="extension_install_failed_message">“%1$s” failed to install: %2$s.\nOpen the official page or retry later.</string>
+    <string name="extension_open_official">Open official page</string>
+    <string name="extension_retry">Retry</string>
+    <string name="extension_error_network">Network error — cannot reach the official source</string>
+    <string name="extension_error_domain">The official installer rejected this URL</string>
+    <string name="extension_error_signature">Missing Mozilla official signature</string>
+    <string name="extension_error_corrupt">Official package check failed, please retry</string>
+    <string name="extension_error_blocklisted">This extension is blocked by Mozilla</string>
+    <string name="extension_error_engine_no_response">The install request was handed to the engine, but the engine did not respond within the time limit — usually the install confirmation dialog never appeared or was hidden behind another screen, or the official source is unresponsive on this network. Please retry.</string>
+    <string name="extension_error_code">Official error code %1$d</string>
+    <string name="extension_error_timeout">Install timed out — official source did not respond in time</string>
+    <string name="extension_region_blocked">Region limited</string>
+    <string name="extension_region_blocked_title">Official channel region limit</string>
+    <string name="extension_region_blocked_message">The official AMO channel for “%1$s” returns HTTP 451 (Unavailable For Legal Reasons) in your region — a compliance measure taken by the publisher Mozilla to abide by local laws and binding court rulings, not an action of this app. Install is temporarily unavailable; if it remains unavailable after your network environment changes, you can open the official page for details.</string>
+    <string name="extension_install_confirm">Install “%1$s”?</string>
+    <string name="extension_update_confirm">Update extension</string>
+    <string name="extension_update_confirm_message">An update is available for “%1$s” (v%2$s). Allow?</string>
+    <string name="extension_optional_confirm">Extension permission request</string>
+    <string name="extension_optional_confirm_message">“%1$s” requests the following optional permissions:</string>
+    <string name="extension_no_permissions">This extension requests no extra permissions</string>
+    <string name="extension_permissions_intro">It requests:</string>
+    <string name="extension_perm_host">Read and modify data on %1$s</string>
+    <string name="extension_perm_host_any">Read and modify data on any website</string>
+    <string name="extension_permissions_more" tools:ignore="PluralsCandidate">… and %1$d more</string>
+    <!-- Extension management (installed-row gear / after install) -->
+    <string name="extension_manage_desc">Manage</string>
+    <string name="extension_manage_title">Extension management</string>
+    <string name="extension_manage_info">Extension info</string>
+    <string name="extension_manage_settings">Extension settings</string>
+    <string name="extension_creator">Developer: %1$s</string>
+    <string name="extension_no_settings_hint">%1$s provides no built-in management page. See its official page for details.</string>
+    <string name="extension_manage_enable_failed">Could not enable the extension, please retry</string>
+    <string name="extension_list_load_failed">Couldn\'t read the extension list — what you see may be out of date. Please try again.</string>
+    <!-- Install-chain immediate feedback: no path may end in a silent no-op -->
+    <string name="extension_install_started">Install started, please wait…</string>
+
+    <!-- Update -->
+    <string name="pref_check_update_title">Check for updates</string>
+    <string name="pref_check_update_summary">Get the latest version of TangSnow</string>
+    <string name="update_dialog_title">Check for updates</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_latest">You are on the latest version\nv%1$s (internal build %2$d)</string>
+    <string name="update_new_found">New version v%1$s available</string>
+    <string name="update_download">Update now</string>
+    <string name="update_failed">Cannot open the download link, please retry later</string>
+    <string name="update_check_failed">Update check failed, please retry later (if it keeps failing, make sure the update service is configured)</string>
+    <string name="pref_check_update_unavailable">Update service is not configured yet — currently unavailable</string>
+    <string name="pref_version_unknown">Unknown</string>
+
+    <!-- Home / Customize -->
+    <string name="home_wordmark">TangSnow</string>
+    <string name="home_tagline">Light as snow · simple as a leaf</string>
+    <string name="customize_home_title">Customize home</string>
+    <string name="home_style_label">Background style</string>
+    <string name="style_tangsnow">TangSnow</string>
+    <string name="style_mist">Mist</string>
+    <string name="style_plain">Plain</string>
+    <string name="style_image">Custom image</string>
+    <string name="style_image_pick">Choose from gallery</string>
+    <string name="style_image_clear">Clear custom image</string>
+    <string name="style_image_preview_desc">Custom background preview</string>
+    <string name="style_image_hint">Pick an image from your gallery as the home background. Stored locally only.</string>
+    <string name="shortcuts_label">Shortcuts</string>
+    <string name="shortcuts_empty">No shortcuts yet, tap the button below to add</string>
+    <string name="shortcut_add">Add shortcut</string>
+    <string name="shortcut_name_hint">Name (e.g. Bilibili)</string>
+    <string name="shortcut_url_hint">URL (e.g. bilibili.com)</string>
+    <string name="shortcut_max">Up to 8 shortcuts</string>
+    <string name="shortcut_invalid">Invalid name or URL (URL must contain a domain)</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="prefs_cat_general">General</string>
+    <string name="prefs_cat_privacy">Privacy &amp; security</string>
+    <string name="prefs_cat_advanced">Advanced</string>
+    <string name="prefs_cat_about">About</string>
+
+    <string name="pref_language_title">Language</string>
+    <string name="pref_language_summary">中文 / English</string>
+    <string name="pref_default_browser_title">Set as default browser</string>
+    <string name="pref_default_browser_summary">Open links with TangSnow</string>
+
+    <string name="pref_default_browser_already">Already set as default</string>
+    <string name="pref_default_browser_unavailable">Not supported on this device</string>
+
+    <string name="pref_engine_title">Search engine</string>
+    <string name="pref_engine_summary">Built-in and custom search engines</string>
+    <string name="pref_theme_title">Theme</string>
+    <string name="pref_font_size_title">Font size</string>
+    <string name="pref_desktop_mode_title">Desktop site</string>
+    <string name="pref_desktop_mode_summary">Request desktop version of sites</string>
+    <string name="dlg_desktop_confirm">All tabs will be reloaded in desktop mode. Unsaved page content will be lost. Continue?</string>
+    <string name="pref_ask_download_title">Ask before downloading</string>
+    <string name="pref_ask_download_summary">Confirm before each download</string>
+    <string name="pref_javascript_title">Enable JavaScript</string>
+    <string name="pref_javascript_summary">Most sites will break when disabled</string>
+    <string name="pref_session_restore_title">Restore previous tabs</string>
+    <string name="pref_session_restore_summary">After the app is closed by the system, restore your previously open tabs on next launch; private tabs are never restored and tab info stays on this device only</string>
+    <string name="pref_toolbar_bottom_title">Address bar at bottom</string>
+    <string name="pref_toolbar_bottom_summary">Move the address bar to the bottom for easier one-handed use</string>
+
+    <string name="pref_private_mode_title">Private browsing</string>
+    <string name="pref_private_mode_summary">Don\'t save history or cookies</string>
+    <string name="pref_tracking_mode_title">Tracking protection mode</string>
+    <string name="prefs_cat_tracking_custom">Tracking protection — custom</string>
+    <string name="tracking_custom_content_title">Block tracking content</string>
+    <string name="tracking_custom_content_summary">Stop tracking scripts and social-media trackers from loading</string>
+    <string name="tracking_custom_fp_title">Block fingerprint tracking</string>
+    <string name="tracking_custom_fp_summary">Stop sites from building a cross-site profile from your browser fingerprint</string>
+    <string name="tracking_custom_crypto_title">Block cryptomining scripts</string>
+    <string name="tracking_custom_crypto_summary">Stop pages from mining in the background on your device</string>
+    <string name="tracking_custom_cookie_title">Cross-site cookie isolation</string>
+    <string name="tracking_custom_cookie_summary">Isolate third-party cookies per origin site (known tracking cookies are blocked even when off)</string>
+    <string name="toast_tracking_restart">Tracking protection changes take effect on the next launch of TangSnow</string>
+    <string name="pref_gpc_title">Global Privacy Control (GPC)</string>
+    <string name="pref_gpc_summary">Send a “do not sell/share my data” signal to websites that support it (on by default)</string>
+    <string name="pref_param_stripping_title">Strip tracking parameters from links</string>
+    <string name="pref_param_stripping_summary">Remove utm_ and similar tracking parameters when opening links; independent of the tracking protection level (on by default)</string>
+    <string name="toast_privacy_restart">This privacy setting takes effect on the next launch of TangSnow</string>
+    <string name="pref_clear_data_title">Clear browsing data</string>
+    <string name="pref_clear_data_summary">Clear cookies, cache and site data</string>
+
+    <string name="pref_version_title">Version</string>
+    <string name="pref_about_title">About TangSnow</string>
+    <string name="pref_about_summary">Privacy summary · Full privacy · User agreement</string>
+    <string name="pref_open_source_title">Open source licences</string>
+    <string name="pref_open_source_summary">Licences, source availability and trademark notices for GeckoView (MPL 2.0), OkHttp, ZXing and others</string>
+
+    <!-- Consent (cold start / policy update) -->
+    <string name="consent_welcome">Welcome to TangSnow</string>
+    <string name="consent_intro">Before you start, please read and agree to the following. TangSnow is a local browser tool and will not load web pages, initialize the engine, or collect any information until you agree.</string>
+    <string name="consent_view_privacy">View full privacy policy</string>
+    <string name="consent_view_agreement">View user agreement</string>
+    <string name="consent_agree">Agree and continue</string>
+    <string name="consent_disagree">Disagree</string>
+    <string name="consent_starting">Starting…</string>
+
+    <!-- About TangSnow -->
+    <string name="about_privacy_summary">Privacy summary</string>
+    <string name="about_privacy_full">Full privacy policy</string>
+    <string name="about_agreement">User agreement</string>
+    <!-- About page · Crash reports -->
+    <string name="about_crash_title">Crash reports</string>
+    <string name="about_crash_summary_empty">No records yet; catchable app errors are saved locally automatically (view, share or delete — never uploaded)</string>
+    <string name="about_crash_summary_format" tools:ignore="PluralsCandidate">Saved crash logs on this device: %1$d. Tap to view, share or delete</string>
+    <string name="about_crash_none">No crash logs</string>
+    <string name="about_crash_view">View</string>
+    <string name="about_crash_share">Share</string>
+    <string name="about_crash_share_via">Share crash log via…</string>
+    <string name="about_crash_delete">Delete</string>
+    <string name="about_crash_empty_file">(This log is empty)</string>
+
+
+
+
+    <!-- Dialogs -->
+    <string name="dlg_ok">OK</string>
+    <string name="dlg_cancel">Cancel</string>
+    <string name="dlg_clear_data_title">Clear browsing data</string>
+    <string name="clear_option_cookies">Cookies and site data</string>
+    <string name="clear_option_cache">Cache</string>
+    <string name="clear_option_history">Local browsing history</string>
+    <string name="clear_option_session">Tab session snapshot</string>
+    <string name="clear_option_downloads">Download records</string>
+    <string name="toast_data_nothing_selected">Select at least one item</string>
+    <string name="toast_data_cleared">Browsing data cleared</string>
+    <string name="toast_data_partially_cleared">Selected data cleared, but some local data could not be removed</string>
+    <string name="toast_data_clear_failed">Clear failed, please retry</string>
+    <string name="toast_private_mode_restart">Private mode applies to the next new tab</string>
+
+    <!-- Web prompts / site permissions (PromptDelegate / PermissionDelegate) -->
+    <string name="prompt_login_title">Sign in</string>
+    <string name="prompt_username">Username</string>
+    <string name="prompt_password">Password</string>
+    <string name="prompt_leave_title">Leave page?</string>
+    <string name="prompt_leave_message">Changes you made may not be saved. Leave anyway?</string>
+
+    <!-- New web prompts (GeckoView PromptDelegate completion) -->
+    <string name="prompt_color_title">Pick a color</string>
+    <string name="prompt_color_custom">Custom…</string>
+    <string name="prompt_color_invalid">Color must be #RRGGBB (e.g. #3366CC)</string>
+    <string name="prompt_popup_message">“%1$s” requested a window. TangSnow does not open new windows and will load it in the current tab.</string>
+    <string name="prompt_repost_title">Resubmit form?</string>
+    <string name="prompt_repost_message">This will resend the form data. Continue?</string>
+    <string name="prompt_redirect_message">The page will go to “%1$s”. Continue?</string>
+    <string name="prompt_share_chooser">Share to…</string>
+    <string name="perm_allow">Allow</string>
+    <string name="perm_deny">Deny</string>
+    <string name="perm_location_message">%1$s wants to access your location</string>
+    <string name="perm_notification_message">%1$s wants to send you notifications</string>
+    <string name="perm_local_device_message">%1$s wants to access local devices</string>
+    <string name="perm_local_network_message">%1$s wants to access your local network</string>
+    <string name="perm_media_message">%1$s wants to use your %2$s</string>
+    <string name="perm_media_camera_mic">camera and microphone</string>
+    <string name="perm_media_camera">camera</string>
+    <string name="perm_media_mic">microphone</string>
+
+    <!-- Open source notice (MPL 2.0 / Apache 2.0 compliance) -->
+    <string name="open_source_text">This app uses the following open-source components:\n\n1. Mozilla GeckoView (v155)
+Copyright © Mozilla Foundation, license: Mozilla Public License 2.0
+Source: https://github.com/mozilla/gecko-dev
+MPL 2.0 full text: https://www.mozilla.org/en-US/MPL/2.0/
+Source availability (MPL 2.0 §3.2): since this app is distributed in executable form, the source address above is where the corresponding Source Code Form can be obtained; this app does not modify GeckoView, and its licence and copyright notices (§3.4) are left intact.
+
+2. OkHttp (official AMO metadata, icons and update-manifest requests)
+Copyright © Square, license: Apache License 2.0
+Source: https://github.com/square/okhttp
+
+3. ZXing / ZXing Android Embedded (QR scan)
+License: Apache License 2.0
+Source: https://github.com/zxing/zxing
+
+4. Google Material Components (Material 3, UI components)
+License: Apache License 2.0
+Source: https://github.com/material-components/material-components-android
+
+5. AndroidX, Kotlin, kotlinx-coroutines, etc.
+License: Apache License 2.0
+
+Apache License 2.0 full text: https://www.apache.org/licenses/LICENSE-2.0
+
+This app only calls the public APIs of these components and does not modify their source. This app’s own code is not subject to MPL 2.0 copyleft obligations. Copyright of each component belongs to its respective authors.
+
+6. Interface icons
+Some vector icons are based on Google Material Icons (Apache License 2.0, https://fonts.google.com/icons). Official icons of search engines and browser extensions are used only to identify the service or product they refer to in the UI; their copyright belongs to their respective owners, and their use here does not imply endorsement or affiliation.
+
+7. Trademarks
+“TangSnow (棠雪)” is this app’s own brand. This app is built on the GeckoView engine but is not a Mozilla product and has no affiliation with Firefox; “Firefox”, “Mozilla” and their logos are trademarks of the Mozilla Foundation, referenced here only to factually describe the engine origin.</string>
+
+    <!-- Privacy summary (keep in sync with full policy) -->
+    <string name="legal_privacy_summary">TangSnow is a local browser tool designed with privacy in mind:\n\n· Local-only data
+\nBookmarks, history, homepage customization and settings are kept only on this device. The app does not collect or upload your personal information and contains no analytics, ads or tracking SDKs. Crash logs from catchable unexpected errors are also kept on this device only (limited to the version, device and stack details needed for debugging, and possibly the domain of the most recently visited site — the domain only, never the full URL or search terms), where you can view or delete them from the About page — they are never uploaded automatically.
+\n
+\n· Minimal permissions
+\nInternet — load sites you visit and fetch extension metadata/packages. Camera — only used when you actively scan a QR code. Clipboard — written only when you tap copy (scan results, copy link, copy selection, one-tap clear). In addition, to warn you when the clipboard is rewritten, the app listens for new system-clipboard content while it is in the foreground and holds window focus; this is used only to show a reminder with a one-tap clear, at most once per foreground session. The listener never reads, stores or uploads clipboard content, and never attributes the change to a particular site (the system provides no origin information).
+\n
+\n· Photos from your gallery
+\nWhen you choose “Scan from image” or “Custom home image”, Android’s system photo picker lets you select a single picture. The app does not request album/photo permissions, cannot browse your library, and never uploads the picture.
+\n
+\n· Network targets and built-in protection
+\nNetwork access is limited to the sites you visit and the official AMO extension source. The built-in tracking protection (on by default; strength adjustable, or can be turned off, in Settings) is evaluated on this device and never collects or uploads your browsing behavior; its filter lists are updated on-device from Mozilla’s official list service (lists and hash-prefix comparisons only — never the plain text of the URLs you visit). The engine’s remote “Safe Browsing” lookups are switched off, so no URL you visit is sent to any third party. Stripping tracking parameters from links and the “Do Not Track / Global Privacy Control (GPC)” signal are on by default and can be turned off in Settings → Privacy &amp; Security. The address bar also shows an on-device connection-security state (encrypted / not secure) with no network check involved, and you can turn on “Block screenshots” so system screenshots and the Recents preview show no browsing content.
+\n
+\n· Your data rights
+\nAll data stay on this device: you can clear history, bookmarks or download records in one tap from the Library, or selectively clear Cookies &amp; site data, cache, local history, tab session snapshots and download records via “Clear browsing data” (bookmarks are never bulk-cleared — manage them separately in the Library); uninstalling removes everything. Apart from the requests made to Mozilla’s official services (addons.mozilla.org and the list service) to fetch extensions and list updates, TangSnow does not sell, share, commission the processing of, or transfer across borders any of your information.
+\n
+\n· Your choice
+\nDisagreeing with this summary is the same as disagreeing with the full policy — the app exits immediately. The full privacy policy and user agreement are always available on this page and via Settings → About TangSnow; making TangSnow your default browser is always your own explicit choice.</string>
+
+    <!-- Full privacy policy -->
+    <string name="privacy_policy_text">Last updated: 2026-09-16\n\n1. What we process and why
+\nTangSnow is a strictly local browser tool. In normal use we do not collect any personal information outside your device: bookmarks, history, tab session snapshots (to restore your last open tabs if the process is reclaimed by the system; only normal tabs are saved, never private tabs; on by default and can be turned off in Settings, which clears any saved snapshot immediately), homepage customization and settings live only on this device. These data are processed solely to provide browsing and local assistant features (e.g. history suggestions); this is necessary to provide the local-tool functionality you use. The app does not use your data for marketing, profiling or automated decision-making. It contains no analytics, advertising or tracking SDKs and does not sell personal information.\n\n2. Permissions (minimized)
+\n· INTERNET — load pages and fetch extension metadata and packages.
+\n· CAMERA — used only when you actively scan a QR code; nothing is recorded or stored.
+\n· Engine operations (ordinary permissions declared by the Mozilla GeckoView engine; never prompted, no personal data involved): ACCESS_NETWORK_STATE (check connectivity), WAKE_LOCK (keep the device awake during media playback), MODIFY_AUDIO_SETTINGS (adjust media volume and audio settings).
+\n· Gallery — the app does not request album/photo permissions. “Scan from image” and “Custom home image” use Android’s system photo picker and read only the single picture you select; it cannot browse your library and never uploads pictures.
+\n· Clipboard — written only when you tap copy (scan results, copy link, copy selection, one-tap clear). To be transparent: to warn you when the clipboard is rewritten, the app listens for new system-clipboard content while it is in the foreground and holds window focus. This is used only to show a reminder with a one-tap “Clear”, at most once per foreground session. The listener never reads, stores or uploads clipboard content, and does not attribute the change to any particular page (the system provides no origin information).\n\n3. Default search engine
+\nThe default is “Bing CN” (cn.bing.com) for stable, compliant access on mainland networks. Overseas or custom entries are enabled only by explicit user choice; please use them only where your network and local law allow, at your own responsibility.\n\n4. Network targets and where processing happens
+\n· addons.mozilla.org (AMO) — extension catalog, icons, metadata and signed packages.
+\n· Sites you visit yourself.
+\n· Built-in tracking protection is on by default and can be adjusted (Standard/Strict/Custom) or fully turned off in Settings → Privacy &amp; Security; blocking decisions are made on your device, and neither we nor any third party receives the URLs you visit or your browsing behaviour. In the Strict profile — and in Custom when “Block fingerprinting” is ticked — additional runtime fingerprinting protection is enabled on your device (it weakens browser characteristics usable for fingerprinting); because it changes information some pages can read and may affect how a few sites render, it is enabled only in the profiles you explicitly choose. “Bounce tracking protection” (blocking cross-site tracking built through redirection chains) follows the same setting and is turned off together with tracking protection. The filter lists used by tracking protection are provided and updated on-device by Mozilla’s official list service (shavar.services.mozilla.com); only lists and hash-prefix comparisons are downloaded, never the plain text of the URLs you visit, and they are not used to identify you.
+\n· Stripping tracking parameters from links and the Global Privacy Control (GPC) signal are on by default and can be turned off in the same settings page: the former removes tracking parameters locally when opening links; the latter only sends a declaration to supporting websites (compliance is the site’s own choice). Neither transfers your browsing data to any third party.
+\n· Local .xpi import is verified and installed on-device by the engine only, makes no network request and bypasses no regional limits.
+\nApart from the necessary requests made to Mozilla’s official services (addons.mozilla.org and the list service) to fetch extensions and list updates, the app does not share, sell or commission the processing of your personal information with any third party, and there is no other cross-border transfer of personal information. The engine’s remote “Safe Browsing” lookups are switched off, so no URL you visit is sent to any third party on that account. To make up for the reduced warning coverage, the address bar shows the connection security state (encrypted / not secure, the latter including insecure content that was loaded instead of blocked) as judged entirely on this device — it issues no network requests. Crash logs are never uploaded either (see §7).\n\n5. Consent and withdrawal
+\nOn first use, or after this policy or the user agreement changes, a summary is shown first; no web content or engine starts until you tap “Agree and continue”. “Disagree” exits immediately without processing, and consent state lives only on this device.
+\nYou can withdraw consent at any time: stop using the app and uninstall it — local data are deleted with it. Before uninstalling you can also clear data in-app as described in §7 and §8.\n\n6. Third-party content and extensions
+\nPages are provided by their own sites and extensions by their developers; the app merely opens pages you request or installs Mozilla-signed extensions from the official source. Downloaded files should be checked for source and safety by yourself. The app neither bundles nor recommends any ad-blocking extension (their availability and legal status differ across jurisdictions and they may constitute unfair competition): the curated catalog lists privacy and utility extensions only. Third-party extensions you install yourself are the responsibility of their developers — please evaluate them and accept the consequences yourself.\n\n7. Data retention and deletion
+\nBookmarks, history, tab session snapshots and other local data are removed when you delete them, run “Clear browsing data”, or uninstall the app (private tabs never save any session snapshot, and neither write to nor read from on-device history — so in a private tab, page links are never highlighted based on sites you visited before). “Clear browsing data” clears exactly what you select: cookies &amp; site data (including site permissions and HTTP auth sessions — permissions you previously granted, such as location or notifications, and HTTP login state are cleared as well), cache, local history, tab session snapshots and download records — bookmarks are not included and are managed separately in the Library, which also supports clearing history, bookmarks or download records in one tap (clearing download records only removes the records, never the downloaded files). Browsing history keeps only the most recent 200 entries; older entries are removed automatically. Downloaded files are stored in the system download directory or the app-private directory and are opened or shared through system content authorization (FileProvider), never uploaded. In case of a catchable unexpected error in the app process, a crash log is saved on this device only: it contains only the crash time, app version, device model and error stack, and may record the domain of the site you most recently visited (domain only, never the full URL). It never includes page content, search terms, account details or other browsing information that identifies you. Logs are capped at the 10 most recent and can be viewed, shared or deleted one by one via Settings → About TangSnow → Crash reports; they are never uploaded. “Block screenshots” is an optional on-device setting (off by default): when on, it only adds a system security flag to the app window so that system screenshots and the Recents preview show no content; it reads and collects nothing. TangSnow has no cloud account — uninstalling fully deletes your data.\n\n8. Your rights
+\nBecause your data live entirely on this device, you can at any time: view and correct them (e.g. re-save bookmarks); delete them (one-tap clearing of history/bookmarks/download records in the Library, homepage settings, crash-report deletion, “Clear browsing data”); uninstall to delete everything. If you have questions about how TangSnow handles your information, contact us via §11; after verifying identity we will assist (as the app does not store identity-revealing data, on-device deletion is normally the complete remedy).\n\n9. Protection of minors
+\nMinors should use this app under the guidance of their guardians; the app offers no content or features targeting minors.\n\n10. Infringement and reporting
+\nFor content hosted by third-party sites or extensions, contact those providers first. For issues about this app itself, contact us via the project\'s GitHub repository.\n\n11. Contact
+\nFor privacy or compliance questions, contact us via the project\'s GitHub repository (please mention the issue type and app version).</string>
+
+    <!-- User agreement -->
+    <string name="user_agreement_text">1. Service nature
+\nThis app is a local browsing tool providing page rendering, Mozilla-signed AMO extensions, QR scanning (camera and from-gallery), using a local picture as the home background, saving pages as PDF, desktop-site switching and tab session restoration (restoring your last open tabs after the process is reclaimed, saved locally only) and a Library for managing and one-tap clearing of history, bookmarks and download records (clearing download records does not delete files). It also shows an on-device connection-security indicator and offers an optional “Block screenshots” switch. It does not host, aggregate or review any web content; browsing data such as the page cache is stored on your device only (see §§1 and 7 of the privacy policy).
+\n
+\n2. Consent and changes
+\nOn first use, or when this agreement or the privacy policy changes, this summary appears before any use; you must tap “Agree and continue” to proceed, and “Disagree” exits immediately. Future changes restart the consent flow on next launch.
+\n
+\n3. Extensions
+\nAll extensions come from the official Mozilla source and are Mozilla-signed; no third-party mirrors or unsigned extensions are offered. Some may be region-limited by Mozilla’s own policy.
+\nYou may also install a local .xpi file from your device: it must still carry a valid Mozilla signature — unsigned or mismatched files are rejected by the engine. Local import is verified and installed on-device only; it does not bypass any regional limits and is not an endorsement of third-party distribution channels.
+\nSome ad- and content-filtering extensions (e.g. ad blockers) may differ in availability and legal status across jurisdictions; their publishers may restrict provision in certain regions to comply with local laws or binding court rulings. Whether to install or use such tools is your own judgment and responsibility. The app neither bundles nor recommends any ad-blocking extension: the curated catalog lists privacy and utility extensions only.
+\n
+\n4. Search engines and compliance
+\nThe default search engine is an accessible, licensed domestic service. Overseas search engines and custom search URLs are used only when you actively choose them; you are responsible for using them in a compliant network and legal environment. The app offers no tool to circumvent network regulation.
+\n
+\n5. Default browser
+\nYou may explicitly request to set TangSnow as the default browser in Settings → Advanced. The app never changes the system default on its own.
+\n
+\n6. User responsibilities
+\nYou agree to comply with the laws of your jurisdiction and to refrain from accessing, distributing or storing illegal content (including content endangering state security, obscenity, or infringing others’ IP and personal information). Downloaded files should be verified by yourself.
+\n
+\n7. Protection of minors
+\nMinors should use this app under adult guidance.
+\n
+\n8. Infringement and reporting
+\nPages and extensions are provided by their respective owners; contact them first for takedown requests. For issues about this app itself, contact us via the project\'s GitHub repository.
+\n
+\n9. Disclaimer
+\nDisputes or losses caused by third-party sites, extensions, files you download, or overseas/custom search engines you enable are not the responsibility of this app’s developer.
+\n
+\n10. Open source
+\nThis app uses Mozilla GeckoView (MPL 2.0), OkHttp and ZXing (Apache License 2.0); see “Open source notice” for statements and license links.</string>
+    <string name="about_version_format">v%1$s</string>
+    <string name="tabs_count_format">%1$d</string>
+    <string name="arrow_open">▾</string>
+    <string name="arrow_closed">▸</string>
+    <string name="extension_install_interrupted">The previous install was interrupted — try again</string>
+    <!-- ==== Connection security indicator (S1) ==== -->
+    <string name="security_secure_desc">Connection is encrypted (HTTPS, valid certificate)</string>
+    <string name="security_insecure_desc">Connection is not encrypted, or the page has insecure content loaded</string>
+
+    <!-- ==== Executable download warning (S3): not affected by "don't ask again" ==== -->
+    <string name="dl_executable_title">This is an executable file</string>
+    <string name="dl_executable_message">"%1$s" may be an installer or program that can modify your device. Continue only if you fully trust the source.</string>
+    <string name="dl_executable_continue">I understand the risk, continue</string>
+
+    <!-- ==== Block screenshots (P4) ==== -->
+    <string name="pref_secure_screen_title">Block screenshots</string>
+    <string name="pref_secure_screen_summary">When on, system screenshots and the Recents preview will not show browsing screens; some devices or OS versions may not support it</string>
+    <string name="toast_secure_screen_applied">Saved — takes effect immediately in browsing screens</string>
+
+    <!-- ==== Notice before sharing a crash log (P3) ==== -->
+    <string name="about_crash_share_notice">This file may contain the domain of the site you most recently visited (domain only, never the full URL). Please review before sharing.</string>
+</resources>

@@ -1,0 +1,444 @@
+<resources>
+    <string name="app_name">棠雪</string>
+
+    <!-- 首页 / 地址栏 / 底部栏 -->
+    <string name="hint_search">搜索或输入网址</string>
+    <string name="btn_back">返回</string>
+    <string name="btn_forward">前进</string>
+    <string name="btn_stop">停止</string>
+    <string name="btn_scan">扫码</string>
+    <string name="btn_bookmark">收藏</string>
+    <string name="btn_share">分享</string>
+    <string name="btn_tabs">标签页</string>
+    <string name="btn_more">更多</string>
+    <string name="btn_close">关闭</string>
+    <string name="btn_delete">删除</string>
+
+    <string name="btn_custom_engine">自定义搜索引擎</string>
+    <string name="action_switch_engine">切换搜索引擎</string>
+
+    <!-- 扫码 -->
+    <string name="btn_private">无痕浏览</string>
+    <string name="toast_private_on">已开启无痕标签页：不记录历史、不保存 Cookie</string>
+    <string name="toast_private_off">已退出无痕浏览</string>
+    <string name="scan_hint">将二维码对准取景框</string>
+    <string name="scan_result_title">扫码结果</string>
+    <!-- 扫码得到非 http(s) 链接（file:/mailto:/tel: 等）：明确告知打不开，而不是拿去搜索 -->
+    <string name="scan_scheme_unsupported">这是一个 %1$s 链接，浏览器无法打开：\n\n%2$s</string>
+    <string name="scan_open_external">用其它应用打开</string>
+    <string name="scan_no_handler">没有能打开该链接的应用</string>
+    <string name="scan_copy">复制内容</string>
+    <string name="scan_copied">已复制到剪贴板</string>
+    <!-- 剪贴板变化提示：系统不提供来源信息，故**不断言“网页写入”**（分屏/悬浮窗下别的应用复制也会触发）。
+         隐私政策已披露本监听行为，且仅在应用前台且持有焦点时、每个前台周期提示一次。 -->
+    <string name="clipboard_external_write">剪贴板内容有更新</string>
+    <string name="clipboard_clear">清除</string>
+    <string name="clipboard_read_title">允许读取剪贴板？</string>
+    <string name="clipboard_read_message">「%1$s」想要读取剪贴板内容</string>
+    <string name="clipboard_read_allow">允许</string>
+    <string name="clipboard_read_deny">拒绝</string>
+    <string name="clipboard_unknown_site">该网站</string>
+
+    <!-- 崩溃兜底 / 外部协议 -->
+    <string name="toast_page_crashed">页面出错了，正在尝试恢复…</string>
+    <string name="toast_external_opening">正在用其他应用打开…</string>
+    <string name="extension_popup_close">关闭扩展面板</string>
+
+    <!-- 收藏 / 分享 Toast -->
+    <string name="toast_bookmarked">已添加到书签</string>
+    <string name="toast_bookmark_removed">已移除书签</string>
+    <string name="toast_share_empty">当前没有可分享的页面</string>
+    <string name="toast_open_file_failed">无法打开该文件</string>
+    <string name="toast_share_file_failed">无法分享该文件</string>
+    <string name="toast_file_not_ready">文件还没下载完，完成后才能打开</string>
+    <string name="toast_file_download_failed">这次下载没有成功，没有可打开的文件</string>
+    <string name="toast_file_missing">文件已不存在，可能已被删除或清理</string>
+    <string name="toast_start_download">开始下载</string>
+    <string name="download_confirm_title">开始下载</string>
+    <string name="download_confirm_message">文件名：%1$s\n\n是否下载该文件？</string>
+    <string name="download_confirm_ok">下载</string>
+    <string name="download_no_ask">不再询问</string>
+    <string name="share_via">分享到…</string>
+
+    <!-- 更多面板 -->
+    <string name="more_extensions">扩展</string>
+    <string name="more_history">历史</string>
+    <string name="more_bookmarks">书签</string>
+    <string name="more_downloads">下载</string>
+    <string name="more_customize_home">定制主页</string>
+    <string name="more_settings">设置</string>
+    <string name="more_exit">退出浏览器</string>
+    <!-- 更多面板 · 快捷操作（对接 GeckoView 原生能力） -->
+    <string name="more_refresh">刷新</string>
+    <string name="more_find">页内查找</string>
+    <string name="find_hint">查找网页文字</string>
+    <string name="find_prev">上一处</string>
+    <string name="find_next">下一处</string>
+    <string name="find_empty">无结果</string>
+    <string name="find_result">%1$d / %2$d</string>
+    <string name="suggestion_search">在 %1$s 中搜索 “%2$s”</string>
+    <string name="selection_copy">复制</string>
+    <string name="selection_share">分享</string>
+    <string name="selection_search">搜索</string>
+    <string name="more_copy_link">复制链接</string>
+    <string name="more_desktop">桌面版</string>
+    <string name="more_save_pdf">存 PDF</string>
+    <string name="more_scan_image">相册扫码</string>
+    <string name="more_need_page">当前没有可操作的页面</string>
+    <string name="more_nothing_to_copy">当前没有可复制的链接</string>
+    <string name="toast_copied">链接已复制到剪贴板</string>
+    <string name="toast_desktop_on">已切换桌面版，页面正在刷新</string>
+    <string name="toast_desktop_off">已切回移动版，页面正在刷新</string>
+    <string name="toast_desktop_on_blank">已开启桌面版，下次打开网页生效</string>
+    <string name="toast_desktop_off_blank">已关闭桌面版，下次打开网页生效</string>
+    <string name="pdf_saved">PDF 已保存到系统「下载」</string>
+    <string name="pdf_failed">生成 PDF 失败，请稍后重试</string>
+    <string name="dlg_exit_title">退出棠雪</string>
+    <string name="dlg_exit_message">确定要退出浏览器吗？</string>
+    <string name="toast_exit_again">再按一次退出</string>
+
+    <!-- 标签页面板 -->
+    <string name="tabs_title">标签页</string>
+    <string name="tabs_new">新标签页</string>
+    <string name="tabs_empty">暂无其他标签页</string>
+    <string name="tabs_batch_title">标签操作</string>
+    <string name="tabs_close_others">关闭其余标签</string>
+    <string name="tabs_close_all">关闭全部标签</string>
+    <!-- 复数形式：中文只有一种形态（Android 至少要求 other） -->
+    <plurals name="tabs_close_others_done">
+        <item quantity="other">已保留 %1$d 个标签</item>
+    </plurals>
+    <string name="tabs_closed_all">已关闭全部标签</string>
+
+    <!-- 引擎管理 -->
+    <string name="engine_manager_title">搜索引擎</string>
+    <string name="engine_settings_help">选择默认搜索引擎；长按自定义项可删除；点击下方按钮可添加自定义搜索（用 {q} 代表关键词）</string>
+    <string name="engine_add_title">添加自定义引擎</string>
+    <string name="engine_name_hint">名称（如：我的搜索）</string>
+    <string name="engine_url_hint">搜索地址，用 {q} 代表关键词，如 https://x.com/s?q={q}</string>
+    <string name="engine_duplicated">该名称或地址已存在</string>
+    <string name="engine_url_scheme_invalid">搜索地址必须以 http:// 或 https:// 开头</string>
+    <string name="engine_delete_confirm">确定删除「%1$s」吗？删除后需重新添加。</string>
+    <string name="engine_manage">管理搜索引擎</string>
+    <string name="engine_custom_suffix_format">%1$s（自定义）</string>
+    <!-- 引擎名称（供界面本地化显示） -->
+    <string name="engine_bing_cn">必应国内</string>
+    <string name="engine_bing">Bing 国际</string>
+    <string name="engine_baidu">百度</string>
+    <string name="engine_sogou">搜狗</string>
+    <string name="engine_so360">360 搜索</string>
+    <string name="engine_sm">神马搜索</string>
+    <string name="engine_google">Google</string>
+    <string name="engine_ddg">DuckDuckGo</string>
+
+    <!-- 资料库（历史 / 书签 / 下载） -->
+    <string name="library_title">资料库</string>
+    <string name="btn_clear">清空</string>
+    <string name="library_clear_history">历史记录</string>
+    <string name="library_clear_bookmarks">书签</string>
+    <string name="library_clear_downloads">下载记录</string>
+    <string name="library_clear_confirm">确定清空全部%1$s吗？此操作不可撤销。</string>
+    <string name="library_clear_downloads_hint">仅清除记录，已下载的文件不会被删除。</string>
+    <string name="toast_cleared">已清空</string>
+    <string name="history_empty">暂无浏览历史</string>
+    <string name="bookmarks_empty">暂无书签\n浏览网页时点击下方 ☆ 即可收藏</string>
+    <string name="downloads_empty">暂无下载记录</string>
+    <string name="download_state_success">已完成</string>
+    <string name="download_state_running">下载中 %1$d%%</string>
+    <string name="download_state_failed">失败</string>
+    <string name="download_state_paused">已暂停</string>
+    <string name="download_state_pending">等待中</string>
+
+    <!-- 扩展 -->
+    <string name="extensions_title">扩展</string>
+    <string name="extension_tab_recommend">可安装</string>
+    <string name="extension_tab_installed">已安装</string>
+    <string name="extension_source_note">以下扩展来自 Mozilla 官方签名源（AMO），点击「获取」即可安装到浏览器</string>
+    <string name="extension_get">获取</string>
+    <string name="extension_installing">安装中…</string>
+    <string name="extension_error_download">下载失败，请检查网络后重试</string>
+    <string name="extension_installed_label">已安装</string>
+    <string name="extension_install_success">扩展安装成功</string>
+    <string name="extension_need_runtime">浏览器引擎尚未就绪，请先返回主页再试</string>
+    <string name="extension_version">版本 %1$s</string>
+    <string name="extension_uninstall_confirm">卸载扩展</string>
+    <string name="extension_uninstall_message">确定卸载「%1$s」吗？其保存的数据将一并删除。</string>
+    <string name="extension_list_empty">暂无已安装扩展\n去「可安装」挑一个试试</string>
+    <string name="extension_custom_install">自定义安装</string>
+    <string name="extension_custom_url">从官方链接安装</string>
+
+    <!-- 可安装扩展的简介（与 extension/ExtensionCatalog.kt 的 descRes 一一对应） -->
+    <string name="extension_desc_privacy_badger">自动学习并屏蔽隐藏跟踪器（电子前哨基金会 EFF 出品）</string>
+    <string name="extension_desc_clearurls">自动清除网址中的跟踪参数，减少跨站追踪</string>
+    <string name="extension_desc_darkreader">为任意网站生成舒适的深色模式</string>
+    <string name="extension_desc_tampermonkey">用户脚本管理器，网页增强玩法从这里开始</string>
+    <string name="extension_desc_bitwarden">免费开源的跨端密码管理器</string>
+    <string name="extension_desc_simple_translate">划词即译，简单直接的网页翻译助手</string>
+    <string name="extension_desc_stylus">给网站换自定义样式主题，随心改版</string>
+
+    <string name="extension_url_hint">粘贴 AMO 官方 .xpi 直链（https://addons.mozilla.org/…）</string>
+    <string name="extension_url_install">安装</string>
+    <string name="extension_url_invalid">请输入 addons.mozilla.org 的 https 安装地址（仅支持 Mozilla 官方源）</string>
+    <string name="extension_import_file">从本地文件导入 .xpi</string>
+    <string name="extension_import_hint">仅接受 Mozilla 官方签名的 .xpi 扩展包（与网页安装走同一内核签名校验）</string>
+    <string name="extension_importing">导入中…</string>
+    <string name="extension_import_invalid">无法读取该文件：请选择有效的 .xpi 扩展包</string>
+    <string name="extension_import_failed_message">文件导入失败：%1$s</string>
+
+    <!-- 扩展安装失败与确认 -->
+    <string name="extension_install_failed_title">安装失败</string>
+    <string name="extension_install_failed_message">「%1$s」安装失败：%2$s。\n可打开官方扩展页查看，或稍后重试。</string>
+    <string name="extension_open_official">打开官方扩展页</string>
+    <string name="extension_retry">重试</string>
+    <string name="extension_error_network">网络错误，无法从官方源下载</string>
+    <string name="extension_error_domain">官方安装通道拒绝了该地址</string>
+    <string name="extension_error_signature">该扩展缺少 Mozilla 官方签名</string>
+    <string name="extension_error_corrupt">官方包校验失败，请重试</string>
+    <string name="extension_error_blocklisted">该扩展已被 Mozilla 官方屏蔽</string>
+    <string name="extension_error_engine_no_response">安装请求已交给浏览器内核，但内核在限期内没有任何回应——通常是安装确认弹窗未弹出或被其它界面遮挡，也可能官方源在该网络下无响应。请重试。</string>
+    <string name="extension_error_code">官方返回错误码 %1$d</string>
+    <string name="extension_error_timeout">安装超时（官方源长时间无响应）</string>
+    <string name="extension_region_blocked">地区受限</string>
+    <string name="extension_region_blocked_title">官方渠道地区限制</string>
+    <string name="extension_region_blocked_message">「%1$s」的官方安装渠道（AMO）对您当前网络所在地区返回了 451（因法律原因不可用）限制——这是发行方 Mozilla 为遵守当地法律法规与生效裁判而采取的合规措施，并非本应用行为，因此暂时无法安装。若您的网络环境变化后仍无法安装，可打开官方扩展页了解详情。</string>
+    <string name="extension_install_confirm">安装「%1$s」？</string>
+    <string name="extension_update_confirm">更新扩展</string>
+    <string name="extension_update_confirm_message">「%1$s」有可用更新（v%2$s），是否允许？</string>
+    <string name="extension_optional_confirm">扩展权限请求</string>
+    <string name="extension_optional_confirm_message">「%1$s」请求以下可选权限：</string>
+    <string name="extension_no_permissions">该扩展未申请额外权限</string>
+    <string name="extension_permissions_intro">它申请的权限：</string>
+    <string name="extension_perm_host">读取和修改 %1$s 上的网站数据</string>
+    <string name="extension_perm_host_any">读取和修改任意网站的数据</string>
+    <string name="extension_permissions_more">…… 及其余 %1$d 项</string>
+    <!-- 扩展管理（已安装行齿轮 / 安装完成直达） -->
+    <string name="extension_manage_desc">管理</string>
+    <string name="extension_manage_title">扩展管理</string>
+    <string name="extension_manage_info">扩展信息</string>
+    <string name="extension_manage_settings">扩展设置</string>
+    <string name="extension_creator">开发者：%1$s</string>
+    <string name="extension_no_settings_hint">%1$s 未提供内置管理页，可前往官方页查看详情</string>
+    <string name="extension_manage_enable_failed">启用扩展失败，请重试</string>
+    <string name="extension_list_load_failed">读取扩展列表失败，当前显示的可能不是最新状态，请稍后重试</string>
+    <!-- 安装链路的即时反馈：任何路径都不允许"点了没反应" -->
+    <string name="extension_install_started">已开始安装，请稍候…</string>
+
+    <!-- 更新 -->
+    <string name="pref_check_update_title">检查更新</string>
+    <string name="pref_check_update_summary">获取最新版本的棠雪</string>
+    <string name="update_dialog_title">检查更新</string>
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_latest">当前已是最新版本\nv%1$s（内部版本 %2$d）</string>
+    <string name="update_new_found">发现新版本 v%1$s</string>
+    <string name="update_download">立即更新</string>
+    <string name="update_failed">无法打开下载地址，请稍后重试</string>
+    <string name="update_check_failed">检查更新失败，请稍后重试（如多次失败，请确认已接入更新服务）</string>
+    <string name="pref_check_update_unavailable">尚未接入更新服务，暂时不可用</string>
+    <string name="pref_version_unknown">未知</string>
+
+    <!-- 空白首页 / 定制主页 -->
+    <string name="home_wordmark">棠雪</string>
+    <string name="home_tagline">轻若雪 · 简如棠</string>
+    <string name="customize_home_title">定制主页</string>
+    <string name="home_style_label">背景风格</string>
+    <string name="style_tangsnow">棠雪</string>
+    <string name="style_mist">薄雾</string>
+    <string name="style_plain">极简</string>
+    <string name="style_image">自定义图片</string>
+    <string name="style_image_pick">从相册选择图片</string>
+    <string name="style_image_clear">清除自定义图片</string>
+    <string name="style_image_preview_desc">当前自定义背景预览</string>
+    <string name="style_image_hint">支持从相册选择一张图片作为主页背景（仅保存在设备本地）。</string>
+    <string name="shortcuts_label">快捷方式</string>
+    <string name="shortcuts_empty">还没有快捷方式，点下方按钮添加</string>
+    <string name="shortcut_add">添加快捷方式</string>
+    <string name="shortcut_name_hint">名称（如：哔哩哔哩）</string>
+    <string name="shortcut_url_hint">网址（如 bilibili.com）</string>
+    <string name="shortcut_max">最多添加 8 个快捷方式</string>
+    <string name="shortcut_invalid">名称或网址无效（网址需含域名）</string>
+
+    <!-- 设置 -->
+    <string name="settings_title">设置</string>
+    <string name="prefs_cat_general">常规</string>
+    <string name="prefs_cat_privacy">隐私与安全</string>
+    <string name="prefs_cat_advanced">高级</string>
+    <string name="prefs_cat_about">关于</string>
+
+    <string name="pref_language_title">语言</string>
+    <string name="pref_language_summary">中文 / English</string>
+    <string name="pref_default_browser_title">设为默认浏览器</string>
+    <string name="pref_default_browser_summary">用棠雪打开外部链接</string>
+
+    <string name="pref_default_browser_already">已是默认浏览器</string>
+    <string name="pref_default_browser_unavailable">当前设备不支持此操作</string>
+
+    <string name="scan_no_qr_found">这张图片中没有识别到二维码</string>
+
+    <string name="pref_engine_title">搜索引擎</string>
+    <string name="pref_engine_summary">内置 + 自定义搜索引擎</string>
+    <string name="pref_theme_title">主题</string>
+    <string name="pref_font_size_title">字体大小</string>
+    <string name="pref_desktop_mode_title">桌面版网站</string>
+    <string name="pref_desktop_mode_summary">以桌面版请求网页</string>
+    <string name="dlg_desktop_confirm">切换后将用桌面版重新加载全部标签页，页面中未保存的内容会丢失。确定继续吗？</string>
+    <string name="pref_ask_download_title">下载前询问</string>
+    <string name="pref_ask_download_summary">开始下载前弹出确认</string>
+    <string name="pref_javascript_title">启用 JavaScript</string>
+    <string name="pref_javascript_summary">关闭后大部分网页将无法正常工作</string>
+    <string name="pref_session_restore_title">恢复上次的标签页</string>
+    <string name="pref_session_restore_summary">浏览器被系统关闭后，下次启动自动恢复上次打开的普通标签页；无痕标签不恢复，标签信息仅保存在本机</string>
+    <string name="pref_toolbar_bottom_title">地址栏在底部</string>
+    <string name="pref_toolbar_bottom_summary">把地址栏放到屏幕底部，更方便单手操作</string>
+
+    <string name="pref_private_mode_title">无痕浏览</string>
+    <string name="pref_private_mode_summary">不保存历史记录与 Cookie</string>
+    <string name="pref_tracking_mode_title">跟踪保护模式</string>
+    <string name="prefs_cat_tracking_custom">跟踪保护自定义</string>
+    <string name="tracking_custom_content_title">拦截跟踪内容</string>
+    <string name="tracking_custom_content_summary">阻止跟踪脚本与社交媒体跟踪器加载</string>
+    <string name="tracking_custom_fp_title">拦截指纹跟踪</string>
+    <string name="tracking_custom_fp_summary">阻止网站采集浏览器指纹进行跨站画像</string>
+    <string name="tracking_custom_crypto_title">拦截挖矿脚本</string>
+    <string name="tracking_custom_crypto_summary">阻止网页后台挖矿占用设备性能</string>
+    <string name="tracking_custom_cookie_title">跨站 Cookie 隔离</string>
+    <string name="tracking_custom_cookie_summary">把第三方 Cookie 按来源站点隔离（未开启时仍拦截已知跟踪 Cookie）</string>
+    <string name="toast_tracking_restart">跟踪保护设置的更改将在棠雪下次启动时生效</string>
+    <string name="pref_gpc_title">全球隐私控制（GPC）</string>
+    <string name="pref_gpc_summary">向支持该机制的网站发送「请勿出售/分享我的数据」信号（默认开启）</string>
+    <string name="pref_param_stripping_title">清理链接跟踪参数</string>
+    <string name="pref_param_stripping_summary">打开链接时移除 utm_ 等跟踪参数；与跟踪保护档位相互独立（默认开启）</string>
+    <string name="toast_privacy_restart">该隐私设置将在棠雪下次启动时生效</string>
+    <string name="pref_clear_data_title">清除浏览数据</string>
+    <string name="pref_clear_data_summary">清除 Cookie、缓存与站点数据</string>
+
+    <string name="pref_version_title">版本</string>
+    <string name="pref_about_title">关于棠雪</string>
+    <string name="pref_about_summary">隐私政策摘要 · 完整隐私政策 · 用户协议</string>
+    <string name="pref_open_source_title">开源协议</string>
+    <string name="pref_open_source_summary">GeckoView（MPL 2.0）与 OkHttp、ZXing 等组件的许可、源码获取途径与商标说明</string>
+
+    <!-- 同意页（冷启动 / 政策版本更新时） -->
+    <string name="consent_welcome">欢迎使用棠雪</string>
+    <string name="consent_intro">在开始使用前，请阅读并同意下方内容。本应用为本地浏览器工具，不会在您同意之前加载网页、初始化浏览内核或收集任何信息。</string>
+    <string name="consent_view_privacy">查看完整隐私政策</string>
+    <string name="consent_view_agreement">查看用户协议</string>
+    <string name="consent_agree">同意并继续</string>
+    <string name="consent_disagree">不同意</string>
+    <string name="consent_starting">正在启动…</string>
+
+    <!-- 关于棠雪：三个文档项 -->
+    <string name="about_privacy_summary">隐私政策摘要</string>
+    <string name="about_privacy_full">完整隐私政策</string>
+    <string name="about_agreement">用户协议</string>
+    <!-- 关于页 · 崩溃报告 -->
+    <string name="about_crash_title">崩溃报告</string>
+    <string name="about_crash_summary_empty">暂无记录；应用可捕获的程序错误会自动在本机留存（可查看、分享或删除，不上传）</string>    <string name="about_crash_summary_format">已在本机留存 %1$d 条崩溃日志：点按可查看、分享或删除</string>
+    <string name="about_crash_none">暂无崩溃日志</string>
+    <string name="about_crash_view">查看</string>
+    <string name="about_crash_share">分享</string>
+    <string name="about_crash_share_via">分享崩溃日志到…</string>
+    <string name="about_crash_delete">删除</string>
+    <string name="about_crash_empty_file">（该日志内容为空）</string>
+
+
+
+
+    <!-- 对话框通用 -->
+    <string name="dlg_ok">确定</string>
+    <string name="dlg_cancel">取消</string>
+    <string name="dlg_clear_data_title">清除浏览数据</string>
+    <string name="clear_option_cookies">Cookie 与站点数据</string>
+    <string name="clear_option_cache">缓存</string>
+    <string name="clear_option_history">本机历史记录</string>
+    <string name="clear_option_session">标签页会话快照</string>
+    <string name="clear_option_downloads">下载记录</string>
+    <string name="toast_data_nothing_selected">请至少勾选一项</string>
+    <string name="toast_data_cleared">浏览数据已清除</string>
+    <string name="toast_data_partially_cleared">已清除所选数据，但有部分本地数据未能清除</string>
+    <string name="toast_data_clear_failed">清除失败，请重试</string>
+    <string name="toast_private_mode_restart">无痕模式将在下一次新建标签页时生效</string>
+
+    <!-- 网页弹窗 / 站点权限（PromptDelegate / PermissionDelegate） -->
+    <string name="prompt_login_title">登录</string>
+    <string name="prompt_username">用户名</string>
+    <string name="prompt_password">密码</string>
+    <string name="prompt_leave_title">离开页面？</string>
+    <string name="prompt_leave_message">此页面可能有未保存的内容，确定要离开吗？</string>
+
+    <!-- 新增网页弹窗（GeckoView PromptDelegate 补全） -->
+    <string name="prompt_color_title">选择颜色</string>
+    <string name="prompt_color_custom">自定义…</string>
+    <string name="prompt_color_invalid">颜色格式应为 #RRGGBB（如 #3366CC）</string>
+    <!-- 弹窗窗口请求：内核侧永远不新开窗口（见 NavigationDelegate.onNewSession），
+         实际行为是在**当前标签**打开，文案必须如实说明，不能让用户以为会开新窗口 -->
+    <string name="prompt_popup_message">「%1$s」请求打开窗口。棠雪不新开窗口，将继续在当前标签打开。</string>
+    <string name="prompt_repost_title">重新提交表单？</string>
+    <string name="prompt_repost_message">此操作需要重新提交表单数据，确定要继续吗？</string>
+    <string name="prompt_redirect_message">页面将跳转到「%1$s」，是否继续？</string>
+    <string name="prompt_share_chooser">分享到…</string>
+    <string name="perm_allow">允许</string>
+    <string name="perm_deny">拒绝</string>
+    <string name="perm_location_message">%1$s 请求获取你的位置信息</string>
+    <string name="perm_notification_message">%1$s 请求向你发送通知</string>
+    <string name="perm_local_device_message">%1$s 请求访问本地设备</string>
+    <string name="perm_local_network_message">%1$s 请求访问本地网络</string>
+    <string name="perm_media_message">%1$s 请求使用你的%2$s</string>
+    <string name="perm_media_camera_mic">摄像头和麦克风</string>
+    <string name="perm_media_camera">摄像头</string>
+    <string name="perm_media_mic">麦克风</string>
+
+    <!-- 开源声明（MPL 2.0 合规义务） -->
+    <string name="open_source_text">本应用使用了以下开源组件：\n\n1. Mozilla GeckoView（v155）\n版权所有 © Mozilla Foundation，许可证：Mozilla Public License 2.0\n源码：https://github.com/mozilla/gecko-dev\nMPL 2.0 全文：https://www.mozilla.org/en-US/MPL/2.0/\n源码获取途径（MPL 2.0 第 3.2 条）：本应用以可执行形式分发时，上述源码地址即为对应的 Source Code Form 获取处；本应用未修改 GeckoView 源码，其许可证与版权声明（第 3.4 条）均未被移除或改动。\n\n2. OkHttp（官方元数据、图标与更新清单等网络请求）\n版权所有 © Square，开源协议：Apache License 2.0\n源码：https://github.com/square/okhttp\n\n3. ZXing / ZXing Android Embedded（二维码扫描）\n开源协议：Apache License 2.0\n源码：https://github.com/zxing/zxing\n\n4. Google Material Components（Material 3，界面组件）\n开源协议：Apache License 2.0\n源码：https://github.com/material-components/material-components-android\n\n5. AndroidX、Kotlin、kotlinx-coroutines 等\n许可证：Apache License 2.0\n\nApache License 2.0 全文：https://www.apache.org/licenses/LICENSE-2.0\n\n本应用仅调用上述组件的公开 API，未修改其源码；本应用自身代码不受 MPL 2.0 传染性约束。各组件版权归其各自作者所有。\n\n6. 界面图标\n部分矢量图标基于 Google Material Icons（Apache License 2.0，https://fonts.google.com/icons）。各搜索引擎与浏览器扩展的官方图标仅用于界面标识其所指的服务或产品，版权归各自所有者，不构成任何背书或隶属关系。\n\n7. 商标\n「棠雪 / TangSnow」为本应用自有品牌。本应用基于 GeckoView 内核构建，但并非 Mozilla 产品，与 Firefox 无隶属关系；Firefox、Mozilla 及其图标为 Mozilla Foundation 的商标，此处仅客观描述内核来源。</string>
+
+    <!-- 隐私政策摘要（与完整隐私政策保持一致，更新时必须同步） -->
+    <string name="legal_privacy_summary">棠雪是一款本地运行的网页浏览工具，以保护隐私为设计前提：\n\n· 数据本地存储\n书签、浏览历史、主页定制与设置仅保存在设备本地，应用不收集、不上传您的个人信息，也不含任何统计、广告或追踪 SDK。若发生可被捕获的程序错误，崩溃日志同样仅保存在本机（只含排障所需的版本、设备与堆栈信息，并可能记录最近访问站点的域名——仅域名，不含完整网址或搜索词），供您在「关于棠雪」页查看或删除，不会自动上传。\n\n· 权限最小化\n联网：加载您访问的网页、获取扩展元数据与扩展包；相机：仅在您主动扫码时使用；剪贴板：仅在您点击「复制」时写入（扫码结果、复制链接、复制选中文字、一键清除）；另外，为提醒您剪贴板被改写，应用在前台且持有窗口焦点时会监听系统剪贴板是否有新内容（仅用于弹出提醒与一键清除，不读取、不保存、不上传内容，也不指认写入来源），每个前台周期最多提醒一次。此外，浏览内核（Mozilla GeckoView）为正常运行还会声明网络状态、播放唤醒、音量调节三类普通系统权限（无需单独授权、不涉及个人数据）。\n\n· 相册图片\n选择「从相册识别二维码」或「自定义主页图片」时，通过系统照片选择器只处理您点选的那一张图片，应用不申请相册读取权限、无法遍历您的相册，图片绝不上传。\n\n· 网络访问对象与内置防护\n联网仅包含您主动访问的网站与扩展官方源（AMO）；内置跟踪保护（默认开启，可在设置中调整强度或整体关闭）在本机判断处理，不采集、不上传浏览行为；其拦截名单由 Mozilla 官方名单服务在本机更新（只下载名单与哈希前缀比对，不含您访问网址的明文）。内核的「安全浏览」远程查询已关闭，不会向第三方发送您访问的网址；链接跟踪参数清理与「请勿跟踪 / 全球隐私控制（GPC）」信号默认开启，可在「设置 → 隐私与安全」中关闭。地址栏还会显示本机判断的连接安全状态（已加密 / 不安全），不发起任何网络校验；可另开启「禁止截屏」，让系统截图与「最近任务」预览不显示浏览内容。\n\n· 您的数据权利\n数据均保存在本机：您可在「资料库」一键清空历史、书签或下载记录，也可在「清除浏览数据」中按需勾选 Cookie 与站点数据、缓存、本机历史、标签页会话快照、下载记录（书签不会被一键清除，需在「资料库」单独管理），卸载即全部删除；除为获取扩展与名单更新而请求 Mozilla 官方服务（addons.mozilla.org、名单服务）外，本应用不出售、不共享、不委托处理、不跨境传输您的任何信息。\n\n· 您的选择\n不同意本摘要即代表不同意完整政策，应用将立即退出。完整隐私政策与用户协议可在本页及「设置 → 关于棠雪」中随时查看；是否设为系统默认浏览器也完全由您主动决定。</string>
+
+    <!-- 隐私政策 -->
+    <string name="privacy_policy_text">更新日期：2026年09月16日\n\n1. 我们处理哪些信息、为了什么
+\n本应用为纯本地浏览工具。正常使用中，我们不在您的设备之外收集任何个人信息：书签、浏览历史、标签页会话快照（用于在进程被系统回收后恢复您上次打开的标签页，仅保存普通标签，无痕标签不落盘；默认开启，可在设置中关闭，关闭后立即清除已保存的快照）、主页定制与设置等数据仅保存在您的设备本地。处理这些数据的目的，是向您提供网页浏览与本地辅助功能（例如历史联想）；这是为履行您所使用的本地工具功能所必需，本应用不将这些数据用于营销、画像或任何自动化决策。本应用不含统计、广告或追踪 SDK，不出售个人信息。\n\n2. 权限说明（最小化原则）
+\n· INTERNET：加载网页、获取扩展元数据与扩展包；
+\n· CAMERA：仅在您主动使用「扫码」功能时调用，用于识别二维码，不做任何拍摄存储；
+\n· 内核运行所需（普通权限，由 Mozilla GeckoView 内核声明，系统不弹窗询问，亦不涉及个人数据）：ACCESS_NETWORK_STATE（检查网络连接状态）、WAKE_LOCK（播放音视频时保持唤醒）、MODIFY_AUDIO_SETTINGS（调节音量等音频设置）；
+\n· 相册：本应用不申请相册读取权限。「从相册识别二维码」「自定义主页图片」使用 Android 系统照片选择器，只读取您点选的那一张图片，无法遍历相册、绝不上传；
+\n· 剪贴板：仅在您点击「复制」时写入内容（扫码结果、复制链接、复制选中文字、一键清除）。另需说明：为提醒您剪贴板内容被改写，应用在处于前台且持有窗口焦点期间会监听系统剪贴板是否有新内容，仅用于弹出提醒并提供「一键清除」，每个前台周期最多提醒一次；该监听不读取、不保存、不上传剪贴板内容，也不区分写入来源（系统不提供来源信息，故提示不会指认某个网页）。\n\n3. 默认搜索引擎
+\n首次安装默认搜索引擎为「必应国内」（cn.bing.com），以保证国内网络下的访问稳定。列表中的境外或自定义条目仅由您主动选择启用；请仅在自身所在地区合规的网络与法律环境下使用，并自行承担责任。\n\n4. 网络访问对象与处理位置
+\n· addons.mozilla.org（AMO 官方）：扩展目录、图标、元数据与官方签名扩展包的获取；
+\n· 您主动访问的网站；
+\n· 内置跟踪保护默认开启，可在「设置 → 隐私与安全」调整强度（标准/严格/自定义）或整体关闭；拦截判断在本机完成，应用不会把您访问的网址或浏览行为上报给我们或任何第三方。其中「严格」档、以及自定义档勾选「拦截指纹跟踪」时，会额外在本机启用运行时级指纹保护（削弱可供指纹识别的浏览器特征）；该能力会改变部分网页可读取的浏览器信息、可能影响个别站点的显示效果，故仅在您主动选择这些档位时启用。「弹跳跟踪保护」（拦截以“红跳转”方式建立的跨站跟踪）与跟踪保护档位同开关，关闭跟踪保护时一并关闭。跟踪保护所使用的拦截名单由 Mozilla 官方名单服务（shavar.services.mozilla.com）提供并在本机更新，仅下载名单与哈希前缀比对，不含您访问网址的明文，也不用于识别您的身份；
+\n· 链接跟踪参数清理与「全球隐私控制（GPC）」信号默认开启、可在同一设置页关闭：前者在打开链接时本地移除跟踪参数，后者仅向支持网站发送声明、是否遵从由网站决定，均不向第三方传输您的浏览数据；
+\n· 从本地导入 .xpi 时仅由内核在本机校验 Mozilla 官方签名后安装，不发起网络请求，亦不绕过任何地区限制。
+\n除上述为获取扩展与名单更新而向 Mozilla 官方服务（addons.mozilla.org、名单服务）发起的必要请求外，本应用不向任何第三方共享、出售或委托处理您的个人信息，不存在其他跨境传输个人信息的情形。本应用已关闭内核的「安全浏览」远程查询能力，不因此向任何第三方发送您访问的网址。为弥补由此减少的风险提示，地址栏会显示连接安全状态（已加密 / 不安全，后者含已加载而未被拦住的不安全内容）—— 该判断完全在设备内完成，不发起任何网络请求。崩溃日志亦不上传（见第 7 条）。\n\n5. 同意机制与撤回
+\n首次使用或本政策/用户协议更新后，应用先展示政策摘要，仅在您点击「同意并继续」后才加载网页并运行浏览内核；点击「不同意」立即退出且不做任何数据处理，同意状态仅存本机。
+\n您可随时撤回同意：停止使用并卸载本应用即可，卸载后本地数据随之删除；卸载前也可按第 7、8 条在应用内自行清理。\n\n6. 第三方内容与扩展
+\n网页内容由第三方网站提供，扩展由其开发者负责；应用仅按您的要求打开网站或安装来自 Mozilla 官方签名的扩展，不对第三方内容负责。下载文件请自行确认来源与安全性。本应用不内置、也不推荐任何广告拦截类扩展（其在部分司法辖区的可用性与法律评价存在差异，并可能构成不正当竞争）：精选目录只收录隐私保护与工具类扩展。您自行安装的第三方扩展由其开发者负责，请自行判断并承担相应后果。\n\n7. 数据保留与删除
+\n书签、历史、标签页会话快照等本地数据在您删除、执行「清除浏览数据」或卸载应用后被移除（无痕标签从不保存任何会话快照，也既不写入、也不读取本机历史 —— 因此在无痕标签中，页面链接不会依据您以往的访问记录着色）。「清除浏览数据」按您的勾选分别清除：Cookie 与站点数据（含站点权限与 HTTP 认证会话 —— 您此前允许的地理定位/通知等授权、以及 HTTP 登录状态会一并清除）、缓存、本机历史记录、标签页会话快照、下载记录——书签不在其中，须在「资料库」单独管理；「资料库」支持一键清空历史、书签或下载记录（清空下载记录仅删除记录，不删除已下载的文件）。浏览历史仅保留最近 200 条，更早的条目会被自动移除。下载的文件保存在系统下载目录或应用专属目录，通过系统内容授权（FileProvider）打开或分享，绝不上传。程序异常时，若应用进程发生可被捕获的错误，会留存在设备本地的崩溃日志：仅含崩溃时间、应用版本、设备型号与错误堆栈，并可能记录最近访问站点的域名（仅域名、不含完整网址）；不含页面内容、搜索词、账号或其它可识别您个人的浏览信息。日志自动保留最近 10 条，可在「设置 → 关于棠雪 → 崩溃报告」逐条查看、分享或删除，应用不会自动上传。「禁止截屏」是可选的本机设置（默认关闭）：开启后仅对应用窗口加系统安全标志，阻止系统截图与「最近任务」预览显示内容；它不读取、不收集任何信息。本应用无云端账户，卸载即完成数据的完全删除。\n\n8. 您的权利
+\n因您的数据全部保存在本机，您可以随时：查看与更正（重新保存书签等）；删除（「资料库」一键清空历史/书签/下载记录、主页设置、崩溃报告删除、清除浏览数据）；卸载即删除全部数据。如您对本应用处理您的信息有疑问，可通过第 11 条联系方式提出，我们将在核实身份后协助处理（本应用不保存能识别您身份的信息，故通常直接以本机删除为准）。\n\n9. 未成年人保护
+\n未成年人应在监护人指导下使用本应用；应用不提供、不推荐任何面向未成年人的定向内容与功能。\n\n10. 侵权与举报
+\n如您认为网站或扩展内容侵犯您的权益，可优先联系对应网站/扩展方；涉及本应用自身的问题，可通过本项目 GitHub 仓库提交的 Issue 联系处理。\n\n11. 联系我们
+\n如有隐私或合规问题，请通过本项目 GitHub 仓库提交的 Issue 与我们联系（请注明问题类型与应用版本号）。</string>
+
+    <!-- 用户协议 -->
+    <string name="user_agreement_text">1. 服务性质\n本应用是一款本地网页辅助工具，提供网页渲染、扩展（来自 Mozilla 官方签名源 AMO）、二维码识别（含相机扫码与从相册选图）、将本地图片设为主页背景、生成页面 PDF、桌面版切换、标签页会话恢复（进程被系统回收后恢复上次打开的标签页，仅本地保存）、资料库（历史/书签/下载记录的管理与一键清空；清空下载记录不删除文件）、连接安全状态提示（完全在本机判断）与可选的「禁止截屏」等能力；不提供、不聚合、不审核任何网页内容；网页产生的缓存等浏览数据仅保存在设备本地（见隐私政策第 1、7 条）。\n\n2. 同意机制与变更\n首次安装或本协议/隐私政策更新时，应用会在使用前展示协议摘要，您需点击「同意并继续」方可使用；点击「不同意」将立即退出。协议如有变化将以应用内最新版本为准，并在下次启动时重新征得同意。\n\n3. 扩展功能说明\n扩展均来自 Mozilla 官方渠道并由 Mozilla 签名，本应用不提供、不引导安装任何第三方镜像或未签名扩展；部分扩展可能因官方地区合规限制而无法安装。\n您也可以从设备本地导入 .xpi 文件安装：文件仍须携带 Mozilla 官方签名，未签名或签名不符的文件会被内核拒绝；本地导入仅在本机校验与安装，不绕过任何地区限制，也不视为本应用对第三方分发渠道的认可。\n部分广告与内容过滤类扩展（如广告拦截器）在不同司法辖区的可获取性与法律评价存在差异，其发行方可能为遵守当地法律法规或生效裁判而在特定地区限制提供；此类工具是否安装与使用，由您自行了解并判断，并自行承担相应责任。本应用不内置、也不推荐任何广告拦截类扩展：精选扩展目录只收录隐私保护与工具类扩展。\n\n4. 搜索引擎与内容合规\n默认搜索为国内可访问的持证搜索服务。境外搜索引擎、自定义搜索地址仅由您主动选择使用，请确保在自身所在地区合规的网络与法律环境下使用，并自行承担由此产生的责任。应用不提供任何规避网络审查的手段。\n\n5. 设为默认浏览器\n您可在「设置 → 高级」中主动申请将棠雪设为系统默认浏览器；本应用绝不未经用户操作自行修改系统默认应用。\n\n6. 用户责任\n您应遵守中华人民共和国法律法规，不得使用本应用访问、传播、存储违法内容（包括但不限于危害国家安全、色情低俗、侵犯他人知识产权与个人信息的内容）。下载的文件请自行确认来源与安全性。\n\n7. 未成年人保护\n未成年人应在监护人指导下使用本应用。\n\n8. 侵权与举报\n网页与扩展内容分别由其站点与扩展方提供；如权利受到侵害，请优先联系对应方处理。就本应用自身问题，可通过本项目 GitHub 仓库提交的 Issue 与我们联系，收到有效通知后将及时处理。\n\n9. 免责条款\n因第三方网站内容、第三方扩展行为、用户自行下载文件或自行启用境外/自定义搜索引起的任何争议或损失，与本应用开发者无关。\n\n10. 开源许可\n本应用使用 Mozilla GeckoView（MPL 2.0）、OkHttp 与 ZXing（Apache License 2.0）等开源组件，相关声明与许可链接见「开源声明」。</string>
+    <string name="about_version_format">v%1$s</string>
+    <string name="tabs_count_format">%1$d</string>
+    <string name="arrow_open">▾</string>
+    <string name="arrow_closed">▸</string>
+    <string name="extension_install_interrupted">上次的安装被中断，可重新获取重试</string>
+    <!-- ==== 连接安全指示（S1）：安全浏览已关闭，本机安全状态是用户判断连接可信度的主要依据 ==== -->
+    <string name="security_secure_desc">连接已加密（HTTPS，证书有效）</string>
+    <string name="security_insecure_desc">连接未加密，或页面含已加载的不安全内容</string>
+
+    <!-- ==== 可执行文件下载强警示（S3）：不受「下载前不再询问」影响 ==== -->
+    <string name="dl_executable_title">这是可执行文件</string>
+    <string name="dl_executable_message">「%1$s」可能是安装包或程序文件，运行后能修改你的设备。请只在你完全信任下载来源时继续。</string>
+    <string name="dl_executable_continue">我了解风险，继续</string>
+
+    <!-- ==== 防截屏（P4）：开启后系统截图与最近任务预览不显示本应用画面 ==== -->
+    <string name="pref_secure_screen_title">禁止截屏</string>
+    <string name="pref_secure_screen_summary">开启后，浏览界面的系统截图与「最近任务」预览不会显示内容；部分设备或系统版本可能不支持</string>
+    <string name="toast_secure_screen_applied">已保存，浏览界面立即生效</string>
+
+    <!-- ==== 崩溃日志分享前提示（P3）：日志可能含最近访问站点域名 ==== -->
+    <string name="about_crash_share_notice">该文件可能包含最近访问站点的域名（仅域名，不含完整网址），请确认后再分享。</string>
+</resources>
+

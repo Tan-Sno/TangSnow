@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 首页背景：暖雪渐变 + 双色柔光（浅色主题） -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 底色：白 → 微暖的海棠晕 -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="@color/home_bg_top"
+                android:endColor="@color/home_bg_bottom" />
+        </shape>
+    </item>
+
+    <!-- 左上暖光 -->
+    <item android:left="-120dp" android:top="-150dp">
+        <shape android:shape="oval">
+            <size
+                android:width="340dp"
+                android:height="340dp" />
+            <gradient
+                android:type="radial"
+                android:gradientRadius="170dp"
+                android:startColor="@color/home_blob_accent"
+                android:endColor="@color/home_blob_transparent" />
+        </shape>
+    </item>
+
+    <!-- 右下冷光 -->
+    <item android:right="-140dp" android:bottom="-120dp">
+        <shape android:shape="oval">
+            <size
+                android:width="380dp"
+                android:height="380dp" />
+            <gradient
+                android:type="radial"
+                android:gradientRadius="190dp"
+                android:startColor="@color/home_blob_cool"
+                android:endColor="@color/home_blob_transparent" />
+        </shape>
+    </item>
+</layer-list>

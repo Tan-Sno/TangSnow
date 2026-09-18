@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 棠雪品牌标记：六出雪花 · 花蕊点睛 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 三轴雪花 -->
+    <path
+        android:pathData="M12,3 L12,21"
+        android:strokeColor="@color/accent"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M4.2,7.5 L19.8,16.5"
+        android:strokeColor="@color/accent"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M19.8,7.5 L4.2,16.5"
+        android:strokeColor="@color/accent"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- 雪花六端的小花点 -->
+    <path android:pathData="M11,3 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0 Z" android:fillColor="@color/accent" android:fillAlpha="0.85" />
+    <path android:pathData="M11,21 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0 Z" android:fillColor="@color/accent" android:fillAlpha="0.85" />
+    <path android:pathData="M3.2,7.5 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0 Z" android:fillColor="@color/accent" android:fillAlpha="0.85" />
+    <path android:pathData="M18.8,16.5 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0 Z" android:fillColor="@color/accent" android:fillAlpha="0.85" />
+    <path android:pathData="M18.8,7.5 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0 Z" android:fillColor="@color/accent" android:fillAlpha="0.85" />
+    <path android:pathData="M3.2,16.5 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0 Z" android:fillColor="@color/accent" android:fillAlpha="0.85" />
+
+    <!-- 花蕊 -->
+    <path
+        android:pathData="M10.5,12 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0 Z"
+        android:fillColor="@color/accent" />
+</vector>

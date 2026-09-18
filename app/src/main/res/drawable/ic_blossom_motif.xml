@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 棠雪专属矢量纹样：海棠枝头落雪（浅色主题） -->
+<vector xmlns:tools="http://schemas.android.com/tools" tools:ignore="VectorRaster" xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp"
+    android:height="240dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+
+    <!-- 主枝 -->
+    <path
+        android:pathData="M236,232 C204,192 188,152 152,124 C124,102 96,96 66,94"
+        android:strokeColor="@color/accent"
+        android:strokeAlpha="0.30"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- 侧枝 -->
+    <path
+        android:pathData="M186,150 C178,132 172,116 170,102"
+        android:strokeColor="@color/accent"
+        android:strokeAlpha="0.26"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- 海棠花 A（主枝末端） -->
+    <path
+        android:pathData="M59.5,80.5 a6.5,6.5 0 1,0 13.0,0 a6.5,6.5 0 1,0 -13.0,0 Z M48.6,88.4 a6.5,6.5 0 1,0 13.0,0 a6.5,6.5 0 1,0 -13.0,0 Z M52.7,101.3 a6.5,6.5 0 1,0 13.0,0 a6.5,6.5 0 1,0 -13.0,0 Z M66.3,101.3 a6.5,6.5 0 1,0 13.0,0 a6.5,6.5 0 1,0 -13.0,0 Z M70.4,88.4 a6.5,6.5 0 1,0 13.0,0 a6.5,6.5 0 1,0 -13.0,0 Z M62.8,92.0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0 Z"
+        android:fillColor="@color/accent"
+        android:fillAlpha="0.20" />
+
+    <!-- 海棠花 B（侧枝末端） -->
+    <path
+        android:pathData="M164.5,88.0 a5.5,5.5 0 1,0 11.0,0 a5.5,5.5 0 1,0 -11.0,0 Z M155.0,94.9 a5.5,5.5 0 1,0 11.0,0 a5.5,5.5 0 1,0 -11.0,0 Z M158.6,106.1 a5.5,5.5 0 1,0 11.0,0 a5.5,5.5 0 1,0 -11.0,0 Z M170.4,106.1 a5.5,5.5 0 1,0 11.0,0 a5.5,5.5 0 1,0 -11.0,0 Z M174.0,94.9 a5.5,5.5 0 1,0 11.0,0 a5.5,5.5 0 1,0 -11.0,0 Z M167.2,98.0 a2.8,2.8 0 1,0 5.6,0 a2.8,2.8 0 1,0 -5.6,0 Z"
+        android:fillColor="@color/accent"
+        android:fillAlpha="0.16" />
+
+    <!-- 花苞 -->
+    <path
+        android:pathData="M116.0,62.0 a4.0,4.0 0 1,0 8.0,0 a4.0,4.0 0 1,0 -8.0,0 Z"
+        android:fillColor="@color/accent"
+        android:fillAlpha="0.24" />
+    <path
+        android:pathData="M120,66 C118,76 112,84 106,90"
+        android:strokeColor="@color/accent"
+        android:strokeAlpha="0.20"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- 落雪 -->
+    <path android:pathData="M101.4,40.0 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 Z" android:fillColor="#8CA6BF" android:fillAlpha="0.50" />
+    <path android:pathData="M45.8,150.0 a2.2,2.2 0 1,0 4.4,0 a2.2,2.2 0 1,0 -4.4,0 Z" android:fillColor="#8CA6BF" android:fillAlpha="0.42" />
+    <path android:pathData="M137.2,196.0 a2.8,2.8 0 1,0 5.6,0 a2.8,2.8 0 1,0 -5.6,0 Z" android:fillColor="#8CA6BF" android:fillAlpha="0.46" />
+    <path android:pathData="M204.0,84.0 a2.0,2.0 0 1,0 4.0,0 a2.0,2.0 0 1,0 -4.0,0 Z" android:fillColor="#8CA6BF" android:fillAlpha="0.38" />
+    <path android:pathData="M28.2,108.0 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" android:fillColor="#8CA6BF" android:fillAlpha="0.34" />
+    <path android:pathData="M86.0,214.0 a2.0,2.0 0 1,0 4.0,0 a2.0,2.0 0 1,0 -4.0,0 Z" android:fillColor="#8CA6BF" android:fillAlpha="0.36" />
+</vector>

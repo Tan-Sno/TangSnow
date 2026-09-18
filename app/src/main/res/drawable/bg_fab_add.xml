@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 标签页面板右下角「新建」悬浮按钮 -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/press_ripple_on_accent">
+    <item android:id="@android:id/mask">
+        <shape android:shape="oval">
+            <solid android:color="@android:color/white" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/accent" />
+        </shape>
+    </item>
+</ripple>
