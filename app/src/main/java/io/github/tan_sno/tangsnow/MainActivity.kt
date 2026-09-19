@@ -539,7 +539,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     }
 
     private fun enterPipIfMediaPlaying() {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        // 不再有 SDK_INT 版本判断：本应用 minSdk = 26，画中画所需 API（24）必然可用，
+        // 原 `SDK_INT < O` 判断永远为假（lint: ObsoleteSdkInt 已确认）。真正需要判断的是
+        // **设备是否具备画中画特性** —— 部分设备（含某些定制 ROM / 车机 / 电视）虽 API 达标
+        // 也不支持，故下面这条特性检查才是有效闸门。
         if (!packageManager.hasSystemFeature(
                 android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE
             )

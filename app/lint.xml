@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <lint>
-    <!-- 自适应图标 xml 位于 mipmap-anydpi-v26 是 Android 官方模板规范；
-         ObsoleteSdkInt 会误报该目录多余，予以忽略 -->
-    <issue id="ObsoleteSdkInt" severity="ignore" />
+    <!--
+        路径级豁免 —— 刻意**不用** severity="ignore"。
+
+        为什么：severity="ignore" 会关掉**整类** ObsoleteSdkInt 检查，于是
+        「多余的 SDK_INT 版本判断」这种真实问题也一并失守。实测代价：
+        MainActivity 里一处 `SDK_INT < VERSION_CODES.O` 的死判断（minSdk 已是 26，
+        该条件永远为假）被掩盖了很久，直到临时打开此检查才发现。
+
+        误报的根因：自适应图标固定放在 `mipmap-anydpi-v26/` 是 Android Studio
+        新建项目的模板规范（`<adaptive-icon>` 要求 API 26+），而本应用 minSdk 恰为 26，
+        lint 便认为 `-v26` 限定符多余、建议并入 `mipmap-anydpi/`。
+        该目录名符合官方模板，保持不变；这里只对它豁免，其余位置的同类问题仍会被报出。
+
+        注意：豁免路径相对于**本模块**（app/），不是仓库根。
+    -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
 </lint>
