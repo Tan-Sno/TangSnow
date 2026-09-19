@@ -199,7 +199,8 @@ dependencies {
     implementation(libs.preference.ktx)
     implementation(libs.coroutines.android)
     // 二维码扫描（ZXing Embed，自带取景 Activity 与相机权限处理）
-    implementation("com.journeyapps:zxing-android-embedded:4.3.0") {
+    // isTransitive = false：它自带的那份 zxing-core 与下面显式声明的版本会冲突，故只取本体
+    implementation(libs.zxing.embed) {
         isTransitive = false
     }
     implementation(libs.zxing.core)
