@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ZH = ROOT / "app/src/main/res/values/strings.xml"
 EN = ROOT / "app/src/main/res/values-en/strings.xml"
-LEGAL_KT = ROOT / "app/src/main/java/com/tangsnow/tangsnow/data/LegalDocs.kt"
+LEGAL_KT = ROOT / "app/src/main/java/io/github/tan_sno/tangsnow/data/LegalDocs.kt"
 
 DOCS = {
     "privacy_policy_text": ("docs/PRIVACY.md", "隐私政策", "Privacy Policy"),
