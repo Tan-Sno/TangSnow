@@ -4,6 +4,7 @@ geckoView = "155.0.20260903215306"
 preferenceKtx = "1.2.1"
 coroutinesAndroid = "1.11.0"
 zxingCore = "3.5.4"
+zxingEmbed = "4.3.0"
 coreKtx = "1.19.0"
 junit = "4.13.2"
 appcompat = "1.8.0"
@@ -23,6 +24,9 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 preference-ktx = { group = "androidx.preference", name = "preference-ktx", version.ref = "preferenceKtx" }
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutinesAndroid" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
+# 取景 Activity 与相机权限处理由这个库自带（见 AndroidManifest 的 CaptureActivity 声明）。
+# 引用处以 isTransitive = false 引入，避免它再拉一份 zxing-core 与上面的版本打架。
+zxing-embed = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbed" }
 geckoview = { group = "org.mozilla.geckoview", name = "geckoview", version.ref = "geckoView" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
