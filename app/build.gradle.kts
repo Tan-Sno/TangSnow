@@ -69,7 +69,7 @@ if (!keystorePropsFile.exists()) {
 }
 
 android {
-    namespace = "com.tangsnow.tangsnow"
+    namespace = "io.github.tan_sno.tangsnow"
     lint {
         // 仅关闭三类“风格/建议级”检查并写明理由（正确性类保留）：
         // UseKtx/Overdraw 为编码风格建议；NotifyDataSetChanged 对几十项小列表属可接受用法
@@ -82,11 +82,22 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.tangsnow.tangsnow"
+        // 应用标识：反向域名形式，基于 GitHub 提供的 <用户名>.github.io（= io.github.tan_sno）。
+        // 为什么不是 com.tangsnow.tangsnow：① 组织段与应用段同名，冗余；
+        // ② tangsnow.com 已被他人注册，用一个自己不控制的域名做前缀，就失去了
+        // 「反向域名保证全局唯一」这一规范的全部意义。
+        // io.github.<用户名> 是 Maven Central(Sonatype) 官方文档明确支持的、
+        // 面向「没有自有域名的小项目」的命名空间，且归属可由 GitHub 账号验证。
+        // ⚠️ applicationId 一经发布不可更改（改了会被视为另一个应用、旧版无法升级），
+        // 故此处与 namespace 保持一致并显式声明，避免将来改 namespace 时连带改掉它。
+        applicationId = "io.github.tan_sno.tangsnow"
         minSdk = 26
         targetSdk = 37
-        versionCode = 32
-        versionName = "2.0.2"
+        // 2.1.0：更换 applicationId 等于更换应用身份，与 2.0.2 的安装身份不兼容
+        // （旧版无法覆盖升级，需卸载重装）。若仍沿用 2.0.2，会出现「两个不同的应用
+        // 都自称 2.0.2」，故递增次版本号以示区分。
+        versionCode = 33
+        versionName = "2.1.0"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
         // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
         // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。
