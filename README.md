@@ -53,6 +53,16 @@
 
 要求 Android 8.0（API 26）及以上。安装前请在系统设置中允许「安装未知来源应用」。
 
+### 从 2.0.x 升级？
+
+**2.1.0 起应用标识已变更**（`com.tangsnow.tangsnow` → `io.github.tan_sno.tangsnow`），
+因此新版**无法直接覆盖安装**在旧版之上 —— 系统会把它识别为一个新应用。
+
+不必先卸载：两个版本可以**并存**。建议先装上新版、确认一切正常，再自行卸载旧版。
+需要注意的是，旧版的书签、历史记录与各项设置**不会自动迁移**，需要在新版中重新配置。
+
+每个版本的具体变更与安装要求，都写在对应的 Release 页面上。
+
 ## 隐私
 
 - 不需要账号，没有云端账户；卸载即完成数据删除
@@ -62,6 +72,9 @@
 - 崩溃日志只写入本机，可在应用内查看或删除，不会上传
 - 权限：`INTERNET`、`CAMERA`（按需申请），加上渲染内核自身声明的三项普通权限
   （网络状态 / 唤醒锁 / 音频设置）。安装后可在系统「应用信息 → 权限」中核对
+- 另有一项 `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`：由 AndroidX 自动生成的应用自签权限，
+  用于阻止外部应用调用本应用内部的动态广播接收器。它不涉及任何数据访问，也不会出现在
+  系统设置的可授权列表中。用 `aapt dump permissions` 之类的工具扫描时会看到它，特此说明
 
 完整说明见[隐私政策](docs/PRIVACY.md)与[用户协议](docs/TERMS.md)。
 
@@ -74,8 +87,9 @@
 
 要求：
 
-- JDK 17+
-- Android SDK `platforms;android-37`（含 minor API level 2）
+- **JDK 25** —— Gradle 守护进程按 `gradle/gradle-daemon-jvm.properties` 固定使用该版本；
+  本机若未安装，Gradle 会自动下载。产物字节码目标为 Java 17。
+- Android SDK `platforms;android-37`（API 37，minor level 2）
 
 ```bash
 ./gradlew :app:assembleDebug      # 构建 debug 包
