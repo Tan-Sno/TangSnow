@@ -53,8 +53,18 @@ if (!keystorePropsFile.exists()) {
 
     val pending = listOf("storePassword", "keyAlias", "keyPassword")
         .filter { keystoreProps.getProperty(it)?.contains("<<") == true }
-    val wantsRelease = gradle.startParameter.taskNames.any {
-        it.contains("Release", ignoreCase = true) && !it.contains("Debug", ignoreCase = true)
+    // 只有「会产出并签名 release 产物」的任务才真的需要凭据：package / assemble / bundle / install。
+    //
+    // ⚠️ 不能只看任务名里有没有 "Release" —— 那样会把 compileReleaseKotlin、lintRelease、
+    // testReleaseUnitTest、minifyReleaseWithR8 这类**完全不签名**的任务一并挡住，
+    // 报出「release 签名必定失败」这种与事实相反的错误，也会挡住「只想编译验证 release 变体」
+    // 这一正当用法。（实测踩到：`compileReleaseJavaWithJavac` 被拦。）
+    val packagingVerbs = listOf("package", "assemble", "bundle", "install")
+    val wantsRelease = gradle.startParameter.taskNames.any { raw ->
+        val name = raw.substringAfterLast(':')
+        name.contains("Release", ignoreCase = true) &&
+            !name.contains("Debug", ignoreCase = true) &&
+            packagingVerbs.any { name.startsWith(it, ignoreCase = true) }
     }
     if (pending.isNotEmpty() && wantsRelease && !wizardDriven) {
         throw GradleException(
