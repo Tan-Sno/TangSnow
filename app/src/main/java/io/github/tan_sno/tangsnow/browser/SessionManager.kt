@@ -1146,8 +1146,11 @@ class BrowserSessionManager private constructor(
                         // 本应用对外的隐私承诺包含「不把您访问的网址发送给第三方」，而日志会留在
                         // 设备 Logcat（release 未剥离 Log）。主机名已足够定位「哪个站点触发了预期
                         // 外的权限类型」，路径与查询串对排障没有增量价值、却会完整落进日志。
-                        val host = perm.uri
-                            ?.let { runCatching { android.net.Uri.parse(it).host }.getOrNull() }
+                        // 注：perm.uri 是 Java 侧字段（javap: `public final String uri`），
+                        // Kotlin 视为平台类型、此处推为非空，故不加 `?.`（加了会触发
+                        // Unnecessary safe call 警告）。若 Java 侧真传 null，Uri.parse 抛的 NPE
+                        // 会被外层 runCatching 捕获 → host 为 null → 记 "(unknown)"，同样安全。
+                        val host = runCatching { android.net.Uri.parse(perm.uri).host }.getOrNull()
                         android.util.Log.i(
                             TAG,
                             "content permission denied by policy: " +
