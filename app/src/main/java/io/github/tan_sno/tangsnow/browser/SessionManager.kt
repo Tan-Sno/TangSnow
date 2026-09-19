@@ -1142,9 +1142,16 @@ class BrowserSessionManager private constructor(
                     }
                     // ③ 明确拒绝，并记录原因（便于排障；不写日志会变成"静默失效"）
                     else -> {
+                        // 只记**主机名**，不记完整 URL。
+                        // 本应用对外的隐私承诺包含「不把您访问的网址发送给第三方」，而日志会留在
+                        // 设备 Logcat（release 未剥离 Log）。主机名已足够定位「哪个站点触发了预期
+                        // 外的权限类型」，路径与查询串对排障没有增量价值、却会完整落进日志。
+                        val host = perm.uri
+                            ?.let { runCatching { android.net.Uri.parse(it).host }.getOrNull() }
                         android.util.Log.i(
                             TAG,
-                            "content permission denied by policy: type=${perm.permission} uri=${perm.uri}",
+                            "content permission denied by policy: " +
+                                "type=${perm.permission} host=${host ?: "(unknown)"}",
                         )
                         result.complete(deny)
                         return result
