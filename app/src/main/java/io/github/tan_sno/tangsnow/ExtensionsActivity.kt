@@ -117,12 +117,12 @@ class ExtensionsActivity : AppCompatActivity() {
                 // 上次安装仍“进行中”却被中断（作业已随旧实例销毁）
                 ExtensionCatalog.installing.remove(slug)
                 ExtensionCatalog.installStartedAt.remove(slug)
-                catalogAdapter.notifyItemChanged(slugIndex(slug))
+                notifyCatalogItemChanged(slug)
                 if (notifyInterrupted) toast(R.string.extension_install_interrupted)
             } else if (!resultPending && tooOld) {
                 ExtensionCatalog.installing.remove(slug)
                 ExtensionCatalog.installStartedAt.remove(slug)
-                catalogAdapter.notifyItemChanged(slugIndex(slug))
+                notifyCatalogItemChanged(slug)
             }
         }
     }
@@ -311,7 +311,7 @@ class ExtensionsActivity : AppCompatActivity() {
     private fun startInstall(entry: ExtensionCatalog.Entry, extController: WebExtensionController) {
         ExtensionCatalog.installing.add(entry.slug)
         ExtensionCatalog.installStartedAt[entry.slug] = android.os.SystemClock.elapsedRealtime()
-        catalogAdapter.notifyItemChanged(slugIndex(entry.slug))
+        notifyCatalogItemChanged(entry.slug)
 
         val accepted = installCoordinator.install(
             ExtInstallCoordinator.Source.Catalog(entry),
@@ -322,14 +322,14 @@ class ExtensionsActivity : AppCompatActivity() {
                     ext?.let { ExtensionCatalog.installedIdsBySlug[entry.slug] = it.id }
                     toast(R.string.extension_install_success)
                     refreshInstalled()
-                    catalogAdapter.notifyItemChanged(slugIndex(entry.slug))
+                    notifyCatalogItemChanged(entry.slug)
                     // 装完打开扩展自己的管理界面（先取最新元数据定位）
                     scheduleManagePage(ext?.id)
                 }
 
                 override fun onFailure(source: ExtInstallCoordinator.Source, err: Throwable?) {
                     finishInstall(entry)
-                    catalogAdapter.notifyItemChanged(slugIndex(entry.slug))
+                    notifyCatalogItemChanged(entry.slug)
                     showInstallFailure(entry, err)
                 }
             }
@@ -923,8 +923,20 @@ class ExtensionsActivity : AppCompatActivity() {
     private fun toast(res: Int) =
         android.widget.Toast.makeText(this, res, android.widget.Toast.LENGTH_SHORT).show()
 
-    private fun slugIndex(slug: String): Int =
-        ExtensionCatalog.all.indexOfFirst { it.slug == slug }
+    /**
+     * 按 slug 刷新目录列表中的某一行。
+     *
+     * `indexOfFirst` 在找不到时返回 **-1**，而 `notifyItemChanged(-1)` 不是合法调用。
+     * 目录数据目前与 [CatalogAdapter] 同一份（`ExtensionCatalog.all`），正常路径不会为 -1；
+     * 但入口一旦多起来（换数据源、异步刷新期间回调），漏判就会变成难查的异常。
+     * 故把「查找 + 越界防护」收在一处，调用方只表达意图。
+     *
+     * 与 `ui/Adapters.kt` 里 `TabsAdapter.updateTab` 的 `if (index >= 0)` 保持同一处理方式。
+     */
+    private fun notifyCatalogItemChanged(slug: String) {
+        val index = ExtensionCatalog.all.indexOfFirst { it.slug == slug }
+        if (index >= 0) catalogAdapter.notifyItemChanged(index)
+    }
 
 
     // ------------------------------------------------------------- 可安装目录适配器
