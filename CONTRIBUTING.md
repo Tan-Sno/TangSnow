@@ -28,9 +28,10 @@
 
 ## 开发环境
 
-- JDK 17+
-- Android SDK `platforms;android-37`（含 minor API level 2）
-- Android Studio 2026.1 或更高版本
+- **JDK 25** —— Gradle 守护进程按 `gradle/gradle-daemon-jvm.properties` 固定使用该版本；
+  本机若未安装，Gradle 会自动下载。产物字节码目标为 Java 17。
+- Android SDK `platforms;android-37`（API 37，minor level 2）
+- Android Studio 2026.1 或更高版本（仅图形界面开发需要，命令行构建不需要）
 
 ```bash
 ./gradlew :app:assembleDebug      # 构建

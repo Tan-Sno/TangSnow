@@ -9,14 +9,15 @@ body:
 
         **注意**：如果你要报告的是**安全漏洞**，请立刻停止填写本表单，改用
         [私密漏洞报告](https://github.com/Tan-Sno/TangSnow/security/advisories/new)，
-        不要把它公开在这里。详见 [安全政策](../blob/main/SECURITY.md)。
+        不要把它公开在这里。详见
+        [安全政策](https://github.com/Tan-Sno/TangSnow/blob/main/SECURITY.md)。
 
   - type: input
     id: version
     attributes:
       label: 棠雪版本
       description: 应用内「设置 → 关于棠雪」中可以查到
-      placeholder: 例如 2.0.2
+      placeholder: 例如 2.1.0
     validations:
       required: true
 
