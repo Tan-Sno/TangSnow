@@ -99,6 +99,7 @@ class SuggestionsController(private val activity: MainActivity) {
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Throwable) {
+            // 同上一处：单侧读取失败不影响另一侧联想，静默降级为「这一类没有结果」
         }
         return items
             .filter { (t, u) -> t.lowercase().contains(kw) || u.lowercase().contains(kw) }
