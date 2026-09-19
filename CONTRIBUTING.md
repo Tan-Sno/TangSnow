@@ -43,7 +43,10 @@
 ## 代码约定
 
 - 语言与界面框架：Kotlin + Android View System（不使用 Compose）
-- 颜色与尺寸一律使用语义命名（如 `colorSurface`），不要硬编码色值
+- **颜色**一律使用语义命名（`@color/…` 或 `?attr/colorXxx`），不要硬编码色值
+- **尺寸**（dp/sp）只在「同一语义在多处重复、或已出现取值漂移」时才抽入 `values/dimens.xml`；
+  单次使用的值留在布局原地。同一个数字在不同位置常代表不同含义（40dp 触控区 vs 40dp 外边距），
+  强行合并只会制造假耦合。抽取标准与已有取例见 `dimens.xml` 顶部注释
 - 用户可见文案必须同时维护中文（`values/`）与英文（`values-en/`）两份，且键集合保持一致
 - 新增网络请求须说明用途；本项目遵循「数据不出设备」原则，不接受遥测、统计或广告类依赖
 - `docs/PRIVACY.md` 与 `docs/TERMS.md` 由 `tools/export_legal_docs.py` 从 `strings.xml` 导出，
