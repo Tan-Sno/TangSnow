@@ -77,8 +77,16 @@
     <color name="press_ripple_on_accent">#33FFFFFF</color>
     <!-- 极淡中性底（无痕按钮等轻量容器） -->
     <color name="neutral_soft">#14808080</color>
-    <!-- 扫码页取景层遮罩：叠在相机画面上，**不随明暗主题变化**，始终压暗以突出二维码 -->
-    <color name="scan_scrim">#66000000</color>
+
+    <!-- ============ 遮罩（scrim）—— 叠在内容之上压暗，明暗主题下**一律是深色**，故无夜间变体 ============ -->
+    <!-- 面板/抽屉底层遮罩 -->
+    <color name="scrim">#66000000</color>
+    <!-- 强遮罩：模态对话框（如隐私同意页）需要更强的内容隔离 -->
+    <color name="scrim_strong">#8A000000</color>
+
+    <!-- 扫码页取景层遮罩：叠在相机画面上，**不随明暗主题变化**，始终压暗以突出二维码。
+         取值与通用 [scrim] 相同，故直接引用，避免同一色值写两遍、改一处漏一处 -->
+    <color name="scan_scrim">@color/scrim</color>
     <color name="scan_scrim_stroke">#33FFFFFF</color>
 
     <!-- ============ 首页快捷瓦片（冷色系，与蓝白基调一致；品牌识别色，不随明暗漂移） ============ -->
