@@ -6,7 +6,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#8A000000">
+    android:background="@color/scrim_strong">
 
     <LinearLayout
         android:id="@+id/consentCard"
