@@ -144,6 +144,43 @@ class PolicyConsistencyTest {
         }
     }
 
+    @Test
+    fun `政策里列出的每个外部主机名也都出现在 README 的隐私说明中`() {
+        // 为什么单独查 README：README 的「隐私」段是一份**手抄的摘要**，不随政策文本走。
+        // 实测漂移过一次 —— 2.1.1 为「检查更新」新增了 api.github.com，
+        // 政策 §4 与同意页摘要都同步了，README 却仍写着「仅访问 Mozilla 官方服务」。
+        // 政策与 README 是两份文本，只有把这条写成断言才拦得住下一次。
+        val hosts = hostsInPolicyNetworkSection()
+        assertTrue("政策第 4 条里没解析出任何主机名，正则可能失效了", hosts.isNotEmpty())
+
+        val readme = File(repoRoot(), "README.md").readText()
+        for (h in hosts) {
+            assertTrue(
+                "政策第 4 条披露了外部地址「$h」，但 README 的隐私说明里没有它。\n" +
+                    "README 是对外第一眼看到的地方，漏一处就是一次失准 —— " +
+                    "请同步 README.md 的「隐私」段。",
+                readme.contains(h),
+            )
+        }
+    }
+
+    /**
+     * 取政策「网络访问对象」一节里出现的所有主机名。
+     *
+     * 只取这一节而不是整篇政策：别处也会出现域名（如第 3 条列举默认搜索引擎 `cn.bing.com`），
+     * 那是「用户选了哪个搜索引擎」的说明，不属于本应用主动联系的服务清单。
+     */
+    private fun hostsInPolicyNetworkSection(): Set<String> {
+        val text = policyText("values")
+        val start = text.indexOf("4. ")
+        val end = text.indexOf("5. ", start + 1)
+        val section = if (start >= 0 && end > start) text.substring(start, end) else text
+        return Regex("""\b([a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+\.(?:com|org|net|io|dev))\b""")
+            .findAll(section)
+            .map { it.groupValues[1] }
+            .toSet()
+    }
+
     // ------------------------------------------------------------------ ③ 对外端点披露
 
     @Test
