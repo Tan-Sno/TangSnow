@@ -978,20 +978,31 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private fun onPrivateTabFromPanel() {
         hideTabsPanel()
         if (sessionManager.activeTab?.isPrivate == true) {
-            val normal = sessionManager.closePrivateTabs()
-            if (normal != null) {
-                binding.geckoView.setSession(normal.session)
-                syncViewWithTab(normal)
-            } else {
-                createTab(url = null, isPrivate = false)
-                showHome()
-            }
-            toast(R.string.toast_private_off)
+            exitPrivateMode()
         } else {
             createTab(url = null, isPrivate = true)
             showHome()
             toast(R.string.toast_private_on)
         }
+    }
+
+    /**
+     * 退出无痕浏览：关闭全部无痕标签并回到普通标签；若已无普通标签可回，就新建一个空白页。
+     *
+     * 抽成一处的原因：标签面板的「无痕」开关与首页墨镜开关走的是**同一段逻辑**，
+     * 此前两份完全相同的代码各写了一遍。以后若要改「退出无痕该做什么」
+     * （例如还要恢复滚动位置、或补某个收尾动作），漏改一处就会出现两条入口行为不一致。
+     */
+    private fun exitPrivateMode() {
+        val normal = sessionManager.closePrivateTabs()
+        if (normal != null) {
+            binding.geckoView.setSession(normal.session)
+            syncViewWithTab(normal)
+        } else {
+            createTab(url = null, isPrivate = false)
+            showHome()
+        }
+        toast(R.string.toast_private_off)
     }
 
     private fun createTab(url: String?, isPrivate: Boolean = prefs.privateMode): Tab {
@@ -1236,15 +1247,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private fun togglePrivateBrowsing() {
         val active = sessionManager.activeTab
         if (active?.isPrivate == true) {
-            val normal = sessionManager.closePrivateTabs()
-            if (normal != null) {
-                binding.geckoView.setSession(normal.session)
-                syncViewWithTab(normal)
-            } else {
-                createTab(url = null, isPrivate = false)
-                showHome()
-            }
-            toast(R.string.toast_private_off)
+            exitPrivateMode()
         } else {
             // 新建空白无痕标签后**同步视图**（与「标签面板的无痕开关」「+ 新建标签」一致）：
             // 空白标签会被 syncViewWithTab 判定为「应显示首页」。
