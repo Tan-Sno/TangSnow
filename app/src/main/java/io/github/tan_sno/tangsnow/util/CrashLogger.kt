@@ -20,7 +20,15 @@ import java.util.Locale
 object CrashLogger {
 
     private const val DIR_NAME = "crash"
-    private const val MAX_KEEP = 10
+
+    /**
+     * 崩溃日志保留条数。
+     *
+     * 声明为 `internal` 而非 `private`：隐私政策第 7 条明确写了「日志自动保留最近 10 条」，
+     * 而 `PolicyConsistencyTest` 要把这句话与这个常量对上 —— 两边一旦不一致（比如这里
+     * 改成 20 而政策没改），单测直接失败。改动本值时**必须同步改政策文本**。
+     */
+    internal const val MAX_KEEP = 10
 
     @Volatile
     private var installed = false
