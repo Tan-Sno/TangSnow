@@ -233,6 +233,24 @@ def apk_signature(apksigner, env, apk):
     return m.group(1).lower(), schemes
 
 
+def check_apk_freshness(root, apks):
+    """⑥ 签名之后是否又改过「会进产物」的代码。
+
+    工作区干净只保证「此刻没有未提交改动」，**不能**保证「APK 是从 HEAD 构建的」：
+    完全可以先签名、再提交若干改动，于是要发布的包其实落后于 HEAD。
+    这里取 APK 文件时间之后触及 `app/src` / `app/build.gradle.kts` / `gradle/`
+    的提交 —— 有就提示。**返回的是清单，不是错误**：只改文档/注释并不影响产物，
+    不该拦住发布，交给人判断更合适。
+    """
+    newest = max(os.path.getmtime(p) for p in apks)
+    r = run(
+        ["git", "log", "--since=%d" % int(newest), "--name-only",
+         "--pretty=format:", "--", "app/src", "app/build.gradle.kts", "gradle/"],
+        cwd=root,
+    )
+    return sorted({l.strip() for l in (r.stdout or "").splitlines() if l.strip()})
+
+
 def sha256_of(path):
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -329,7 +347,21 @@ def main():
         say("  ✅ ④ 权限集合与已披露基准一致")
         say("  ✅ ⑤ 签名证书为预期密钥，且 v2 签名方案已启用")
 
+        # ⑥ 提示（不是错误）：签名之后是否又改过会进产物的代码
+        stale = check_apk_freshness(root, apks)
+
         print()
+        if stale:
+            print("⚠️  签名之后，这些「会影响产物」的文件又有改动：")
+            for f in stale[:8]:
+                print("      %s" % f)
+            if len(stale) > 8:
+                print("      …另有 %d 个" % (len(stale) - 8))
+            print()
+            print("    当前 APK 因此**落后于 HEAD**。若这些改动影响产物（代码 / 资源 / 构建脚本），")
+            print("    请重新构建并签名后再发布；若只是文档或注释，可忽略本提示。")
+            print()
+
         print("✅ 校验通过，可以发布。校验和（可直接贴进发布说明）：")
         print()
         for name, digest, size, on in checksums:
