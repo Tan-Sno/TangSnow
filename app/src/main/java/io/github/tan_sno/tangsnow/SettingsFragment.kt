@@ -433,9 +433,12 @@ class SettingsFragment : PreferenceFragmentCompat() {
             .setMessage(getString(R.string.update_manual_message, version))
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.update_open_releases) { _, _ ->
-                // 用应用自己的浏览器打开：政策第 4 条已覆盖「您主动访问的网站」，
-                // 不引入新端点，也不需要额外权限或外部应用
-                BrowserOpener.open(context, UpdateChecker.RELEASES_URL)
+                // 用**新标签**打开，而不是 `open()`（当前标签）：
+                // 检查更新是顺手做的一件事，不该把用户正在看的页面顶掉。
+                // 与 ExtensionsActivity 里「前往 AMO 信息页」用的是同一种做法。
+                // 政策第 4 条已覆盖「您主动访问的网站」，故不引入新端点，
+                // 也不需要额外权限或外部应用。
+                BrowserOpener.openNewTab(context, UpdateChecker.RELEASES_URL)
             }
             .show()
     }
