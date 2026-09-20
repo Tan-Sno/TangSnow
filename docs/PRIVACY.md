@@ -4,7 +4,7 @@
 
 # 隐私政策 / Privacy Policy
 
-> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 17`。
+> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 18`。
 > 最后更新：2026年09月16日
 > **请勿直接编辑**；请修改 `strings.xml` 后运行 `python tools/export_legal_docs.py` 重新导出。
 
@@ -42,13 +42,15 @@
 
 · 您主动访问的网站；
 
+· api.github.com（GitHub 官方 API）：**仅当您点击「设置 → 检查更新」时**，读取棠雪的公开版本信息（最新版本号与更新说明），用于告知是否有新版本。该请求只读取公开数据，不携带任何设备标识、账号或浏览记录；应用**不会**在后台自动发起此请求。
+
 · 内置跟踪保护默认开启，可在「设置 → 隐私与安全」调整强度（标准/严格/自定义）或整体关闭；拦截判断在本机完成，应用不会把您访问的网址或浏览行为上报给我们或任何第三方。其中「严格」档、以及自定义档勾选「拦截指纹跟踪」时，会额外在本机启用运行时级指纹保护（削弱可供指纹识别的浏览器特征）；该能力会改变部分网页可读取的浏览器信息、可能影响个别站点的显示效果，故仅在您主动选择这些档位时启用。「弹跳跟踪保护」（拦截以“红跳转”方式建立的跨站跟踪）与跟踪保护档位同开关，关闭跟踪保护时一并关闭。跟踪保护所使用的拦截名单由 Mozilla 官方名单服务（shavar.services.mozilla.com）提供并在本机更新，仅下载名单与哈希前缀比对，不含您访问网址的明文，也不用于识别您的身份；
 
 · 链接跟踪参数清理与「全球隐私控制（GPC）」信号默认开启、可在同一设置页关闭：前者在打开链接时本地移除跟踪参数，后者仅向支持网站发送声明、是否遵从由网站决定，均不向第三方传输您的浏览数据；
 
 · 从本地导入 .xpi 时仅由内核在本机校验 Mozilla 官方签名后安装，不发起网络请求，亦不绕过任何地区限制。
 
-除上述为获取扩展与名单更新而向 Mozilla 官方服务（addons.mozilla.org、名单服务）发起的必要请求外，本应用不向任何第三方共享、出售或委托处理您的个人信息，不存在其他跨境传输个人信息的情形。本应用已关闭内核的「安全浏览」远程查询能力，不因此向任何第三方发送您访问的网址。为弥补由此减少的风险提示，地址栏会显示连接安全状态（已加密 / 不安全，后者含已加载而未被拦住的不安全内容）—— 该判断完全在设备内完成，不发起任何网络请求。崩溃日志亦不上传（见第 7 条）。
+除上述为获取扩展与名单更新而向 Mozilla 官方服务（addons.mozilla.org、名单服务）发起的必要请求，以及您主动点击「检查更新」时向 GitHub 官方 API（api.github.com）发起的版本查询外，本应用不向任何第三方共享、出售或委托处理您的个人信息，不存在其他跨境传输个人信息的情形。本应用已关闭内核的「安全浏览」远程查询能力，不因此向任何第三方发送您访问的网址。为弥补由此减少的风险提示，地址栏会显示连接安全状态（已加密 / 不安全，后者含已加载而未被拦住的不安全内容）—— 该判断完全在设备内完成，不发起任何网络请求。崩溃日志亦不上传（见第 7 条）。
 
 5. 同意机制与撤回
 
@@ -112,13 +114,15 @@ The default is “Bing CN” (cn.bing.com) for stable, compliant access on mainl
 
 · Sites you visit yourself.
 
+· api.github.com (GitHub's official API) — **only when you tap Settings → Check for updates**, to read TangSnow's public release information (latest version number and release notes) so the app can tell you whether an update exists. This request reads public data only and carries no device identifier, account or browsing record; the app **never** issues it automatically in the background.
+
 · Built-in tracking protection is on by default and can be adjusted (Standard/Strict/Custom) or fully turned off in Settings → Privacy & Security; blocking decisions are made on your device, and neither we nor any third party receives the URLs you visit or your browsing behaviour. In the Strict profile — and in Custom when “Block fingerprinting” is ticked — additional runtime fingerprinting protection is enabled on your device (it weakens browser characteristics usable for fingerprinting); because it changes information some pages can read and may affect how a few sites render, it is enabled only in the profiles you explicitly choose. “Bounce tracking protection” (blocking cross-site tracking built through redirection chains) follows the same setting and is turned off together with tracking protection. The filter lists used by tracking protection are provided and updated on-device by Mozilla’s official list service (shavar.services.mozilla.com); only lists and hash-prefix comparisons are downloaded, never the plain text of the URLs you visit, and they are not used to identify you.
 
 · Stripping tracking parameters from links and the Global Privacy Control (GPC) signal are on by default and can be turned off in the same settings page: the former removes tracking parameters locally when opening links; the latter only sends a declaration to supporting websites (compliance is the site’s own choice). Neither transfers your browsing data to any third party.
 
 · Local .xpi import is verified and installed on-device by the engine only, makes no network request and bypasses no regional limits.
 
-Apart from the necessary requests made to Mozilla’s official services (addons.mozilla.org and the list service) to fetch extensions and list updates, the app does not share, sell or commission the processing of your personal information with any third party, and there is no other cross-border transfer of personal information. The engine’s remote “Safe Browsing” lookups are switched off, so no URL you visit is sent to any third party on that account. To make up for the reduced warning coverage, the address bar shows the connection security state (encrypted / not secure, the latter including insecure content that was loaded instead of blocked) as judged entirely on this device — it issues no network requests. Crash logs are never uploaded either (see §7).
+Apart from the necessary requests made to Mozilla's official services (addons.mozilla.org and the list service) to fetch extensions and list updates, and the version lookup made to GitHub's official API (api.github.com) when you tap “Check for updates”, the app does not share, sell or commission the processing of your personal information with any third party, and there is no other cross-border transfer of personal information. The engine’s remote “Safe Browsing” lookups are switched off, so no URL you visit is sent to any third party on that account. To make up for the reduced warning coverage, the address bar shows the connection security state (encrypted / not secure, the latter including insecure content that was loaded instead of blocked) as judged entirely on this device — it issues no network requests. Crash logs are never uploaded either (see §7).
 
 5. Consent and withdrawal
 
