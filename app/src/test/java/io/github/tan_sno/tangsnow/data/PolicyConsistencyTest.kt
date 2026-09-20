@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.update.UpdateChecker
 import io.github.tan_sno.tangsnow.util.CrashLogger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -143,7 +144,29 @@ class PolicyConsistencyTest {
         }
     }
 
-    // ------------------------------------------------------------------ ③ 枚举类：崩溃日志字段
+    // ------------------------------------------------------------------ ③ 对外端点披露
+
+    @Test
+    fun `更新检查所用的对外端点已在政策中披露`() {
+        // 「检查更新」会访问 api.github.com —— 它是本应用第三个对外端点，
+        // 政策 §4 必须写明。这条断言把「代码里加了端点」与「政策里写了」绑在一起：
+        // 以后若再引入新的对外请求而忘了改政策，这里会失败。
+        //
+        // 只针对 UpdateChecker 这一个已知端点做定点检查。若将来对外端点变多，
+        // 可扩展为「扫描源码里所有字面量 https 主机名，逐个要求出现在政策中」——
+        // 但那会引入注释/示例 URL 的误报，需先设计好白名单。
+        val host = java.net.URI(UpdateChecker.LATEST_RELEASE_API).host
+        assertTrue("解析不出对外端点的主机名", !host.isNullOrBlank())
+
+        assertTrue(
+            "应用会访问 $host，但中文政策第 4 条没有披露它。\n" +
+                "新增对外端点属实质变化：除补政策文本外，还需把 POLICY_VERSION +1。",
+            policyText("values").contains(host),
+        )
+        assertTrue("应用会访问 $host，但英文政策没有披露它", policyText("values-en").contains(host))
+    }
+
+    // ------------------------------------------------------------------ ④ 枚举类：崩溃日志字段
 
     @Test
     fun `崩溃日志写入的字段集合与预期一致`() {
