@@ -14,9 +14,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
-import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
@@ -59,7 +57,6 @@ import io.github.tan_sno.tangsnow.ui.showSelectionPopup
 import io.github.tan_sno.tangsnow.util.SecureScreen
 import io.github.tan_sno.tangsnow.util.UrlUtils
 import io.github.tan_sno.tangsnow.util.dp
-import io.github.tan_sno.tangsnow.util.selectableRipple
 import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
