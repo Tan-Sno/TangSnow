@@ -114,7 +114,7 @@ The default is “Bing CN” (cn.bing.com) for stable, compliant access on mainl
 
 · Sites you visit yourself.
 
-· api.github.com (GitHub's official API) — **only when you tap Settings → Check for updates**, to read TangSnow's public release information (latest version number and release notes) so the app can tell you whether an update exists. This request reads public data only and carries no device identifier, account or browsing record; the app **never** issues it automatically in the background.
+· api.github.com (GitHub’s official API) — **only when you tap Settings → Check for updates**, to read TangSnow’s public release information (latest version number and release notes) so the app can tell you whether an update exists. This request reads public data only and carries no device identifier, account or browsing record; the app **never** issues it automatically in the background.
 
 · Built-in tracking protection is on by default and can be adjusted (Standard/Strict/Custom) or fully turned off in Settings → Privacy & Security; blocking decisions are made on your device, and neither we nor any third party receives the URLs you visit or your browsing behaviour. In the Strict profile — and in Custom when “Block fingerprinting” is ticked — additional runtime fingerprinting protection is enabled on your device (it weakens browser characteristics usable for fingerprinting); because it changes information some pages can read and may affect how a few sites render, it is enabled only in the profiles you explicitly choose. “Bounce tracking protection” (blocking cross-site tracking built through redirection chains) follows the same setting and is turned off together with tracking protection. The filter lists used by tracking protection are provided and updated on-device by Mozilla’s official list service (shavar.services.mozilla.com); only lists and hash-prefix comparisons are downloaded, never the plain text of the URLs you visit, and they are not used to identify you.
 
@@ -122,7 +122,7 @@ The default is “Bing CN” (cn.bing.com) for stable, compliant access on mainl
 
 · Local .xpi import is verified and installed on-device by the engine only, makes no network request and bypasses no regional limits.
 
-Apart from the necessary requests made to Mozilla's official services (addons.mozilla.org and the list service) to fetch extensions and list updates, and the version lookup made to GitHub's official API (api.github.com) when you tap “Check for updates”, the app does not share, sell or commission the processing of your personal information with any third party, and there is no other cross-border transfer of personal information. The engine’s remote “Safe Browsing” lookups are switched off, so no URL you visit is sent to any third party on that account. To make up for the reduced warning coverage, the address bar shows the connection security state (encrypted / not secure, the latter including insecure content that was loaded instead of blocked) as judged entirely on this device — it issues no network requests. Crash logs are never uploaded either (see §7).
+Apart from the necessary requests made to Mozilla’s official services (addons.mozilla.org and the list service) to fetch extensions and list updates, and the version lookup made to GitHub’s official API (api.github.com) when you tap “Check for updates”, the app does not share, sell or commission the processing of your personal information with any third party, and there is no other cross-border transfer of personal information. The engine’s remote “Safe Browsing” lookups are switched off, so no URL you visit is sent to any third party on that account. To make up for the reduced warning coverage, the address bar shows the connection security state (encrypted / not secure, the latter including insecure content that was loaded instead of blocked) as judged entirely on this device — it issues no network requests. Crash logs are never uploaded either (see §7).
 
 5. Consent and withdrawal
 
@@ -148,8 +148,8 @@ Minors should use this app under the guidance of their guardians; the app offers
 
 10. Infringement and reporting
 
-For content hosted by third-party sites or extensions, contact those providers first. For issues about this app itself, contact us via the project's GitHub repository.
+For content hosted by third-party sites or extensions, contact those providers first. For issues about this app itself, contact us via the project’s GitHub repository.
 
 11. Contact
 
-For privacy or compliance questions, contact us via the project's GitHub repository (please mention the issue type and app version).
+For privacy or compliance questions, contact us via the project’s GitHub repository (please mention the issue type and app version).
