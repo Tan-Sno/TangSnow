@@ -111,9 +111,7 @@ class ConsentActivity : AppCompatActivity() {
 
     private fun openMainAndFinish() {
         val go = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP
+            flags = BrowserOpener.FLAGS_BRING_TO_FRONT
         }
         pendingUrl?.let { go.putExtra(BrowserOpener.EXTRA_OPEN_URL, it) }
         if (intent.getBooleanExtra(BrowserOpener.EXTRA_OPEN_NEW_TAB, false)) {
