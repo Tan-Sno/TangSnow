@@ -9,7 +9,6 @@
     android:background="@color/scrim_strong">
 
     <LinearLayout
-        android:id="@+id/consentCard"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:orientation="vertical"
@@ -79,7 +78,6 @@
                     android:textColor="?attr/colorPrimary" />
 
                 <TextView
-                    android:id="@+id/txtSummary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
