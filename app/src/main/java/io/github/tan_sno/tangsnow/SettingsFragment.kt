@@ -1,12 +1,14 @@
 package io.github.tan_sno.tangsnow
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import androidx.preference.Preference
@@ -27,7 +29,7 @@ import kotlinx.coroutines.launch
  *  - 主题：立即套用并重建当前 Activity
  *  - 无痕模式：受 GeckoView 限制只能在创建 Session 时指定，故提示下次启动生效
  *  - 清除浏览数据：调用 runtime.storageController（带 try / catch 兜底）
- *  - 检查更新：报出当前版本，并在应用内打开发布页（不自建更新服务端，见 UpdateChecker）
+ *  - 检查更新：向 GitHub Releases 读最新版并比对（仅用户点击时发起，见 UpdateChecker）
  *  - 关于：弹出对应长文本
  */
 class SettingsFragment : PreferenceFragmentCompat() {
@@ -419,28 +421,89 @@ class SettingsFragment : PreferenceFragmentCompat() {
     }
 
     /**
-     * 「检查更新」：报出**当前版本**，再把**官方发布页**交给应用自身的浏览器打开。
+     * 「检查更新」：向 GitHub Releases 读最新一版，与本机版本比对后如实呈现结果。
      *
-     * 为什么不在应用内自动比对版本，见 [UpdateChecker] 的类注释 —— 结论是不为此
-     * 新增对外端点。这里如实呈现「你自己看对照」，而不是假装「已是最新」（假反馈）。
+     * 为什么可以联网比对了：这条路径**只由用户点击触发**，不做任何后台自检，
+     * 且已在隐私政策第 4 条披露（`api.github.com` 是本应用第三个对外端点，
+     * `POLICY_VERSION` 随之提升到 18）。设计细节见 [UpdateChecker] 的类注释。
+     *
+     * 三种结果都不含「假反馈」：失败就说失败，不回落成「已是最新」。
      */
     private fun checkUpdate() {
         val context = requireContext()
-        val version = UpdateChecker.current(context).versionName
-            .ifBlank { getString(R.string.pref_version_unknown) }
-        AlertDialog.Builder(context)
+        val current = UpdateChecker.current(context)
+
+        // 积极按钮（下载）在 Builder 阶段就声明，结果回来后只做显示/隐藏 ——
+        // 避免 show() 之后再 setButton 可能加不上按钮的问题。
+        val dialog = AlertDialog.Builder(context)
             .setTitle(R.string.update_dialog_title)
-            .setMessage(getString(R.string.update_manual_message, version))
+            .setMessage(getString(R.string.update_checking))
             .setNegativeButton(R.string.dlg_cancel, null)
-            .setPositiveButton(R.string.update_open_releases) { _, _ ->
-                // 用**新标签**打开，而不是 `open()`（当前标签）：
-                // 检查更新是顺手做的一件事，不该把用户正在看的页面顶掉。
-                // 与 ExtensionsActivity 里「前往 AMO 信息页」用的是同一种做法。
-                // 政策第 4 条已覆盖「您主动访问的网站」，故不引入新端点，
-                // 也不需要额外权限或外部应用。
-                BrowserOpener.openNewTab(context, UpdateChecker.RELEASES_URL)
+            .setPositiveButton(R.string.update_download, null)
+            .create()
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isVisible = false
+
+        lifecycleScope.launch {
+            // 沿用本文件既有风格，用全限定名引用 Build（文件里其它几处也这么写）
+            val release = UpdateChecker.fetchLatest(android.os.Build.SUPPORTED_ABIS.toList())
+            // 弹窗可能已被用户取消 / Fragment 已销毁 / Activity 正在销毁（旋转、返回）
+            val activity = activity
+            if (!isAdded || activity == null || activity.isFinishing || activity.isDestroyed) {
+                return@launch
             }
-            .show()
+            if (!dialog.isShowing) return@launch
+
+            when {
+                release == null ->
+                    dialog.setMessage(getString(R.string.update_check_failed))
+
+                !UpdateChecker.isNewer(release.versionName, current.versionName) ->
+                    dialog.setMessage(
+                        getString(R.string.update_latest, current.versionName, current.versionCode)
+                    )
+
+                else -> {
+                    dialog.setMessage(buildReleaseMessage(release))
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.let { btn ->
+                        btn.isVisible = true
+                        btn.setOnClickListener {
+                            openUpdate(release)
+                            dialog.dismiss()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** 「发现新版本」的正文：版本号 + 发布说明节选（太长会撑爆弹窗，故截断） */
+    private fun buildReleaseMessage(release: UpdateChecker.Release): String = buildString {
+        append(getString(R.string.update_new_found, release.versionName))
+        release.notes?.let {
+            append("\n\n").append(if (it.length > RELEASE_NOTES_LIMIT) {
+                it.take(RELEASE_NOTES_LIMIT) + "…"
+            } else {
+                it
+            })
+        }
+    }
+
+    /**
+     * 打开下载。
+     *
+     * 交给**系统**浏览器 / 下载器处理（`ACTION_VIEW`）：应用自身不下这份文件、
+     * 不碰安装流程，也就不需要存储或安装相关的任何权限。
+     * 若没有与本机 ABI 匹配的包（[UpdateChecker.Release.apkUrl] 为 null），
+     * 退回到打开发布页让用户自己选 —— 而不是给一个装不上的链接。
+     */
+    private fun openUpdate(release: UpdateChecker.Release) {
+        val url = release.apkUrl ?: UpdateChecker.RELEASES_URL
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.onFailure {
+            Toast.makeText(requireContext(), R.string.update_failed, Toast.LENGTH_SHORT).show()
+        }
     }
 
     // ------------------------------------------------------------- 关于文本
@@ -471,6 +534,9 @@ class SettingsFragment : PreferenceFragmentCompat() {
     }
 
     private companion object {
+        /** 「发现新版本」弹窗里发布说明的截断长度：太长会把弹窗撑到看不完 */
+        const val RELEASE_NOTES_LIMIT = 500
+
         const val KEY_ENGINE_MANAGER = "engine_manager"
         const val KEY_ABOUT = "about_tangsnow"
         const val KEY_CLEAR_DATA = "clear_data"
