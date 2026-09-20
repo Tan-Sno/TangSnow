@@ -36,6 +36,22 @@ class HomeTilesAdapter(
 
     private val items = mutableListOf<HomeShortcut>()
 
+    /**
+     * 标签是否压在**自定义图片**背景上（由首页按当前风格设置）。
+     *
+     * 为 true 时给标签加一层跟随主题的半透明底色：自定义背景是用户任意一张照片，
+     * 对比度不可预知，而标签文字随明暗主题变化，裸文字压上去可能读不清。
+     * 其余风格的背景是应用自己的版面，标签本就清晰，故不加底色、保持原来的轻盈观感。
+     */
+    private var labelOnImage = false
+
+    /** 供首页在切换风格时调用；值没变就不重绑（该方法每次 onResume 都会被调到）。 */
+    fun setLabelOnImage(onImage: Boolean) {
+        if (labelOnImage == onImage) return
+        labelOnImage = onImage
+        notifyItemRangeChanged(0, items.size)
+    }
+
     fun submit(list: List<HomeShortcut>) {
         items.clear()
         items.addAll(list)
@@ -55,6 +71,10 @@ class HomeTilesAdapter(
         holder.binding.tileAvatar.backgroundTintList =
             ColorStateList.valueOf(colorFor(holder.itemView.context, item.name))
         holder.binding.tileLabel.text = item.name
+        // 压在自定义图片上时给标签加底色；其余风格清掉，避免回收复用后残留
+        holder.binding.tileLabel.setBackgroundResource(
+            if (labelOnImage) R.drawable.bg_tile_label else 0
+        )
         holder.binding.root.setOnClickListener { onOpen(item) }
     }
 }

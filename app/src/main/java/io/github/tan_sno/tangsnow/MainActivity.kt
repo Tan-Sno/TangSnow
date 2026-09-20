@@ -674,7 +674,20 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     }
 
     private fun applyHomeStyle() {
-        when (prefs.homeStyle) {
+        val style = prefs.homeStyle
+
+        // 自定义图片作背景时，品牌区（标记 + 品牌名 + 标语）整体隐藏 —— 背景是用户
+        // 自己的画面，再压一行 46sp 的品牌名上去既遮挡也不得体；其余风格保持显示。
+        //
+        // 注意：这句话**以前只写在下面 STYLE_IMAGE 分支的注释里，代码并没有实现**，
+        // 于是品牌名一直浮在自定义图片上（注释承诺了、实现没跟上）。现在收到这里统一
+        // 裁决，不再分散在各分支里，避免同一个意图两处各说一遍又各自走偏。
+        val onImage = style == PreferenceStore.STYLE_IMAGE
+        binding.home.homeBrand.isVisible = !onImage
+        // 图片上的文字对比度不可预知（背景是任意照片），故让快捷方式标签带上底色
+        homeTilesAdapter.setLabelOnImage(onImage)
+
+        when (style) {
             PreferenceStore.STYLE_MIST -> {
                 binding.home.root.setBackgroundResource(R.drawable.bg_home_mist)
                 binding.home.homeMotif.isVisible = true
@@ -684,7 +697,6 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 binding.home.homeMotif.isVisible = false
             }
             PreferenceStore.STYLE_IMAGE -> {
-                // 自定义图作为背景时，logo/品牌名/标语一律隐藏，保持画面干净
                 binding.home.homeMotif.isVisible = false
                 applyHomeImageBackground()
             }
