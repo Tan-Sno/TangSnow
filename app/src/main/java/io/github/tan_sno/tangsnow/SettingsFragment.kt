@@ -1,14 +1,12 @@
 package io.github.tan_sno.tangsnow
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import androidx.preference.Preference
@@ -29,7 +27,7 @@ import kotlinx.coroutines.launch
  *  - 主题：立即套用并重建当前 Activity
  *  - 无痕模式：受 GeckoView 限制只能在创建 Session 时指定，故提示下次启动生效
  *  - 清除浏览数据：调用 runtime.storageController（带 try / catch 兜底）
- *  - 检查更新：读取更新清单（未接入时提示已是最新），发现新版本可跳转下载
+ *  - 检查更新：报出当前版本，并在应用内打开发布页（不自建更新服务端，见 UpdateChecker）
  *  - 关于：弹出对应长文本
  */
 class SettingsFragment : PreferenceFragmentCompat() {
@@ -414,75 +412,32 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
     private fun bindUpdate() {
         val pref = findPreference<Preference>(KEY_CHECK_UPDATE) ?: return
-        // 未接入更新源时置灰并说明原因：绝不假装“已是最新”（假反馈）
-        if (!UpdateChecker.isConfigured()) {
-            pref.isEnabled = false
-            pref.summary = getString(R.string.pref_check_update_unavailable)
-        }
         pref.setOnPreferenceClickListener {
             checkUpdate()
             true
         }
     }
 
+    /**
+     * 「检查更新」：报出**当前版本**，再把**官方发布页**交给应用自身的浏览器打开。
+     *
+     * 为什么不在应用内自动比对版本，见 [UpdateChecker] 的类注释 —— 结论是不为此
+     * 新增对外端点。这里如实呈现「你自己看对照」，而不是假装「已是最新」（假反馈）。
+     */
     private fun checkUpdate() {
         val context = requireContext()
-        val current = UpdateChecker.current(context)
-        // 积极按钮在 Builder 阶段就声明（下载新版本），结果返回后只做显示/隐藏，
-        // 避免 show() 之后再 setButton 可能加不上按钮的问题。
-        val dialog = AlertDialog.Builder(context)
+        val version = UpdateChecker.current(context).versionName
+            .ifBlank { getString(R.string.pref_version_unknown) }
+        AlertDialog.Builder(context)
             .setTitle(R.string.update_dialog_title)
-            .setMessage(getString(R.string.update_checking))
+            .setMessage(getString(R.string.update_manual_message, version))
             .setNegativeButton(R.string.dlg_cancel, null)
-            .setPositiveButton(R.string.update_download, null)
-            .create()
-        dialog.show()
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isVisible = false
-
-        lifecycleScope.launch {
-            val info = UpdateChecker.fetchManifest()
-            // 弹窗可能已被用户取消 / Fragment 已销毁 / Activity 正在销毁（旋转、返回）
-            val activity = activity
-            if (!isAdded || activity == null || activity.isFinishing || activity.isDestroyed) {
-                return@launch
+            .setPositiveButton(R.string.update_open_releases) { _, _ ->
+                // 用应用自己的浏览器打开：政策第 4 条已覆盖「您主动访问的网站」，
+                // 不引入新端点，也不需要额外权限或外部应用
+                BrowserOpener.open(context, UpdateChecker.RELEASES_URL)
             }
-            if (!dialog.isShowing) return@launch
-
-            when {
-                info == null -> {
-                    // 已配置更新源但网络失败/清单异常：如实提示检查失败
-                    dialog.setMessage(getString(R.string.update_check_failed))
-                }
-                info.versionCode <= current.versionCode -> {
-                    dialog.setMessage(
-                        getString(R.string.update_latest, current.versionName, current.versionCode)
-                    )
-                }
-                else -> {
-                    val message = buildString {
-                        append(getString(R.string.update_new_found, info.versionName))
-                        info.notes?.let { append("\n\n").append(it) }
-                    }
-                    dialog.setMessage(message)
-                    dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.let { btn ->
-                        btn.isVisible = true
-                        btn.setOnClickListener {
-                            openApk(info.apkUrl)
-                            dialog.dismiss()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private fun openApk(url: String) {
-        if (url.isBlank()) return
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }.onFailure {
-            Toast.makeText(requireContext(), R.string.update_failed, Toast.LENGTH_SHORT).show()
-        }
+            .show()
     }
 
     // ------------------------------------------------------------- 关于文本

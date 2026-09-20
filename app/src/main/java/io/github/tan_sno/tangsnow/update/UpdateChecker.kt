@@ -1,87 +1,47 @@
 package io.github.tan_sno.tangsnow.update
 
 import android.content.Context
-import io.github.tan_sno.tangsnow.data.AppHttp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 /**
- * 应用内更新检查（脚手架就绪，更新源待接入）。
+ * 版本信息与官方发布页。
  *
- * 接入方式：把 [MANIFEST_URL] 换成一个返回如下 JSON 的 https 地址即可，无需改其它代码：
+ * ## 为什么这里不自动联网比对版本
  *
- * ```json
- * {
- *   "versionCode": 3,
- *   "versionName": "1.2.0",
- *   "apkUrl": "https://example.com/tangsnow-1.2.0.apk",
- *   "notes": "本次更新内容…"
- * }
- * ```
+ * 早前留了一套「自托管更新清单（返回 versionCode 的 JSON）」的脚手架，但一直没有、
+ * 也不打算为此维护一台服务端；而本项目实际的分发渠道是 **GitHub Releases**，
+ * 它**只给 tag 名（`v2.1.0`）而不给 `versionCode`** —— 清单那套的比对基准与真实渠道
+ * 对不上。既然外壳无人填充、口径也不匹配，就整体删掉了（历史仍可在 git 里查到），
+ * 只保留真正需要的两件事：**当前版本**与**官方发布页地址**。
  *
- *  - [MANIFEST_URL] 为空串时视为「尚未接入」：设置页会置灰「检查更新」入口并提示
- *    不可用，绝不假装“已是最新”（[isConfigured] 供界面判断）；
- *  - APK 下载交由系统浏览器 / 下载器处理（ACTION_VIEW），应用自身无需存储权限。
+ * ## 为什么也不直接调 GitHub API
+ *
+ * `api.github.com` 会成为本应用第三个对外端点，而隐私政策第 4 条目前只列举了
+ * Mozilla 官方服务（AMO 与名单服务），并明确「除此之外不发请求」。要加就得同步
+ * 修订政策文本（属产品/法律决定，不能悄悄做）。
+ *
+ * ## 现在的做法
+ *
+ * 用**应用自身的浏览器**打开官方发布页。这一动作在政策里已被覆盖（第 4 条列有
+ * 「您主动访问的网站」），零新增对外端点，用户还能直接看到最新版本号、发布说明，
+ * 并在同一页面下载 —— 不假装「已是最新」，也不假装置灰不可用。
  */
 object UpdateChecker {
 
-    /** 空串 = 更新服务尚未接入（故意未启用，接入方式见类注释）；接入后填 https 清单地址。 */
-    const val MANIFEST_URL: String = ""
+    /** 官方发布页。`latest` 由 GitHub 重定向到最新一版，故无需随版本改动。 */
+    const val RELEASES_URL: String = "https://github.com/Tan-Sno/TangSnow/releases/latest"
 
     data class Current(val versionCode: Long, val versionName: String)
 
-    data class Info(
-        val versionCode: Long,
-        val versionName: String,
-        val apkUrl: String,
-        val notes: String?,
-    )
-
     fun current(context: Context): Current = try {
-        val pm = context.applicationContext.packageManager
-        val pkg = pm.getPackageInfo(context.applicationContext.packageName, 0)
+        val app = context.applicationContext
+        val pkg = app.packageManager.getPackageInfo(app.packageName, 0)
         Current(
             versionCode = if (android.os.Build.VERSION.SDK_INT >= 28) pkg.longVersionCode
             else @Suppress("DEPRECATION") pkg.versionCode.toLong(),
             versionName = pkg.versionName.orEmpty(),
         )
     } catch (e: Exception) {
+        // 取不到版本信息不该让调用方崩溃：返回占位值，界面用 pref_version_unknown 兜底
         Current(0, "")
     }
-
-    /**
-     * 拉取更新清单。
-     * @return 清单信息；未配置更新源或网络失败/非 https 时为 null
-     *
-     * 安全要求：更新源必须为 HTTPS 且由开发者控制；正式接入时建议配合
-     * 强校验（如清单内嵌 SHA-256，下载后校验签名再安装），
-     * 切勿静默更新或使用未加密/第三方更新源（防投毒）。
-     */
-    suspend fun fetchManifest(): Info? = withContext(Dispatchers.IO) {
-        if (!isConfigured()) return@withContext null
-        if (!MANIFEST_URL.startsWith("https://")) return@withContext null
-        try {
-            val req = AppHttp.get(MANIFEST_URL, acceptJson = true).build()
-            AppHttp.client.newCall(req).execute().use { resp ->
-                val body = resp.body.string()
-                val json = JSONObject(body)
-                Info(
-                    versionCode = json.optLong("versionCode", 0),
-                    versionName = json.optString("versionName", ""),
-                    apkUrl = json.optString("apkUrl", ""),
-                    notes = json.optString("notes", "").ifBlank { null },
-                )
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // 取消要原样传播，不能降级成 null：「null = 未配置/网络失败」会让调用方
-            // 把已取消的协程当成一次真实失败（例如弹出「检查更新失败」）。
-            throw e
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    /** 是否已配置更新源（清单地址非空） */
-    fun isConfigured(): Boolean = MANIFEST_URL.isNotBlank()
 }
