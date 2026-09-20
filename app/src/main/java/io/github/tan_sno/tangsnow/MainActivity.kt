@@ -366,9 +366,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 在同意前绝不初始化 GeckoRuntime / 会话 / 网页内容。
         if (ConsentGate.needsConsent(prefs)) {
             val go = Intent(this, ConsentActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+                flags = BrowserOpener.FLAGS_BRING_TO_FRONT
             }
             // 外部链接（ACTION_VIEW）与应用内跳转（EXTRA_OPEN_URL）都要随门禁转发
             externalUrl(intent)?.let { go.putExtra(BrowserOpener.EXTRA_OPEN_URL, it) }

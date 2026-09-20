@@ -14,6 +14,19 @@ object BrowserOpener {
     const val EXTRA_OPEN_NEW_TAB = "open_new_tab"
 
     /**
+     * 「复用已有实例、置于前台、并清掉其上已打开的页面」的启动标志。
+     *
+     * 三处需要它，语义完全相同，故收成一处（此前同一组标志在四处各写了一遍）：
+     *  · 本对象打开 URL；
+     *  · `ConsentActivity` 同意后进入主界面；
+     *  · `MainActivity` 未同意时转向同意页。
+     * 要表达的意图是：**不要叠出第二个实例**，并把目标之上已经打开的页面清掉。
+     */
+    const val FLAGS_BRING_TO_FRONT = Intent.FLAG_ACTIVITY_NEW_TASK or
+        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+        Intent.FLAG_ACTIVITY_CLEAR_TOP
+
+    /**
      * 应用内**特权跳转**的进程内通道。
      *
      * 为什么需要它：MainActivity 是 exported 入口，任何应用都能用 `ACTION_VIEW` 或自造
@@ -54,9 +67,7 @@ object BrowserOpener {
         if (url.isEmpty()) return
         setPending(url, newTab = false)
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = FLAGS_BRING_TO_FRONT
             // extra 只对 http/https 有效（MainActivity 的 exported 入口仅收这两种）；
             // 特权 scheme 靠上面的进程内通道传递，见 consumePending 的注释。
             putExtra(EXTRA_OPEN_URL, url)
@@ -69,9 +80,7 @@ object BrowserOpener {
         if (url.isEmpty()) return
         setPending(url, newTab = true)
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = FLAGS_BRING_TO_FRONT
             putExtra(EXTRA_OPEN_URL, url)
             putExtra(EXTRA_OPEN_NEW_TAB, true)
         }
