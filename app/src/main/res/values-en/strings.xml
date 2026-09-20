@@ -223,15 +223,10 @@
 
     <!-- Update -->
     <string name="pref_check_update_title">Check for updates</string>
-    <string name="pref_check_update_summary">Get the latest version of TangSnow</string>
+    <string name="pref_check_update_summary">See the latest version on the official releases page</string>
     <string name="update_dialog_title">Check for updates</string>
-    <string name="update_checking">Checking for updates…</string>
-    <string name="update_latest">You are on the latest version\nv%1$s (internal build %2$d)</string>
-    <string name="update_new_found">New version v%1$s available</string>
-    <string name="update_download">Update now</string>
-    <string name="update_failed">Cannot open the download link, please retry later</string>
-    <string name="update_check_failed">Update check failed, please retry later (if it keeps failing, make sure the update service is configured)</string>
-    <string name="pref_check_update_unavailable">Update service is not configured yet — currently unavailable</string>
+    <string name="update_manual_message">Current version: v%1$s\n\nThe app does not contact any server to compare versions. Use the button below to open the official releases page inside the app; it lists the latest version number and the notes for each release.</string>
+    <string name="update_open_releases">Open releases page</string>
     <string name="pref_version_unknown">Unknown</string>
 
     <!-- Home / Customize -->
