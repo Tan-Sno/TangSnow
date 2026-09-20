@@ -20,7 +20,6 @@
 
         <!-- 页面视图：优先展示 GeckoView 内核截图；无截图时显示首字母占位 -->
         <FrameLayout
-            android:id="@+id/previewRoot"
             android:layout_width="match_parent"
             android:layout_height="96dp"
             android:background="@drawable/bg_tab_preview"

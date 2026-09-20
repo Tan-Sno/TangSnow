@@ -81,7 +81,6 @@
         android:background="?attr/selectableItemBackground">
 
         <TextView
-            android:id="@+id/txtRowSummary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/about_privacy_summary"
@@ -116,7 +115,6 @@
         android:background="?attr/selectableItemBackground">
 
         <TextView
-            android:id="@+id/txtRowPrivacy"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/about_privacy_full"
@@ -151,7 +149,6 @@
         android:background="?attr/selectableItemBackground">
 
         <TextView
-            android:id="@+id/txtRowAgreement"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/about_agreement"
@@ -187,7 +184,6 @@
         android:background="?attr/selectableItemBackground">
 
         <TextView
-            android:id="@+id/txtRowCrashes"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/about_crash_title"
