@@ -106,8 +106,11 @@ android {
         // 2.1.0：更换 applicationId 等于更换应用身份，与 2.0.2 的安装身份不兼容
         // （旧版无法覆盖升级，需卸载重装）。若仍沿用 2.0.2，会出现「两个不同的应用
         // 都自称 2.0.2」，故递增次版本号以示区分。
-        versionCode = 33
-        versionName = "2.1.0"
+        // 2.1.1：「检查更新」改为向 GitHub Releases 读取并自动比对版本、按设备架构
+        // 给出对应下载；由此新增对外端点 api.github.com（隐私政策 §4 与同意页摘要
+        // 已同步披露，POLICY_VERSION 升至 18）。另含若干死代码与不合约定写法的清理。
+        versionCode = 34
+        versionName = "2.1.1"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
         // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
         // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。
