@@ -458,6 +458,12 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 release == null ->
                     dialog.setMessage(getString(R.string.update_check_failed))
 
+                // 读不到本机版本时**不能**继续比对：`isNewer(远端, "")` 会返回 false，
+                // 于是界面会说「已是最新」—— 那是**假反馈**（本仓库明令禁止）。
+                // 现实里几乎不会发生，但代价只是一个分支，值得堵住。
+                current.versionName.isBlank() ->
+                    dialog.setMessage(getString(R.string.update_version_unreadable))
+
                 !UpdateChecker.isNewer(release.versionName, current.versionName) ->
                     dialog.setMessage(
                         getString(R.string.update_latest, current.versionName, current.versionCode)
@@ -498,11 +504,16 @@ class SettingsFragment : PreferenceFragmentCompat() {
      * 退回到打开发布页让用户自己选 —— 而不是给一个装不上的链接。
      */
     private fun openUpdate(release: UpdateChecker.Release) {
+        // 这里用可空的 `context` 而不是 `requireContext()`：本函数**已经在失败分支上**了
+        // （没拿到匹配的包 / 用户点了下载），若此刻 Fragment 已 detach，
+        // `requireContext()` 会再抛一个 IllegalStateException，等于把一次「打不开下载」
+        // 升级成崩溃。取到 null 就静默返回，不再制造第二个问题。
+        val ctx = context ?: return
         val url = release.apkUrl ?: UpdateChecker.RELEASES_URL
         runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }.onFailure {
-            Toast.makeText(requireContext(), R.string.update_failed, Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, R.string.update_failed, Toast.LENGTH_SHORT).show()
         }
     }
 

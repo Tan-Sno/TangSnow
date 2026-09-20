@@ -23,7 +23,6 @@ import io.github.tan_sno.tangsnow.databinding.ItemExtensionInstalledBinding
 import io.github.tan_sno.tangsnow.extension.ExtInstallCoordinator
 import io.github.tan_sno.tangsnow.extension.ExtensionCatalog
 import io.github.tan_sno.tangsnow.extension.ExtensionPrompts
-import io.github.tan_sno.tangsnow.util.awaitResult
 import io.github.tan_sno.tangsnow.util.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async

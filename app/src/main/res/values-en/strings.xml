@@ -231,6 +231,7 @@
     <string name="update_download">Download update</string>
     <string name="update_failed">Cannot open the download link, please retry later</string>
     <string name="update_check_failed">Update check failed, please retry later (it may just be a network problem)</string>
+    <string name="update_version_unreadable">Could not read the installed version, so no comparison is possible. You can check it under About TangSnow</string>
     <string name="pref_version_unknown">Unknown</string>
 
     <!-- Home / Customize -->

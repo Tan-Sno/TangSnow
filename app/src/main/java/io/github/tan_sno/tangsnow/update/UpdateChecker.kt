@@ -41,6 +41,15 @@ object UpdateChecker {
     /** 资产文件名以它结尾的才是 APK。 */
     private const val ASSET_SUFFIX = ".apk"
 
+    /**
+     * 从 tag 名里取版本号主体。
+     *
+     * 提为常量而非在函数里现建：`Regex` 构造即编译，而本函数在每次检查里会被调用
+     * 若干次（`isNewer` 两侧各一次、`segments` 再各一次）。本仓库其它几处正则
+     * （`UrlUtils` / `DownloadRepo` / `AboutActivity`）也都这么写，保持一致。
+     */
+    private val VERSION_PREFIX = Regex("""^(\d+(?:\.\d+)*)""")
+
     data class Current(val versionCode: Long, val versionName: String)
 
     /** 远端最新一版。 */
@@ -118,7 +127,7 @@ object UpdateChecker {
      */
     internal fun normalizeVersion(raw: String): String {
         val trimmed = raw.trim().removePrefix("v").removePrefix("V")
-        return Regex("""^(\d+(?:\.\d+)*)""").find(trimmed)?.groupValues?.get(1) ?: ""
+        return VERSION_PREFIX.find(trimmed)?.groupValues?.get(1) ?: ""
     }
 
     /**
