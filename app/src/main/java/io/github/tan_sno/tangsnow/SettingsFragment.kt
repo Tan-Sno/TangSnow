@@ -34,6 +34,21 @@ import kotlinx.coroutines.launch
  */
 class SettingsFragment : PreferenceFragmentCompat() {
 
+    /**
+     * 正在显示的「检查更新」弹窗。
+     *
+     * 为什么要专门持一个引用：那个弹窗**可能显示很久**（要等联网结果，最长到读取超时
+     * 30 秒），期间若发生旋转或页面销毁，不主动收掉就会留下一个已无处安放的窗口
+     * （系统会打 WindowLeaked）。本页其它弹窗都是一问一答、立刻关掉，故此前没有这个需要。
+     */
+    private var updateDialog: AlertDialog? = null
+
+    override fun onDestroyView() {
+        updateDialog?.dismiss()
+        updateDialog = null
+        super.onDestroyView()
+    }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
         // 本页所有设置项都不使用图标：关掉图标占位列，省掉每行一次 ImageView 处理与一段测量
@@ -441,6 +456,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.update_download, null)
             .create()
+        updateDialog = dialog
         dialog.show()
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isVisible = false
 
