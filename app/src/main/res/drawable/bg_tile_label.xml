@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    快捷方式标签压在「自定义图片」背景上时的底色。
+
+    为什么需要它：标签文字用的是 `?attr/colorOnSurface`（随明暗主题变化），而自定义
+    背景是**用户任意一张照片** —— 两者叠加完全可能出现「深字压深图」或「浅字压亮图」。
+    原先标签是裸文字，在照片上读不清，这才是「自定义图片」这个风格此前最实际的问题。
+
+    为什么是半透明而不是实心：这是在用户自己的画面上叠加，实心块会明显盖住画面；
+    半透明既能稳住对比度，又保留照片的观感。角与内边距让文字不至于贴着色块边缘。
+
+    色值随明暗主题变化（见 values/ 与 values-night/ 的 tile_label_bg），
+    方向与标签文字色一致，故两种主题下都成立。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <solid android:color="@color/tile_label_bg" />
+    <corners android:radius="8dp" />
+    <padding
+        android:left="8dp"
+        android:right="8dp"
+        android:top="2dp"
+        android:bottom="2dp" />
+</shape>

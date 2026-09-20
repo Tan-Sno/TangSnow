@@ -38,30 +38,45 @@
         android:orientation="vertical"
         android:gravity="center">
 
-        <androidx.appcompat.widget.AppCompatImageView
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:src="@drawable/ic_tangsnow_mark"
-            android:importantForAccessibility="no" />
-
-        <TextView
+        <!--
+            品牌区（标记 + 品牌名 + 标语）整体包一层，便于一次性隐藏。
+            为什么需要整体隐藏：选「自定义图片」时背景是用户自己的画面，
+            再压一行 46sp 的品牌名上去既遮挡也不得体（见 MainActivity.applyHomeStyle）。
+            单独包一层而不是给外层的 LinearLayout 设 id，是因为外层还装着快捷方式网格 ——
+            那个在自定义图片下必须保留，不能一起隐藏。
+        -->
+        <LinearLayout
+            android:id="@+id/homeBrand"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/home_wordmark"
-            android:textSize="46sp"
-            android:fontFamily="sans-serif-light"
-            android:letterSpacing="0.24"
-            android:textColor="@color/home_wordmark" />
+            android:orientation="vertical"
+            android:gravity="center">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="@string/home_tagline"
-            android:textSize="13sp"
-            android:letterSpacing="0.28"
-            android:textColor="@color/home_tagline" />
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_tangsnow_mark"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/home_wordmark"
+                android:textSize="46sp"
+                android:fontFamily="sans-serif-light"
+                android:letterSpacing="0.24"
+                android:textColor="@color/home_wordmark" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/home_tagline"
+                android:textSize="13sp"
+                android:letterSpacing="0.28"
+                android:textColor="@color/home_tagline" />
+        </LinearLayout>
 
         <!-- 快捷方式网格（一行四个，定制主页里增删） -->
         <androidx.recyclerview.widget.RecyclerView

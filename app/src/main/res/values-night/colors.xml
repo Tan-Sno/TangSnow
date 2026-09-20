@@ -22,6 +22,11 @@
     <color name="page_bg">#1F1F1F</color>
     <color name="on_page">#E8EAED</color>
 
+    <!-- 快捷方式标签压在「自定义图片」背景上时的底色：半透明、跟随主题走向。
+         夜间取深色，与标签文字色（?attr/colorOnSurface，夜间为浅色）同向，
+         这样不论用户选的照片偏亮还是偏暗，文字都能压得住。 -->
+    <color name="tile_label_bg">#D91F1F1F</color>
+
     <!-- ============ M3 语义补充 ============ -->
     <color name="surface_variant">#2D2E31</color>
     <color name="on_surface_variant">#9AA0A6</color>
