@@ -41,7 +41,18 @@ object ExtensionCatalog {
      * 而这里是 Mozilla 官方全量商店，交给用户在浏览内核里自行浏览与安装。
      * 不预设语言路径段，由 AMO 按浏览器语言自动本地化。
      */
-    const val OFFICIAL_STORE_URL = "https://addons.mozilla.org/firefox/extensions/"
+    /**
+     * AMO 官方源地址的**单一事实来源**。
+     *
+     * 为什么收在这里：域名此前散在多处 —— 本文件的几处 URL 拼接之外，还有两处**安全校验**
+     * （`ExtInstallCoordinator` 的下载地址前缀校验、`ExtensionsActivity` 的自定义链接 host 校验）。
+     * 「扩展只走 Mozilla 官方源」是本项目对外承诺的一条口径，散着写就有"漏改一处"的风险
+     * （漏改校验处即等同于放宽准入），故统一到这两个常量。
+     */
+    const val AMO_HOST = "addons.mozilla.org"
+    const val AMO_ORIGIN = "https://" + AMO_HOST
+
+    const val OFFICIAL_STORE_URL = AMO_ORIGIN + "/firefox/extensions/"
 
     data class Entry(
         val slug: String,
@@ -58,11 +69,11 @@ object ExtensionCatalog {
     ) {
         /** AMO「latest」稳定直链（官方域名，始终指向当前最新版） */
         val xpiUrl: String =
-            "https://addons.mozilla.org/firefox/downloads/latest/$slug/addon-$addonId-latest.xpi"
+            "${ExtensionCatalog.AMO_ORIGIN}/firefox/downloads/latest/$slug/addon-$addonId-latest.xpi"
 
         /** 官方扩展详情页 */
         val officialPage: String =
-            "https://addons.mozilla.org/firefox/addon/$slug/"
+            "${ExtensionCatalog.AMO_ORIGIN}/firefox/addon/$slug/"
     }
 
     /** 本次应用生命周期内安装成功的记录：AMO slug → WebExtension id。
@@ -75,6 +86,15 @@ object ExtensionCatalog {
 
     /** 安装启动时间戳（slug → SystemClock.elapsedRealtime），用于超时自愈 */
     val installStartedAt = ConcurrentHashMap<String, Long>()
+
+    /**
+     * 自建下载兜底阶段的进度（slug → 1..100）。
+     *
+     * 只有「内核直链安装」那一步没走通、改用应用自建 OkHttp 下载时才可能有值 ——
+     * 内核通道不暴露进度，服务端未给 `Content-Length` 时也算不出来（那时不会写入本表）。
+     * 与 [installing] 一样是**进程级**状态：本页重建后仍能接着显示，不必从头再来。
+     */
+    val installProgress = ConcurrentHashMap<String, Int>()
 
     /** 官方确认的地区受限扩展（AMO 返回 451） */
     val regionBlocked = ConcurrentHashMap.newKeySet<String>()
@@ -94,7 +114,7 @@ object ExtensionCatalog {
     suspend fun hydrate(entry: Entry): Int = withContext(Dispatchers.IO) {
         try {
             val req = AppHttp.get(
-                "https://addons.mozilla.org/api/v5/addons/addon/${entry.slug}/",
+                "$AMO_ORIGIN/api/v5/addons/addon/${entry.slug}/",
                 acceptJson = true,
             ).build()
             AppHttp.client.newCall(req).execute().use { resp ->

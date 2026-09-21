@@ -116,6 +116,17 @@ class ExtInstallCoordinator(
         fun onSuccess(source: Source, ext: WebExtension?)
 
         fun onFailure(source: Source, err: Throwable?)
+
+        /**
+         * 自建下载兜底阶段的上报进度（1..100）。
+         *
+         * 给了默认空实现：进度只是体验增强，不关心它的调用方一行都不用改。
+         * 回调在主线程投递，同一来源内**单调不减**（换候选地址重下也不会倒退），
+         * 但不保证每个百分点都到 —— 界面应按「最近一次收到的值」渲染。
+         * 内核直链通道不暴露进度，服务端未给 `Content-Length` 时也无从计算，
+         * 这两种情况下本回调不会触发。
+         */
+        fun onProgress(source: Source, percent: Int) {}
     }
 
     private val jobs = activeJobs
@@ -136,7 +147,7 @@ class ExtInstallCoordinator(
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 withTimeout(TOTAL_TIMEOUT_MS) {
-                    onDone(source, cb, performInstall(source, controller))
+                    onDone(source, cb, performInstall(source, controller, cb))
                 }
             } catch (e: TimeoutCancellationException) {
                 settle(source.key)
@@ -170,13 +181,19 @@ class ExtInstallCoordinator(
      * 用应用自建网络栈把官方 xpi 下到缓存：**按优先级依次尝试 [Source.candidateUrls]**，
      * 全部失败才返回 null（调用方据此回退内核内置通道）。
      * 只接受 addons.mozilla.org 官方域名——与"扩展只走 Mozilla 官方源"的产品口径一致。
+     * 下载过程中按已读字节数回调 [Callback.onProgress]；服务端未给 `Content-Length`
+     * （或响应被透明解压）时无从计算，此时不回调，界面继续显示「安装中…」。
      *
      * ⚠️ 这里必须用**带 callTimeout 的 client**：实测某些网络对下载地址做"慢滴/黑洞"
      * （连着既不返回也不断开），此时 OkHttp 的 readTimeout 不会触发，而 `withTimeout`
      * 又无法打断阻塞式 `execute()` —— 结果就是"永远停在安装中、连超时弹窗都没有"。
      */
-    private suspend fun downloadPackage(urls: List<String>): File? = withContext(Dispatchers.IO) {
+    private suspend fun downloadPackage(source: Source, cb: Callback): File? = withContext(Dispatchers.IO) {
+        val urls = source.candidateUrls
         if (urls.isEmpty()) return@withContext null
+        // 进度基准**跨候选共用**：换候选地址重下时不让百分比倒退 —— 界面按「最近一次收到的值」
+        // 渲染，倒退会让人以为白下了一遍。
+        var lastPercent = 0
         val dir = File(context.cacheDir, CACHE_DIR).apply { mkdirs() }
         // 只清**陈旧**残包，不做无条件清空。
         //
@@ -193,14 +210,14 @@ class ExtInstallCoordinator(
             .callTimeout(DOWNLOAD_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
             .build()
         for ((index, url) in urls.withIndex()) {
-            val n = index + 1
-            if (!url.startsWith("https://addons.mozilla.org/", ignoreCase = true)) {
+            if (!url.startsWith("${ExtensionCatalog.AMO_ORIGIN}/", ignoreCase = true)) {
                 continue
             }
             val out = File(dir, "$TMP_PREFIX${System.currentTimeMillis()}-$index.xpi")
             try {
                 client.newCall(AppHttp.get(url).build()).execute().use { resp ->
                     if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
+                    val total = resp.body.contentLength()
                     resp.body.byteStream().use { input ->
                         out.outputStream().buffered().use { sink ->
                             val buf = ByteArray(64 * 1024)
@@ -212,6 +229,15 @@ class ExtInstallCoordinator(
                                 // 体积闸门：官方扩展包远小于此，超出即为异常响应
                                 if (done > MAX_XPI_BYTES) throw IllegalStateException("体积异常，已中止")
                                 sink.write(buf, 0, r)
+                                // 进度上报：只在能算出百分比、且比上次更高时投递，
+                                // 既保证界面平滑，也不会把主线程刷爆（每个百分点最多一次）。
+                                if (total > 0) {
+                                    val percent = ((done * 100) / total).toInt().coerceIn(1, 100)
+                                    if (percent > lastPercent) {
+                                        lastPercent = percent
+                                        withContext(Dispatchers.Main) { cb.onProgress(source, percent) }
+                                    }
+                                }
                             }
                         }
                     }
@@ -239,10 +265,15 @@ class ExtInstallCoordinator(
      *     再走 `file://` + FROM_FILE。
      *
      * 每一步都有独立上限、且三段之和小于 [TOTAL_TIMEOUT_MS]，保证兜底链一定跑得完。
+     *
+     * 进度上报：**只有第 ③ 步（自建下载）有百分比** —— 内核通道不暴露进度。
+     * [Callback.onProgress] 即在该步按已读字节数回调，供界面把「安装中…」换成「下载中 n%」。
+     * @param cb 安装回调；进度仅经它上报，不参与安装决策
      */
     private suspend fun performInstall(
         source: Source,
         controller: WebExtensionController,
+        cb: Callback,
     ): WebExtension? {
         val local = source.localFile
         if (local != null) {
@@ -269,7 +300,7 @@ class ExtInstallCoordinator(
             }
             if (ext != null) return ext
         }
-        val pkg = downloadPackage(source.candidateUrls)
+        val pkg = downloadPackage(source, cb)
             ?: throw IllegalStateException("官方直链与自建下载均不可用")
         try {
             return installFromFile(pkg, controller)

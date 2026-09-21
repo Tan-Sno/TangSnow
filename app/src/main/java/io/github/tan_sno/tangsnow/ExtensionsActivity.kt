@@ -42,8 +42,10 @@ import java.io.File
  *  - 「自定义安装」：粘贴任意官方 .xpi 直链安装；
  *  - 已实现 WebExtensionController.PromptDelegate：从官方网页发起的安装/权限请求
  *    会弹出确认框，不会被静默拒绝；
- *  - 下载阶段：使用 OkHttp 流式读取，UI 实时显示「下载 %d%%」；3 分钟总时长兜底；
- *    失败/超时 100% 通过看门狗反馈，绝不卡在「安装中」。
+ *  - 下载阶段：首选把官方直链交给内核；内核这一步没出结果才回退「应用自建 OkHttp 流式
+ *    下载」，回退期间 UI 实时显示「下载中 n%」；全链路 150s 总时长兜底
+ *    （ExtInstallCoordinator 的 TOTAL_TIMEOUT_MS），失败/超时 100% 通过看门狗反馈，
+ *    绝不卡在「安装中」。
  */
 class ExtensionsActivity : AppCompatActivity() {
 
@@ -116,11 +118,13 @@ class ExtensionsActivity : AppCompatActivity() {
                 // 上次安装仍“进行中”却被中断（作业已随旧实例销毁）
                 ExtensionCatalog.installing.remove(slug)
                 ExtensionCatalog.installStartedAt.remove(slug)
+                ExtensionCatalog.installProgress.remove(slug)
                 notifyCatalogItemChanged(slug)
                 if (notifyInterrupted) toast(R.string.extension_install_interrupted)
             } else if (!resultPending && tooOld) {
                 ExtensionCatalog.installing.remove(slug)
                 ExtensionCatalog.installStartedAt.remove(slug)
+                ExtensionCatalog.installProgress.remove(slug)
                 notifyCatalogItemChanged(slug)
             }
         }
@@ -247,8 +251,9 @@ class ExtensionsActivity : AppCompatActivity() {
 
     /**
      * 目录「获取」：统一交给 [ExtInstallCoordinator]。
-     * 链路 = 官方直链 → OkHttp 流式下载到缓存（界面实时显示「下载 n%」）→ 内核校验 Mozilla
-     * 签名并安装；自建下载不可用时由协调器自动回退内核内置下载通道。
+     * 链路 = 首选把官方直链交给内核 `install(url, MANAGER)`（下载、Mozilla 签名校验、安装
+     * 都在内核里完成）；内核这一步没出结果，才回退「应用自建 OkHttp 流式下载 → 交内核校验
+     * 签名并安装」，回退下载期间界面实时显示「下载中 n%」。
      *
      * 注意：**每个分支都必须给出可见反馈**。旧实现在「该 slug 已在安装中」时直接 return，
      * 一旦界面态未及时刷新，用户看到的就是「点了「获取」毫无反应」。
@@ -331,6 +336,14 @@ class ExtensionsActivity : AppCompatActivity() {
                     notifyCatalogItemChanged(entry.slug)
                     showInstallFailure(entry, err)
                 }
+
+                override fun onProgress(source: ExtInstallCoordinator.Source, percent: Int) {
+                    // 只有「内核直链安装」没走通、改用应用自建下载时才会上报（内核无进度）。
+                    // 先核对仍在安装中再落值：否则一个迟到的进度会把已经收尾的行重新刷成「下载中」。
+                    if (entry.slug !in ExtensionCatalog.installing) return
+                    ExtensionCatalog.installProgress[entry.slug] = percent
+                    notifyCatalogItemChanged(entry.slug)
+                }
             }
         )
         if (!accepted) {
@@ -344,6 +357,8 @@ class ExtensionsActivity : AppCompatActivity() {
     private fun finishInstall(entry: ExtensionCatalog.Entry) {
         ExtensionCatalog.installing.remove(entry.slug)
         ExtensionCatalog.installStartedAt.remove(entry.slug)
+        // 进度必须一并清掉：留着会让下一次安装直接从上次的百分比起跳
+        ExtensionCatalog.installProgress.remove(entry.slug)
         releasePromptDelegateIfIdle()
     }
 
@@ -364,8 +379,13 @@ class ExtensionsActivity : AppCompatActivity() {
     }
 
     private fun describeInstallError(err: Throwable?): String {
-        // 一律先落日志：界面给中文可行动提示，排障靠日志拿到原始异常
-        android.util.Log.w(TAG, "extension install failed: ${err?.javaClass?.name}: ${err?.message}", err)
+        // 一律先落日志：界面给中文可行动提示，排障靠日志拿到原始异常。
+        // 但**只在 debug 构建落**：网络类异常的 message 常带完整下载 URL，而 Logcat 在设备上
+        // 是任何能读日志的工具都能看到的（与「不把您访问的网址发送给第三方」的承诺同源）。
+        // proguard-rules.pro 只兜底剥离 Log.v/d/i，Log.w 属刻意保留的一级，故此处必须自己拦。
+        if (BuildConfig.DEBUG) {
+            android.util.Log.w(TAG, "extension install failed: ${err?.javaClass?.name}: ${err?.message}", err)
+        }
         if (err == null) {
             return getString(R.string.extension_error_download)
         }
@@ -408,7 +428,9 @@ class ExtensionsActivity : AppCompatActivity() {
         binding.customHeader.setOnClickListener {
             val open = !binding.customMethods.isVisible
             binding.customMethods.isVisible = open
-            binding.arrowCustom.text = if (open) "▾" else "▸"
+            // 复用 strings.xml 里已有的箭头字符，不硬编码：否则同一个符号会散在布局与代码两处
+            val arrowRes = if (open) R.string.arrow_open else R.string.arrow_closed
+            binding.arrowCustom.text = getString(arrowRes)
         }
         // 前往官方扩展商店：独立可点，不触发上面那一行的展开/收起（子 View 可点会拦下事件）
         binding.linkOfficialStore.setOnClickListener {
@@ -416,7 +438,8 @@ class ExtensionsActivity : AppCompatActivity() {
         }
         fun setPanel(panel: View?, arrow: TextView, open: Boolean) {
             panel?.isVisible = open
-            arrow.text = if (open) "▾" else "▸"
+            val arrowRes = if (open) R.string.arrow_open else R.string.arrow_closed
+            arrow.text = getString(arrowRes)
         }
         binding.rowXpiImport.setOnClickListener {
             val open = !binding.xpiPanel.isVisible
@@ -438,7 +461,7 @@ class ExtensionsActivity : AppCompatActivity() {
         val url = binding.urlInput.text.toString().trim()
         // 与产品口径一致：扩展只走 Mozilla 官方源（AMO），不接受任意第三方地址
         val host = android.net.Uri.parse(url).host.orEmpty()
-        if (!url.startsWith("https://") || !host.equals("addons.mozilla.org", ignoreCase = true)) {
+        if (!url.startsWith("https://") || !host.equals(ExtensionCatalog.AMO_HOST, ignoreCase = true)) {
             toast(R.string.extension_url_invalid)
             return
         }
@@ -992,9 +1015,17 @@ class ExtensionsActivity : AppCompatActivity() {
                         btnAction.setTextColor(ContextCompat.getColor(root.context, R.color.accent_muted))
                     }
                     installing -> {
-                        // 内核原生安装：无百分比，仅显示进行中（无本地下载阶段）
+                        // 内核直链通道不暴露进度，只能显示「安装中…」；只有内核那一步没走通、
+                        // 改用应用自建下载兜底时才拿得到百分比（见 ExtensionCatalog.installProgress）。
+                        // 百分比文案复用下载列表那条 `download_state_running`（同为「下载中 n%」）：
+                        // 同一个意思不要在两处各存一份字面量，免得改一处忘一处。
+                        val percent = ExtensionCatalog.installProgress[entry.slug]
                         btnAction.isEnabled = false
-                        btnAction.text = getString(R.string.extension_installing)
+                        btnAction.text = if (percent != null) {
+                            getString(R.string.download_state_running, percent)
+                        } else {
+                            getString(R.string.extension_installing)
+                        }
                         btnAction.setBackgroundResource(R.drawable.bg_btn_pill_disabled)
                         btnAction.setTextColor(ContextCompat.getColor(root.context, R.color.accent_muted))
                     }
