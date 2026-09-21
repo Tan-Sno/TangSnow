@@ -3,6 +3,7 @@ package io.github.tan_sno.tangsnow.browser
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import io.github.tan_sno.tangsnow.BuildConfig
 import io.github.tan_sno.tangsnow.GeckoHolder
 import io.github.tan_sno.tangsnow.data.PreferenceStore
 import io.github.tan_sno.tangsnow.data.SessionStore
@@ -627,19 +628,29 @@ class BrowserSessionManager private constructor(
             // 白名单：内核自身能处理的**网页导航**一律放行（返回 null 让内核继续），不拦截。
             val webScheme = scheme == "http" || scheme == "https" || scheme == "about" ||
                 scheme == "data" || scheme == "blob"
-            // 特权 scheme：仅当本次导航**不是网页内容发起**时才放行。
+            // 特权 scheme：只放行**应用自己发起**的导航。
             //
-            // 为什么按发起方区分而不是一刀切：`triggerUri` 是本导航的触发者，
-            // 由网页内容触发时非空（例如页面里的 <a href="file:///…">），
-            // 由应用/用户直接发起（loadUri、地址栏、扩展内部跳转）时为空。
-            //  - `moz-extension:` 必须保留：应用自己的扩展选项页/管理页就是通过
-            //    BrowserOpener → loadUri 打开的，这是直接导航，triggerUri 为空；
-            //    若一律禁止会重现「装完扩展打不开自己的设置页」的回归事故。
-            //  - `file:` 网页内容永远没有正当理由触发它（本地文件预览也不靠它，
-            //    地址栏输入 file:// 会被 UrlUtils 当作搜索词），故对网页内容一律拒绝。
+            // 判据用内核**文档化**的 `LoadRequest.isDirectNavigation`（javap 实测
+            // geckoview 155 已具备该 public final 字段），其官方语义为
+            //   "This load request was initiated by a direct navigation from the
+            //    application. E.g. when calling GeckoSession.load(...)"
+            // —— 正是本处要表达的意思。
+            //
+            // 为什么不再用 `triggerUri` 反推（旧写法）：官方 javadoc 明确写着
+            //   "The URI of the origin page that triggered the load request.
+            //    null for initial loads and loads originating from data: URIs."
+            // 即「初始加载」与「源自 data: URI 的加载」两种情况它都是 null，而 `data:`
+            // 正在上面的白名单里 —— 于是「data: 文档里放一个指向 file:// 的链接」会被
+            // 判成「非网页内容发起」而放行 file:。安全闸门不该架在一个会漏判的字段上。
+            //
+            //  - `moz-extension:` 必须保留：扩展选项页/管理页经 BrowserOpener 的**进程内
+            //    通道**送到 MainActivity，再由 `session.loadUri()` 加载 —— 属直接导航
+            //    （isDirectNavigation = true）；若一律禁止会重现「装完扩展打不开自己的
+            //    设置页」的回归事故。
+            //  - `file:` 网页内容永远没有正当理由触发它（地址栏输入 file:// 会被
+            //    UrlUtils 当作搜索词），故对网页内容一律拒绝。
             val privilegedScheme = scheme == "moz-extension" || scheme == "file"
-            val fromWebContent = !request.triggerUri.isNullOrBlank()
-            val internal = webScheme || (privilegedScheme && !fromWebContent)
+            val internal = webScheme || (privilegedScheme && request.isDirectNavigation)
             if (internal) return null
             // 外部协议（intent://、market://、mailto:、tel:、geo: 等）：先让界面层用系统
             // Intent 尝试打开，再拒绝内核本次跳转（否则内核会尝试自行处理、带走当前页）。
@@ -1142,20 +1153,25 @@ class BrowserSessionManager private constructor(
                     }
                     // ③ 明确拒绝，并记录原因（便于排障；不写日志会变成"静默失效"）
                     else -> {
-                        // 只记**主机名**，不记完整 URL。
+                        // 只记**主机名**，不记完整 URL；且**只在 debug 构建里记**。
                         // 本应用对外的隐私承诺包含「不把您访问的网址发送给第三方」，而日志会留在
-                        // 设备 Logcat（release 未剥离 Log）。主机名已足够定位「哪个站点触发了预期
-                        // 外的权限类型」，路径与查询串对排障没有增量价值、却会完整落进日志。
+                        // 设备 Logcat。release 由 BuildConfig.DEBUG 拦在这里（另有
+                        // proguard-rules.pro 的 `-assumenosideeffects` 兜底剥离 Log.v/d/i），
+                        // 所以正式版既不会把站点域名写进 Logcat，排障能力在 debug 构建里也不打折。
+                        // 主机名已足够定位「哪个站点触发了预期外的权限类型」，路径与查询串对排障
+                        // 没有增量价值、却会完整落进日志。
                         // 注：perm.uri 是 Java 侧字段（javap: `public final String uri`），
                         // Kotlin 视为平台类型、此处推为非空，故不加 `?.`（加了会触发
                         // Unnecessary safe call 警告）。若 Java 侧真传 null，Uri.parse 抛的 NPE
                         // 会被外层 runCatching 捕获 → host 为 null → 记 "(unknown)"，同样安全。
                         val host = runCatching { android.net.Uri.parse(perm.uri).host }.getOrNull()
-                        android.util.Log.i(
-                            TAG,
-                            "content permission denied by policy: " +
-                                "type=${perm.permission} host=${host ?: "(unknown)"}",
-                        )
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.i(
+                                TAG,
+                                "content permission denied by policy: " +
+                                    "type=${perm.permission} host=${host ?: "(unknown)"}",
+                            )
+                        }
                         result.complete(deny)
                         return result
                     }
@@ -1419,7 +1435,17 @@ class BrowserSessionManager private constructor(
                         ?: throw IllegalArgumentException("empty session state")
                     tab.session.restoreState(state)
                 }.isSuccess
-                if (!ok) snap.url?.let { tab.session.loadUri(it) }
+                if (ok) {
+                    // 回填本次恢复所用的会话状态。saveState 读的就是 stateCache，而
+                    // onHistoryStateChange 是**异步**才来的 —— 若不回填，「刚恢复就切后台/
+                    // 被杀」会写出 sessionState = null 的快照，下次冷启动只能退回 loadUri，
+                    // **前进/后退整个历史栈丢失**（表现为「恢复后回不到上一页」）。
+                    // 这里写入的正是发起 restoreState 的那份 JSON，随后即便被
+                    // onHistoryStateChange 覆盖，也只是覆盖成同一状态的更新版本。
+                    stateCache[tab.id] = stateJson
+                } else {
+                    snap.url?.let { tab.session.loadUri(it) }
+                }
             } else {
                 snap.url?.let { tab.session.loadUri(it) }
             }
