@@ -17,3 +17,22 @@
 -dontwarn org.openjsse.**
 
 # kotlinx-coroutines / AndroidX：跟随 AGP 默认规则即可，无需额外 keep
+
+# 调试级日志（v/d/i）在 release 一律剥离。
+#
+# 为什么必须显式写：AGP 9 的默认规则**并不**剥离 Log —— 本仓库的 release APK 用
+# `dexdump -d` 反汇编后仍能读到 `invoke-static …, Landroid/util/Log;.i:` 真的在执行
+# （实测于 v2.1.1 的 classes.dex）。也就是说，像「哪个站点触发了预期外的权限类型」
+# 这类信息会真的落进设备 Logcat。本应用对外的隐私承诺是「不把您访问的网址发送给
+# 第三方」，日志同理，故在 release 里彻底去掉。
+#
+# 作用范围与代价：
+#  · 本文件只挂在 release 构建类型上，**debug 构建日志照常**，排障能力不受影响；
+#  · 保留 w/e 两级：它们在 release 里只承载真实失败，且调用点自身已做内容收敛；
+#  · `-keep class org.mozilla.geckoview.**` 会连带关闭这些类的优化，故内核自身的
+#    日志不受本规则影响 —— 刻意为之，不去改动第三方行为。
+-assumenosideeffects class android.util.Log {
+    public static *** v(...);
+    public static *** d(...);
+    public static *** i(...);
+}
