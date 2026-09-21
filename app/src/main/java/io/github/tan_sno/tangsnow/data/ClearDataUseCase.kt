@@ -38,12 +38,18 @@ object ClearDataUseCase {
         val runtime = GeckoHolder.runtime
         val flags = mutableListOf<Long>()
         if (options.cookiesAndSiteData) {
-            // 已核对内核常量位值（javap -v 看 ConstantValue）：
-            //   COOKIES=1、DOM_STORAGES=16、AUTH_SESSIONS=32、PERMISSIONS=64、
-            //   SITE_DATA=471（= 1|2|4|16|64|128|256，**已含 PERMISSIONS 与 DOM 存储**）。
-            // 因此 SITE_DATA 覆盖了站点权限；**唯 AUTH_SESSIONS(32) 不在任何已选项内**
-            // —— 即 HTTP Basic/Digest 认证的登录态会在「清除浏览数据」后残留。
-            // 用户勾选「Cookie 与站点数据」时的预期是「登出这些站点」，故一并清除。
+            // 位值已核对（`javap -p -constants` 读 geckoview 制品的 ClearFlags，不是推算）：
+            //   COOKIES=1、NETWORK_CACHE=2、IMAGE_CACHE=4、DOM_STORAGES=16、
+            //   AUTH_SESSIONS=32、PERMISSIONS=64、ALL_CACHES=6、SITE_SETTINGS=192、
+            //   SITE_DATA=471（= 1|2|4|16|64|128|256）、ALL=512
+            // 由此得出两条结论：
+            //  ① SITE_DATA **已含 PERMISSIONS 与 DOM 存储** ⇒ 站点权限不必再单独列举；
+            //     唯 AUTH_SESSIONS(32) 不在其中 —— HTTP Basic/Digest 登录态会残留，而用户勾
+            //     「Cookie 与站点数据」时的预期就是「登出这些站点」，故显式补上它。
+            //  ② SITE_DATA 同时含两个缓存位（2|4）⇒ 勾了它必然**连带清缓存**：在当前的位
+            //     定义下「只清 Cookie 不起缓存」做不到。界面上取消勾选「缓存」只能保证
+            //     「没勾 Cookie 时不动缓存」，拦不住这条连带。
+            // 这两条事实由 `ClearFlagsGuardTest` 兜着：内核一改位值，单测立刻变红。
             flags += StorageController.ClearFlags.COOKIES
             flags += StorageController.ClearFlags.SITE_DATA
             flags += StorageController.ClearFlags.AUTH_SESSIONS

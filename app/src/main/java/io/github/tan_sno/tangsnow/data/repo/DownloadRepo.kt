@@ -153,9 +153,15 @@ object DownloadRepo {
      * 为什么单独判定：这类文件运行后会**改变设备状态**（安装应用、执行脚本），
      * 属「不该被一句『不再询问』永久跳过确认」的类别 —— 用户对普通文档的免打扰偏好，
      * 不应顺带把安装包的确认也免掉。故对它们单独强警示。
+     *
+     * 边界（是取舍过的结论，别照抄别处的清单）：
+     *  · `aab` 与 `apk` 同属 Android 应用包，必须在内；
+     *  · `xpi` / `crx` **刻意不收**：它们是浏览器扩展包，自身不可执行、下载后不会自动安装；
+     *    而本应用安装 .xpi 走的是内核 **Mozilla 签名校验**（未签名一律拒绝）。多套一道
+     *    「安装包」警示只会吓到正常下载扩展的用户，并不增加安全性。
      */
     private val EXECUTABLE_EXTENSIONS = setOf(
-        "apk", "apks", "xapk", "apkm", "dex", "ipa",
+        "apk", "aab", "apks", "xapk", "apkm", "dex", "ipa",
         "exe", "msi", "msp", "bat", "cmd", "com", "scr",
         "jar", "vbs", "vbe", "ps1", "sh", "deb", "rpm", "dmg", "pkg", "appimage",
     )
