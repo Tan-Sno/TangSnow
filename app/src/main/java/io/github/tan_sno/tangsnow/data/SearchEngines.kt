@@ -54,6 +54,13 @@ object SearchEngines {
 
     const val DEFAULT_ID = "bing_cn"
 
+    /**
+     * 自定义引擎 id 前缀：id 形如 `custom_<在自定义列表中的下标>`（见 [all]）。
+     * 收在这里是因为「生成 id」与「按 id 回推下标」分处两个文件（另一处在
+     * [PreferenceStore.removeCustomEngine]），字面量各写一份必然漂移。
+     */
+    const val CUSTOM_ID_PREFIX = "custom_"
+
     val builtins: List<SearchEngine> = listOf(
         // 国内版：默认入口；cn.bing.com 在国内可直接访问
         SearchEngine(
@@ -98,7 +105,7 @@ object SearchEngines {
         val customs = prefs.customEngines
             .mapIndexed { i, ce ->
                 SearchEngine(
-                    id = "custom_$i",
+                    id = "$CUSTOM_ID_PREFIX$i",
                     template = ce.template,
                     label = ce.name,
                     isCustom = true,

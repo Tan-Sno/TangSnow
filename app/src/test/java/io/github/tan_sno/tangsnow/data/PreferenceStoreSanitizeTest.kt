@@ -81,4 +81,42 @@ class PreferenceStoreSanitizeTest {
             PreferenceStore.TRACKING_MODES,
         )
     }
+
+    // ------------------------------------------------------------- removeCustomEngine 的下标重映射
+
+    @Test
+    fun `非自定义引擎的选中项不受删除影响`() {
+        assertEquals("bing_cn", PreferenceStore.remapSelectedEngine("bing_cn", 0))
+        assertEquals(
+            SearchEngines.DEFAULT_ID,
+            PreferenceStore.remapSelectedEngine(SearchEngines.DEFAULT_ID, 3),
+        )
+    }
+
+    @Test
+    fun `删掉被选中的那个自定义引擎时回退默认`() {
+        assertEquals(SearchEngines.DEFAULT_ID, PreferenceStore.remapSelectedEngine("custom_2", 2))
+        assertEquals(SearchEngines.DEFAULT_ID, PreferenceStore.remapSelectedEngine("custom_0", 0))
+    }
+
+    @Test
+    fun `删掉选中项之前的引擎时下标前移一位`() {
+        // 自定义 id 是 `custom_<下标>`：删掉前面的条目后，同一个引擎的下标会前移
+        assertEquals("custom_1", PreferenceStore.remapSelectedEngine("custom_2", 1))
+        assertEquals("custom_0", PreferenceStore.remapSelectedEngine("custom_1", 0))
+        // 删的是 index 1，原来在下标 3 的引擎落到下标 2（不是回退默认）
+        assertEquals("custom_2", PreferenceStore.remapSelectedEngine("custom_3", 1))
+    }
+
+    @Test
+    fun `删掉选中项之后的引擎时选中项原样不变`() {
+        assertEquals("custom_1", PreferenceStore.remapSelectedEngine("custom_1", 2))
+        assertEquals("custom_0", PreferenceStore.remapSelectedEngine("custom_0", 5))
+    }
+
+    @Test
+    fun `自定义 id 后缀不可解析时回退默认`() {
+        assertEquals(SearchEngines.DEFAULT_ID, PreferenceStore.remapSelectedEngine("custom_", 0))
+        assertEquals(SearchEngines.DEFAULT_ID, PreferenceStore.remapSelectedEngine("custom_x", 0))
+    }
 }
