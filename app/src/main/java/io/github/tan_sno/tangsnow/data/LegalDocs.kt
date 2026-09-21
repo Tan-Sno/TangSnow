@@ -14,6 +14,18 @@ object LegalDocs {
 
     /**
      * 当前协议版本：文案有实质变化时必须 +1。
+     * v19：隐私政策 §7 与同意页摘要补一处**「文本承诺了实现做不到的事」**的修正 ——
+     *   v16 核实了 `SITE_DATA` 已含站点权限，但漏了同一组位值的另一半：`SITE_DATA`(=471)
+     *   同时含 `NETWORK_CACHE`(2) 与 `IMAGE_CACHE`(4)，因此勾选「Cookie 与站点数据」**必然
+     *   连带清缓存**，而原文「按您的勾选分别清除 / clears exactly what you select」等于
+     *   承诺了一个不存在的独立性。现按事实写明该连带，并在清除数据对话框上加一行前置提示
+     *   （用户勾选前即可见）。该事实由新增的 `ClearFlagsGuardTest` 反射读内核常量断言，
+     *   上游改位值即变红。
+     *   另：政策正文的「更新日期」同步为 **2026-09-21**（v18 于 09-20 改文案时漏改日期，
+     *   属既有疏漏，本次一并补正）。
+     *   另：展示层修复 —— 政策正文里的 `**…**` 此前会被**原样显示成星号**（TextView 与
+     *   AlertDialog 都不做 Markdown），现统一转成加粗（`util/LegalText`，含解析单测）。
+     *   它只改渲染、不改文本事实，故不单独占一次版本。
      * v18：**新增对外端点，必须披露** ——「检查更新」改为读取 GitHub Releases 的公开版本信息。
      *   §4 增列 `api.github.com`，并写明三项限定：仅由用户点击触发、不在后台自检、
      *   只读公开数据且不携带任何设备标识或浏览记录；结尾「除 Mozilla 官方服务外不发请求」
@@ -48,7 +60,7 @@ object LegalDocs {
      *  另：扩展目录移除 Ghostery（其定位含广告拦截），政策与用户协议同步声明精选目录
      *  只收录隐私保护与工具类扩展。
      */
-    const val POLICY_VERSION = 18
+    const val POLICY_VERSION = 19
 
     // 注意：以下资源引用保持「非 const」，避免 Kotlin IR 在编译期常量折叠时
     // 因 R 常量跨模块求值触发 InterpreterMethodNotFoundError 内部错误。

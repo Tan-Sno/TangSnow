@@ -4,8 +4,8 @@
 
 # 隐私政策 / Privacy Policy
 
-> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 18`。
-> 最后更新：2026年09月16日
+> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 19`。
+> 最后更新：2026年09月21日
 > **请勿直接编辑**；请修改 `strings.xml` 后运行 `python tools/export_legal_docs.py` 重新导出。
 
 **目录 / Contents**　[中文](#隐私政策) · [English](#english)
@@ -14,7 +14,7 @@
 
 ## 隐私政策
 
-更新日期：2026年09月16日
+更新日期：2026年09月21日
 
 1. 我们处理哪些信息、为了什么
 
@@ -64,7 +64,7 @@
 
 7. 数据保留与删除
 
-书签、历史、标签页会话快照等本地数据在您删除、执行「清除浏览数据」或卸载应用后被移除（无痕标签从不保存任何会话快照，也既不写入、也不读取本机历史 —— 因此在无痕标签中，页面链接不会依据您以往的访问记录着色）。「清除浏览数据」按您的勾选分别清除：Cookie 与站点数据（含站点权限与 HTTP 认证会话 —— 您此前允许的地理定位/通知等授权、以及 HTTP 登录状态会一并清除）、缓存、本机历史记录、标签页会话快照、下载记录——书签不在其中，须在「资料库」单独管理；「资料库」支持一键清空历史、书签或下载记录（清空下载记录仅删除记录，不删除已下载的文件）。浏览历史仅保留最近 200 条，更早的条目会被自动移除。下载的文件保存在系统下载目录或应用专属目录，通过系统内容授权（FileProvider）打开或分享，绝不上传。程序异常时，若应用进程发生可被捕获的错误，会留存在设备本地的崩溃日志：仅含应用名称与版本、崩溃时间、设备型号与系统版本、进程与线程标识及错误堆栈，并可能记录最近访问站点的域名（仅域名、不含完整网址）；不含页面内容、搜索词、账号或其它可识别您个人的浏览信息。日志自动保留最近 10 条，可在「设置 → 关于棠雪 → 崩溃报告」逐条查看、分享或删除，应用不会自动上传。「禁止截屏」是可选的本机设置（默认关闭）：开启后仅对应用窗口加系统安全标志，阻止系统截图与「最近任务」预览显示内容；它不读取、不收集任何信息。本应用无云端账户，卸载即完成数据的完全删除。
+书签、历史、标签页会话快照等本地数据在您删除、执行「清除浏览数据」或卸载应用后被移除（无痕标签从不保存任何会话快照，也既不写入、也不读取本机历史 —— 因此在无痕标签中，页面链接不会依据您以往的访问记录着色）。「清除浏览数据」按您的勾选分别清除：Cookie 与站点数据（含站点权限与 HTTP 认证会话 —— 您此前允许的地理定位/通知等授权、以及 HTTP 登录状态会一并清除；又因内核把网页与图片缓存归入该项的清除范围，勾选它会**连带清除缓存** —— 无法做到「只清 Cookie 而不动缓存」）、缓存、本机历史记录、标签页会话快照、下载记录——书签不在其中，须在「资料库」单独管理；「资料库」支持一键清空历史、书签或下载记录（清空下载记录仅删除记录，不删除已下载的文件）。浏览历史仅保留最近 200 条，更早的条目会被自动移除。下载的文件保存在系统下载目录或应用专属目录，通过系统内容授权（FileProvider）打开或分享，绝不上传。程序异常时，若应用进程发生可被捕获的错误，会留存在设备本地的崩溃日志：仅含应用名称与版本、崩溃时间、设备型号与系统版本、进程与线程标识及错误堆栈，并可能记录最近访问站点的域名（仅域名、不含完整网址）；不含页面内容、搜索词、账号或其它可识别您个人的浏览信息。日志自动保留最近 10 条，可在「设置 → 关于棠雪 → 崩溃报告」逐条查看、分享或删除，应用不会自动上传。「禁止截屏」是可选的本机设置（默认关闭）：开启后仅对应用窗口加系统安全标志，阻止系统截图与「最近任务」预览显示内容；它不读取、不收集任何信息。本应用无云端账户，卸载即完成数据的完全删除。
 
 8. 您的权利
 
@@ -86,7 +86,7 @@
 
 ## English
 
-Last updated: 2026-09-16
+Last updated: 2026-09-21
 
 1. What we process and why
 
@@ -136,7 +136,7 @@ Pages are provided by their own sites and extensions by their developers; the ap
 
 7. Data retention and deletion
 
-Bookmarks, history, tab session snapshots and other local data are removed when you delete them, run “Clear browsing data”, or uninstall the app (private tabs never save any session snapshot, and neither write to nor read from on-device history — so in a private tab, page links are never highlighted based on sites you visited before). “Clear browsing data” clears exactly what you select: cookies & site data (including site permissions and HTTP auth sessions — permissions you previously granted, such as location or notifications, and HTTP login state are cleared as well), cache, local history, tab session snapshots and download records — bookmarks are not included and are managed separately in the Library, which also supports clearing history, bookmarks or download records in one tap (clearing download records only removes the records, never the downloaded files). Browsing history keeps only the most recent 200 entries; older entries are removed automatically. Downloaded files are stored in the system download directory or the app-private directory and are opened or shared through system content authorization (FileProvider), never uploaded. In case of a catchable unexpected error in the app process, a crash log is saved on this device only: it contains only the app name and version, crash time, device model and OS version, process and thread identifiers and the error stack, and may record the domain of the site you most recently visited (domain only, never the full URL). It never includes page content, search terms, account details or other browsing information that identifies you. Logs are capped at the 10 most recent and can be viewed, shared or deleted one by one via Settings → About TangSnow → Crash reports; they are never uploaded. “Block screenshots” is an optional on-device setting (off by default): when on, it only adds a system security flag to the app window so that system screenshots and the Recents preview show no content; it reads and collects nothing. TangSnow has no cloud account — uninstalling fully deletes your data.
+Bookmarks, history, tab session snapshots and other local data are removed when you delete them, run “Clear browsing data”, or uninstall the app (private tabs never save any session snapshot, and neither write to nor read from on-device history — so in a private tab, page links are never highlighted based on sites you visited before). “Clear browsing data” clears exactly what you select: cookies & site data (including site permissions and HTTP auth sessions — permissions you previously granted, such as location or notifications, and HTTP login state are cleared as well; and because the engine groups the page and image caches into this option, selecting it **also clears the cache** — clearing cookies while leaving the cache untouched is not possible), cache, local history, tab session snapshots and download records — bookmarks are not included and are managed separately in the Library, which also supports clearing history, bookmarks or download records in one tap (clearing download records only removes the records, never the downloaded files). Browsing history keeps only the most recent 200 entries; older entries are removed automatically. Downloaded files are stored in the system download directory or the app-private directory and are opened or shared through system content authorization (FileProvider), never uploaded. In case of a catchable unexpected error in the app process, a crash log is saved on this device only: it contains only the app name and version, crash time, device model and OS version, process and thread identifiers and the error stack, and may record the domain of the site you most recently visited (domain only, never the full URL). It never includes page content, search terms, account details or other browsing information that identifies you. Logs are capped at the 10 most recent and can be viewed, shared or deleted one by one via Settings → About TangSnow → Crash reports; they are never uploaded. “Block screenshots” is an optional on-device setting (off by default): when on, it only adds a system security flag to the app window so that system screenshots and the Recents preview show no content; it reads and collects nothing. TangSnow has no cloud account — uninstalling fully deletes your data.
 
 8. Your rights
 

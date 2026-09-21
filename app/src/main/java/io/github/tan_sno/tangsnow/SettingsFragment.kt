@@ -378,6 +378,10 @@ class SettingsFragment : PreferenceFragmentCompat() {
         val checked = booleanArrayOf(true, true, false, false, false)
         val dialog = AlertDialog.Builder(requireContext())
             .setTitle(R.string.dlg_clear_data_title)
+            // 如实提示内核位掩码造成的连带（勾选「Cookie 与站点数据」必然连带清缓存）。
+            // 放在用户勾选**之前**可见，而不是只藏在法律文本里；
+            // 位值证据见 ClearDataUseCase 的注释，并由 ClearFlagsGuardTest 断言守着。
+            .setMessage(R.string.clear_data_coupling_hint)
             .setMultiChoiceItems(items, checked) { _, which, isChecked -> checked[which] = isChecked }
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.dlg_ok, null)
