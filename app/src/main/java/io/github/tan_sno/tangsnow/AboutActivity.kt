@@ -6,6 +6,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import io.github.tan_sno.tangsnow.databinding.ActivityAboutBinding
 import io.github.tan_sno.tangsnow.update.UpdateChecker
+import io.github.tan_sno.tangsnow.util.LegalText
 import io.github.tan_sno.tangsnow.util.dp
 
 /**
@@ -163,14 +164,17 @@ class AboutActivity : AppCompatActivity() {
             val (titleRes, bodyRes) = LegalActivity.docResources(doc)
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle(titleRes)
-                .setMessage(bodyRes)
+                // 与阅读页同一处理：`**…**` 转加粗，别让用户看到星号（见 util/LegalText）
+                .setMessage(LegalText.emphasize(this, bodyRes))
                 .setPositiveButton(R.string.dlg_ok, null)
                 .show()
         }
     }
 
     private fun previewOf(@androidx.annotation.StringRes res: Int): String {
-        val flat = getString(res).replace('\n', ' ').trim()
+        // 先去掉 `**…**` 标记再截断：预览是纯文本行（带不了 Span），若正好截在标记中间就会
+        // 露出半个星号。复用 LegalText 的解析，保证与阅读页对同一份文本的理解一致。
+        val flat = LegalText.parse(getString(res)).plain.replace('\n', ' ').trim()
         return if (flat.length <= 46) flat else flat.take(46) + "…"
     }
 }

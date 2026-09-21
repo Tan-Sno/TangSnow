@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import io.github.tan_sno.tangsnow.data.LegalDocs
 import io.github.tan_sno.tangsnow.databinding.ActivityLegalBinding
+import io.github.tan_sno.tangsnow.util.LegalText
 
 /**
  * 法律文档阅读页：展示「隐私政策摘要 / 完整隐私政策 / 用户协议 / 开源协议」任一篇。
@@ -28,7 +29,9 @@ class LegalActivity : AppCompatActivity() {
             val (titleRes, textRes) = resolve(doc)
             binding.btnBack.setOnClickListener { finish() }
             binding.txtTitle.setText(titleRes)
-            binding.txtBody.text = getString(textRes)
+            // 正文里的 `**…**` 是给导出的 docs/*.md 用的 Markdown 加粗；TextView 不认，
+            // 直接 setText 会让用户看到裸露星号，故统一在这里转成加粗 Span（见 LegalText）。
+            binding.txtBody.text = LegalText.emphasize(this, textRes)
         } catch (t: Throwable) {
             Log.e(TAG, "onCreate failed", t)
             finish()
