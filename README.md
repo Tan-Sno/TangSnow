@@ -20,21 +20,17 @@
 
 <table>
   <tr>
-    <td align="center" width="25%">
+    <td align="center" width="33%">
       <img src="docs/screenshots/home.jpg" width="180" alt="主页：地址栏与搜索入口，底部为浏览工具栏，右侧为无痕模式开关"><br>
       <sub>主页</sub>
     </td>
-    <td align="center" width="25%">
+    <td align="center" width="33%">
       <img src="docs/screenshots/extensions.jpg" width="180" alt="扩展目录：列出可安装的 Mozilla 官方扩展及其隐私说明"><br>
       <sub>扩展目录（Mozilla 官方源）</sub>
     </td>
-    <td align="center" width="25%">
+    <td align="center" width="33%">
       <img src="docs/screenshots/settings-tracking-protection.jpg" width="180" alt="设置：跟踪保护自定义，可逐项开关跟踪内容、指纹、挖矿脚本等"><br>
       <sub>跟踪保护</sub>
-    </td>
-    <td align="center" width="25%">
-      <img src="docs/screenshots/about.jpg" width="180" alt="关于页：版本号、隐私政策与用户协议入口、本机崩溃报告"><br>
-      <sub>关于与隐私政策</sub>
     </td>
   </tr>
 </table>
