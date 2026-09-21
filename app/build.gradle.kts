@@ -109,8 +109,17 @@ android {
         // 2.1.1：「检查更新」改为向 GitHub Releases 读取并自动比对版本、按设备架构
         // 给出对应下载；由此新增对外端点 api.github.com（隐私政策 §4 与同意页摘要
         // 已同步披露，POLICY_VERSION 升至 18）。另含若干死代码与不合约定写法的清理。
-        versionCode = 34
-        versionName = "2.1.1"
+        // 2.1.2：隐私与合规修正（均未改变对外端点，故政策版本只因文本修正而从 18 升至 19）——
+        //  ① 特权 scheme（file: / moz-extension:）的放行判据改用内核文档化的
+        //     `isDirectNavigation`，堵掉「data: 文档里跳 file:」被判成非网页发起而放行的漏判；
+        //  ② release 不再把站点域名写进 Logcat：隐私相关日志门控在 BuildConfig.DEBUG，
+        //     并在 proguard-rules.pro 剥离 Log.v/d/i（AGP 默认规则并不剥离）；
+        //  ③ 清除浏览数据如实披露「勾选 Cookie 与站点数据会连带清缓存」（内核位掩码使然，
+        //     由 ClearFlagsGuardTest 断言守着）；
+        //  ④ 扩展安装补回「下载中 n%」进度（此前类注释承诺了、实现没跟上）；
+        //  ⑤ 政策正文的加粗标记不再被原样显示成星号，政策「更新日期」同步。
+        versionCode = 35
+        versionName = "2.1.2"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
         // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
         // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。
