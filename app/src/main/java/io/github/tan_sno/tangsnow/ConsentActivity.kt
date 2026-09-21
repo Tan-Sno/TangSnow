@@ -10,6 +10,7 @@ import io.github.tan_sno.tangsnow.data.PreferenceStore
 import io.github.tan_sno.tangsnow.data.SessionStore
 import io.github.tan_sno.tangsnow.data.ThemeController
 import io.github.tan_sno.tangsnow.databinding.ActivityConsentBinding
+import io.github.tan_sno.tangsnow.util.LegalText
 
 /**
  * 首次冷启动 / 政策版本更新时的同意页。
@@ -61,7 +62,8 @@ class ConsentActivity : AppCompatActivity() {
             val (titleRes, bodyRes) = LegalActivity.docResources(doc)
             AlertDialog.Builder(this)
                 .setTitle(titleRes)
-                .setMessage(bodyRes)
+                // 与阅读页同一处理：`**…**` 转加粗，别让用户看到星号（见 util/LegalText）
+                .setMessage(LegalText.emphasize(this, bodyRes))
                 .setPositiveButton(R.string.dlg_ok, null)
                 .show()
         }

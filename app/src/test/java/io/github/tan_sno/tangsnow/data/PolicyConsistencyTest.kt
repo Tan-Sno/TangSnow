@@ -2,6 +2,7 @@ package io.github.tan_sno.tangsnow.data
 
 import io.github.tan_sno.tangsnow.update.UpdateChecker
 import io.github.tan_sno.tangsnow.util.CrashLogger
+import io.github.tan_sno.tangsnow.util.LegalText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -243,6 +244,33 @@ class PolicyConsistencyTest {
         // 英文对应项抽查两个最关键的
         assertTrue("英文政策未披露崩溃时间", en.contains("crash time"))
         assertTrue("英文政策未披露域名记录", en.contains("domain"))
+    }
+
+    // ------------------------------------------------------------------ ④ 展示层标记
+
+    /**
+     * 政策正文里的 `**…**` 必须成对。
+     *
+     * 为什么值得一条断言：这些标记在应用内由 `util/LegalText` 转成加粗，而**落单**的标记会被
+     * 刻意原样保留（免得吞掉正文里真正的星号）—— 于是「用户在政策里看到裸露星号」这件事
+     * 既不报错也不崩溃，只能靠测试发现。它同时守住导出到 docs 目录的 Markdown：
+     * 那边的加粗同样依赖成对标记。
+     */
+    @Test
+    fun `政策正文的加粗标记成对且解析后无残留`() {
+        for (dir in listOf("values", "values-en")) {
+            val text = policyText(dir)
+            val stars = text.count { it == '*' }
+            assertEquals(
+                "$dir 的隐私政策里 `**` 落单（应用内会原样显示成星号）：共 $stars 个星号",
+                0,
+                stars % 2,
+            )
+            assertTrue(
+                "$dir 的隐私政策解析后仍残留 `**` 标记",
+                !LegalText.parse(text).plain.contains("**"),
+            )
+        }
     }
 
     private companion object {
