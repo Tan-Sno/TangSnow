@@ -12,7 +12,6 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.LinearLayout
-import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -390,19 +389,26 @@ class WebPrompts(
         val dialog = AlertDialog.Builder(activity)
             .setTitle(R.string.prompt_color_title)
             .setView(box)
-            .setPositiveButton(R.string.dlg_ok) { _, _ ->
-                val text = custom.text.toString().trim()
-                if (COLOR_RE.matches(text)) {
-                    once(text.uppercase())
-                } else {
-                    // 自定义输入不合法：提示并视作取消，避免把脏字符串回交内核
-                    Toast.makeText(activity, R.string.prompt_color_invalid, Toast.LENGTH_SHORT).show()
-                    once(null)
-                }
-            }
+            // 正按钮传 null：Builder 自带的监听器会**无条件**关闭对话框，于是「输入不合法」
+            // 就等价于「点确定 = 取消」。真正的校验在下面的 OnShowListener 里接管正按钮，
+            // 非法时只就地报错、窗口留着让用户改完再提交。
+            .setPositiveButton(R.string.dlg_ok, null)
             .setNegativeButton(R.string.dlg_cancel) { _, _ -> once(null) }
             .setOnCancelListener { once(null) }
             .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val text = custom.text.toString().trim()
+                if (COLOR_RE.matches(text)) {
+                    once(text.uppercase())
+                    dialog.dismiss()
+                } else {
+                    // 就地报错并**保持窗口打开**。这里绝不能应答 —— 应答即代表已裁决，
+                    // 页面侧的 GeckoResult 会就此完成，用户再改也没人接。
+                    custom.error = activity.getString(R.string.prompt_color_invalid)
+                }
+            }
+        }
         // 色块点击直接确认并关闭：dialog.dismiss() 触发 tracked 的 OnDismissListener 摘除，
         // 不会触发 OnCancelListener，once(hex) 已先完成，故安全
         for (i in 0 until grid.childCount) {
