@@ -322,14 +322,10 @@ class PreferenceStore(context: Context) {
         // 修正被删引擎之后自定义 id 的引用错位：
         //  - 选中的正是被删项 → 回退默认
         //  - 选中的在被删项之后 → 下标减 1 保持指向同一引擎
-        if (searchEngineId.startsWith("custom_")) {
-            val selected = searchEngineId.substringAfter("custom_").toIntOrNull()
-            when {
-                selected == null -> searchEngineId = SearchEngines.DEFAULT_ID
-                selected == index -> searchEngineId = SearchEngines.DEFAULT_ID
-                selected > index -> searchEngineId = "custom_${selected - 1}"
-            }
-        }
+        // 判定本身抽到 companion 的 remapSelectedEngine，那样才能被单测覆盖。
+        // 只在真的变了才写回：setter 会落盘，值没变就不该产生一次多余的写入。
+        val fixedId = Companion.remapSelectedEngine(searchEngineId, index)
+        if (fixedId != searchEngineId) searchEngineId = fixedId
         return true
     }
 
@@ -349,6 +345,27 @@ class PreferenceStore(context: Context) {
         fun isHttpTemplate(template: String): Boolean {
             val t = template.trim().lowercase()
             return t.startsWith("https://") || t.startsWith("http://")
+        }
+
+        /**
+         * 删除第 [removedIndex] 个自定义引擎后，把「当前选中的引擎 id」修正到仍指向同一个引擎。
+         *
+         * 为什么单独抽成纯函数：自定义引擎的 id 是 `custom_<下标>`，删掉一个会让其后所有下标
+         * 前移，这段算术一旦出错，表现是「删掉 A，选中的却变成了 B」—— 靠读代码看不出来，
+         * 只能靠断言兜住（见 `PreferenceStoreSanitizeTest`）。
+         *
+         * 规则：非自定义 id 原样返回；选中的正是被删项、或 id 已不可解析 → 回退默认引擎；
+         * 选中的在被删项之后 → 下标减 1（仍指向同一个引擎）；在被删项之前 → 原样不变。
+         */
+        internal fun remapSelectedEngine(selectedId: String, removedIndex: Int): String {
+            if (!selectedId.startsWith(SearchEngines.CUSTOM_ID_PREFIX)) return selectedId
+            val selected = selectedId.removePrefix(SearchEngines.CUSTOM_ID_PREFIX).toIntOrNull()
+                ?: return SearchEngines.DEFAULT_ID
+            return when {
+                selected == removedIndex -> SearchEngines.DEFAULT_ID
+                selected > removedIndex -> "${SearchEngines.CUSTOM_ID_PREFIX}${selected - 1}"
+                else -> selectedId
+            }
         }
 
         /** 补全协议；非法输入返回 null。
