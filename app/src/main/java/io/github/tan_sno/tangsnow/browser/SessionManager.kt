@@ -780,7 +780,18 @@ class BrowserSessionManager private constructor(
             // 这里刻意传**空标题**：`HistoryRepo.add` 会把空白标题归一成 `null` 再交给
             // `BrowserDb.touchHistory`，其语义是「本次没有可用标题 → 只刷新 visited_at、
             // 不碰 title 列」，因此绝不会用空值覆盖界面层（`onLocationChanged`）已写入的真实标题。
-            ioScope.launch { runCatching { HistoryRepo.add(url, "") } }
+            //
+            // 用 try/catch 而不是 runCatching：**runCatching 会一并吞掉 CancellationException**，
+            // 破坏协作式取消语义（本仓库坑清单里写明的规则）—— 域被取消后不该再继续跑收尾语句。
+            ioScope.launch {
+                try {
+                    HistoryRepo.add(url, "")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    // 历史写入失败只影响「已访问」着色，绝不能影响本次导航的内核应答
+                }
+            }
             return GeckoResult.fromValue(true)
         }
 
@@ -802,8 +813,17 @@ class BrowserSessionManager private constructor(
             // 改为：先返回一个未完成的 GeckoResult，查询在 IO 线程跑完后再 complete。
             val result = GeckoResult<BooleanArray>()
             ioScope.launch {
-                val visited = runCatching { HistoryRepo.areVisited(urls) }
-                    .getOrDefault(BooleanArray(urls.size))
+                // 同样用 try/catch 而非 runCatching：取消必须原样传播（见 onVisited）。
+                // 这里被取消只可能是 `shutdown()` 取消了整个 ioScope —— 内核随即一并关闭，
+                // 不再需要这次应答，故中止查询即可。
+                val visited = try {
+                    HistoryRepo.areVisited(urls)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    // 查询失败按「全部未访问」应答：绝不能让 GeckoResult 悬空（页面会一直等这批结果）
+                    BooleanArray(urls.size)
+                }
                 result.complete(visited)
             }
             return result
