@@ -57,10 +57,10 @@ class AboutActivity : AppCompatActivity() {
         }
     }
 
-    /** 崩溃日志选择（无日志时仅提示） */
     /** 崩溃日志文件名 `crash-yyyyMMdd-HHmmss.txt` 的展示格式化；预编译，避免每次都编译正则 */
     private val crashNamePattern = Regex("""^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$""")
 
+    /** 崩溃日志选择（无日志时仅提示） */
     private fun showCrashReports() {
         val files = io.github.tan_sno.tangsnow.util.CrashLogger.list(this)
         if (files.isEmpty()) {

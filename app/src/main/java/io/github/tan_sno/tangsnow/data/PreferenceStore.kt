@@ -205,9 +205,8 @@ class PreferenceStore(context: Context) {
             prefs.edit().putString(KEY_HOME_STYLE, value).apply()
         }
 
-    /** 首页快捷方式（最多 [Companion.MAX_HOME_SHORTCUTS] 个） */
     /**
-     * 首页快捷方式。
+     * 首页快捷方式（最多 [Companion.MAX_HOME_SHORTCUTS] 个）。
      *
      * 带 JSON 解析缓存：`MainActivity.refreshHome()` 在**每次 onResume** 都会取一次，
      * 而每次访问都重解析 JSON 是纯浪费。缓存以「原始 JSON 字符串是否变化」为准，
