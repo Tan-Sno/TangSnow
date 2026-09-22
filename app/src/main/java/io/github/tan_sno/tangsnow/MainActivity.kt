@@ -710,7 +710,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         }
     }
 
-    /** 用户自定义图片背景：把持久化的 content URI 异步解码并缓存为首页底色；失败则落回默认。 */
+    /**
+     * 用户自定义图片背景：把持久化的 content URI 异步解码并缓存为首页底色。
+     * 读不到图时区分「永久失效」与「瞬时错误」——前者清配置、回退极简并告知用户，
+     * 后者保留用户配置（判据见函数内注释）。
+     */
     private fun applyHomeImageBackground() {
         val uriString = prefs.homeImageUri
         val container = binding.home.root
@@ -731,9 +735,16 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             return
         }
         lifecycleScope.launch {
-            // 失败必须分两类处理：否则一次瞬时错误就会悄悄清掉用户刻意设置的主页风格。
-            //  - 解码返回 null → URI 真的失效（文件被删 / 非图片）→ 才清配置并回退极简；
-            //  - 抛异常（瞬时 I/O、OOM、provider 异常）→ **保留用户配置**，仅本次不换背景。
+            // 读不到图必须分三类处理，否则要么一次瞬时错误就悄悄清掉用户刻意设置的主页风格，
+            // 要么把一个**永久失效**的图片配置一直留着：
+            //  - URI 已不可读（权限被收回 / 文件被删 / 不是图片）→ **永久失效**，再等等也不会好
+            //    → 清配置 + 回退极简 + 告知用户；
+            //  - 其它异常（瞬时 I/O、OOM、provider 抖动）→ **保留用户配置**，仅本次不换背景；
+            // 早期版本只区分「抛异常」与「返回 null」，于是「权限被收回」这一永久失效被归进
+            // 「瞬时错误」并静默保留：主页会长期停在「品牌区被隐藏、背景却不是用户那张图」的
+            // 破相状态，且用户无从知道原因、也不会自愈（HomeCustomizeActivity 里那句
+            // 「下次启动若失败会落到 PLAIN 风格（MainActivity 已处理）」正是这个意思，
+            // 但原实现并没有处理，本次补齐）。
             val outcome = withContext(Dispatchers.IO) {
                 runCatching {
                     val uri = android.net.Uri.parse(uriString)
@@ -752,19 +763,31 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             if (isDestroyed) return@launch
             val cover = outcome.getOrNull()
             if (cover == null) {
-                if (outcome.isFailure) {
+                val cause = outcome.exceptionOrNull()
+                val unreachable = cause is SecurityException ||
+                    cause is java.io.FileNotFoundException
+                if (cause != null && !unreachable) {
                     android.util.Log.w(
                         "MainActivity",
                         "home image decode threw; keeping user's setting",
-                        outcome.exceptionOrNull(),
+                        cause,
                     )
                     return@launch
                 }
-                // 解码过程无异常但拿不到位图 → URI 确认失效 → 清配置并回退极简
+                if (unreachable) {
+                    android.util.Log.w(
+                        "MainActivity",
+                        "home image uri is no longer readable; falling back to plain",
+                        cause,
+                    )
+                }
+                // 失效（含「无异常但拿不到位图」= 该 URI 不是图片）：清配置并回退极简。
+                // 直接重跑 applyHomeStyle()，让品牌区显隐与瓦片标签底色一并回到极简的一致状态
+                // （此前只改背景色，品牌区仍按 onImage 隐藏着，属另一处不一致）。
                 prefs.homeImageUri = null
                 prefs.homeStyle = PreferenceStore.STYLE_PLAIN
-                container.setBackgroundColor(getColor(R.color.page_bg))
-                motif.isVisible = false
+                applyHomeStyle()
+                toast(R.string.home_image_unavailable)
                 return@launch
             }
             homeImageCache = cover

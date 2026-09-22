@@ -247,6 +247,7 @@
     <string name="style_image_clear">Clear custom image</string>
     <string name="style_image_preview_desc">Custom background preview</string>
     <string name="style_image_hint">Pick an image from your gallery as the home background. Stored locally only.</string>
+    <string name="home_image_unavailable">Your custom home image can no longer be read (deleted, or access was revoked). Switched back to Plain.</string>
     <string name="shortcuts_label">Shortcuts</string>
     <string name="shortcuts_empty">No shortcuts yet, tap the button below to add</string>
     <string name="shortcut_add">Add shortcut</string>

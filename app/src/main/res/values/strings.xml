@@ -250,6 +250,7 @@
     <string name="style_image_clear">清除自定义图片</string>
     <string name="style_image_preview_desc">当前自定义背景预览</string>
     <string name="style_image_hint">支持从相册选择一张图片作为主页背景（仅保存在设备本地）。</string>
+    <string name="home_image_unavailable">自定义主页图片已无法读取（可能已被删除或授权已失效），已切回极简背景</string>
     <string name="shortcuts_label">快捷方式</string>
     <string name="shortcuts_empty">还没有快捷方式，点下方按钮添加</string>
     <string name="shortcut_add">添加快捷方式</string>
