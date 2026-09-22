@@ -39,7 +39,9 @@
 ./gradlew :app:testDebugUnitTest  # 单元测试
 ```
 
-提交前请确保上述三条命令均通过，且 lint 无新增问题。
+提交前请确保上述三条命令均通过，且 lint 保持**零问题**。
+注意本项目已开启 `checkAllWarnings`（`app/build.gradle.kts`），**warning 级问题同样会被报出** ——
+请勿为了消掉一条警告而关掉整类检查，有必要的话按现成写法逐条写明豁免理由。
 
 ## 代码约定
 
