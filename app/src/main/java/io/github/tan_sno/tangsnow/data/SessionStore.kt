@@ -26,12 +26,25 @@ object SessionStore {
     private const val FILE_NAME = "session_store.json"
     private const val TMP_SUFFIX = ".tmp"
 
+    /**
+     * [consume] 等待「预读完成」的上限。
+     *
+     * 取 200ms：快照解析是毫秒级（几十个标签的 JSON），正常路径远快于此；
+     * 它只是「慢盘 / 串行队列被在途写任务占住」时的止损 —— 超时即退回同步 [read]
+     * 的既有行为，绝不把冷启动无限拖住。
+     */
+    private const val CONSUME_WAIT_MS = 200L
+
     /** [preload] 的预读结果与就绪标记（仅主线程读、io 线程写，故用 @Volatile） */
     @Volatile
     private var cached: Snapshot? = null
 
     @Volatile
     private var cachedReady = false
+
+    /** [preload] 提交到串行队列的句柄：让 [consume] 在「预读未就绪」时有界等待，见该函数注释 */
+    @Volatile
+    private var preloadTask: java.util.concurrent.Future<*>? = null
 
     /**
      * 清空会话快照后的"暂停落盘"标志（供清除浏览数据用例设置，见
@@ -132,14 +145,16 @@ object SessionStore {
      */
     fun preload(context: Context) {
         val dir = context.applicationContext.filesDir
-        io.execute {
+        // 用 submit 而非 execute：拿到句柄后，consume 才能在「预读未完成」时有界等待它，
+        // 而不是在主线程重做一次「读盘 + JSON 解析」（见 consume 的注释）。
+        preloadTask = io.submit(java.util.concurrent.Callable {
             // 与 write/clear 共用同一条串行队列：不会读到写了一半的文件
             cached = runCatching {
                 val f = File(dir, FILE_NAME)
                 if (f.exists()) parse(f.readText()) else null
             }.getOrNull()
             cachedReady = true
-        }
+        })
     }
 
     /**
@@ -148,9 +163,21 @@ object SessionStore {
      * 「取用即失效」是刻意的：若长期留存在内存里，用户在设置里执行
      * 「清除浏览数据 → 标签页会话快照」之后，一旦 Activity 重建就可能把
      * **已清除的标签**又恢复出来 —— 那与隐私承诺直接冲突。
-     * 预读尚未完成时退回同步 [read]（与改造前行为一致，不会更差）。
+     *
+     * 预读尚未完成时**有界等待**它，而不是在主线程重做一次「读盘 + JSON 解析」——
+     * 本函数的唯一调用方是 `MainActivity.onCreate`（主线程），而 [preload] 早在
+     * `TangSnowApplication` / `ConsentActivity` 就已发起，正常情况下到这一刻早已完成，
+     * 等待通常只有零点几毫秒。真正会撞上「未就绪」的是**进程冷启动后由外部 intent
+     * 直接调起主界面**（本应用是默认浏览器，点链接即是此路径）—— 那时等这几十毫秒
+     * 仍远快于主线程自己读盘解析。等到超时（极慢盘 / 串行队列被在途写任务占住）就放弃
+     * 本次恢复、退回同步 [read]，与改造前行为一致，不会更差，也绝不无限等待。
      */
     fun consume(context: Context): Snapshot? {
+        if (!cachedReady) {
+            runCatching {
+                preloadTask?.get(CONSUME_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            }
+        }
         if (cachedReady) {
             val snapshot = cached
             cached = null
