@@ -296,8 +296,26 @@ object ExtensionPrompts {
     @Volatile
     var popupHost: ExtensionUi? = null
 
-    /** 扩展 Tab 委托里创建标签走 IO 线程（需要等会话管理器与数据库），结果经 GeckoResult 回交 */
-    private val extScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /**
+     * 扩展 Tab 委托里创建标签所用的协程域。**必须落在主线程**，见下方证据与后果说明。
+     *
+     * ⚠️ 为什么不能用 IO：`BrowserSessionManager.newTab()` 最终会走到
+     * `GeckoSession.open(runtime)`，而 javap 实测 geckoview 155 的制品，
+     * `GeckoSession.open(GeckoRuntime, String)` 的**第一条指令**就是
+     * `invokestatic org/mozilla/gecko/util/ThreadUtils.assertOnUiThread:()V`；
+     * 该方法的实现是 `assertOnThread(getUiThread(), AssertBehavior.THROW)`
+     * （`sUiThread = Looper.getMainLooper().getThread()`），而
+     * `assertOnThreadComparison` 在 THROW 行为下直接 `athrow IllegalThreadStateException`。
+     * 同理 `GeckoRuntime.create(Context, Settings)` 也是首条指令 `assertOnUiThread()`。
+     *
+     * 于是「在 IO 线程建标签」必然抛异常：本函数的 `runCatching` 会吞下它并
+     * `result.completeExceptionally(...)` —— 外部表现是**扩展调用 `tabs.create()`
+     * 永远打不开新标签**（扩展侧只看到一个失败的 GeckoResult），而应用内其它入口
+     * （地址栏 / 标签面板 / 会话恢复）都在主线程建会话，所以一直没暴露。
+     * 原注释称此处走 IO 是「需要等会话管理器与数据库」，但这条链上并没有数据库访问，
+     * 该理由不成立（见 `SessionManager.newTab` 的实现）。
+     */
+    private val extScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /**
      * 共享的扩展 Action 委托工厂。
@@ -423,10 +441,22 @@ object ExtensionPrompts {
         )
     }
 
-    fun unmountExtensionDelegates(controller: WebExtensionController, owner: Any) {
+    /**
+     * 解绑本持有方挂载的 Action/Tab 委托（与 [mountExtensionDelegates] 配对）。
+     *
+     * [controller] 允许为 null，且**摘除持有方这一步不受它影响**：调用方在 onDestroy 里
+     * 取 controller 的唯一途径是 `GeckoHolder.runtime?.webExtensionController`，而 runtime
+     * 在 `BrowserSessionManager.shutdown()` 之后就是 null。若此时直接跳过整个解绑，
+     * 这个**进程级**集合会一直强引用已销毁的 Activity（泄漏），并且再也回不到空集 ——
+     * 于是「最后一个持有方退出才真正解绑」的语义失效，后续任何一方退出都不会解绑委托。
+     * controller 为 null 时也确实没有可解绑的对象（内核已随 runtime 一并消失），
+     * 因此只做摘除即可。
+     */
+    fun unmountExtensionDelegates(controller: WebExtensionController?, owner: Any) {
         // remove 自带「是否原本就存在」的原子判断：非持有方或已解绑过都会被忽略，不会误减
         if (!delegateOwners.remove(owner)) return
         if (delegateOwners.isNotEmpty()) return
+        controller ?: return
         controller.list().accept(
             { exts ->
                 // 解绑期间若又有前台 Activity 重新挂载，则不清除，避免误摘新挂载方委托

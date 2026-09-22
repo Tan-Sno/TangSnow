@@ -148,8 +148,10 @@ class ExtensionsActivity : AppCompatActivity() {
         // PromptDelegate 属于本 Activity：无论是否有进行中任务都必须解绑，
         // 否则 controller（进程级）将永久持有已销毁的 Activity
         forceReleasePromptDelegate()
-        // 解绑本页挂载的扩展 Action/Tab 委托（与 mount 配对；持有方集合清空才真正清）
-        controller()?.let { ExtensionPrompts.unmountExtensionDelegates(it, this) }
+        // 解绑本页挂载的扩展 Action/Tab 委托（与 mount 配对；持有方集合清空才真正清）。
+        // 传入可空的 controller：runtime 已 shutdown 时拿不到 controller，但**仍必须**把本页
+        // 从持有方集合里摘掉，否则集合会强引用已销毁的 Activity（见 unmountExtensionDelegates）。
+        ExtensionPrompts.unmountExtensionDelegates(controller(), this)
         super.onDestroy()
     }
 
