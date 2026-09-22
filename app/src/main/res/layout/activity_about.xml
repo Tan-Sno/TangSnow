@@ -67,7 +67,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:textSize="13sp"
-            android:textColor="?attr/colorOnSurfaceVariant" />
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textIsSelectable="true" />
     </LinearLayout>
 
     <!-- 文档项（从上到下：隐私政策摘要 → 完整隐私政策 → 用户协议）；副标题即时预览正文 -->

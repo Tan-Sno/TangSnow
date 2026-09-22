@@ -18,4 +18,16 @@
     <issue id="ObsoleteSdkInt">
         <ignore path="src/main/res/mipmap-anydpi-v26" />
     </issue>
+
+    <!--
+        位置级豁免：首页右下角的海棠纹样是**纯装饰**，刻意让 230dp 的图形出血到屏幕
+        边缘之外（`layout_marginEnd="-26dp"` / `layout_marginBottom="-18dp"`），
+        以形成「纹样从角落漫出」的构图。这是设计意图而非误写 —— 换成正值会让纹样
+        整块收进屏内，失去这个效果。
+
+        只豁免这一个布局；其余位置的负 margin 仍会被报出。
+    -->
+    <issue id="NegativeMargin">
+        <ignore path="src/main/res/layout/view_home.xml" />
+    </issue>
 </lint>

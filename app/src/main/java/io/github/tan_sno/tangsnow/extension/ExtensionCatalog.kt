@@ -82,7 +82,7 @@ object ExtensionCatalog {
     val installedIdsBySlug = ConcurrentHashMap<String, String>()
 
     /** 正在安装的扩展（slug）；用于界面按钮态与孤儿状态自愈 */
-    val installing = ConcurrentHashMap.newKeySet<String>()
+    val installing: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     /** 安装启动时间戳（slug → SystemClock.elapsedRealtime），用于超时自愈 */
     val installStartedAt = ConcurrentHashMap<String, Long>()
@@ -97,7 +97,7 @@ object ExtensionCatalog {
     val installProgress = ConcurrentHashMap<String, Int>()
 
     /** 官方确认的地区受限扩展（AMO 返回 451） */
-    val regionBlocked = ConcurrentHashMap.newKeySet<String>()
+    val regionBlocked: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     // --------------------------------------------------------- 实时官方元数据
 
