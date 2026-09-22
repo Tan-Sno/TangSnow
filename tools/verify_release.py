@@ -84,29 +84,68 @@ def run(cmd, **kw):
                           encoding="utf-8", errors="replace", **kw)
 
 
-def find_java():
-    """找 java。优先 JAVA_HOME；否则回退到 Android Studio 自带的 jbr。
+def _java_exe(java_home):
+    return os.path.join(java_home, "bin", "java.exe" if os.name == "nt" else "java")
+
+
+def _is_jdk(path):
+    """该目录看起来是不是一个 JDK / JRE（`bin/java[.exe]` 在位）。"""
+    return bool(path) and os.path.isfile(_java_exe(path))
+
+
+def _studio_jbr_candidates():
+    """Android Studio 自带运行时（JBR）的**约定位置**（各平台通用，不含任何本机绝对路径）。"""
+    if os.name == "nt":
+        yield os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
+                           "Android", "Android Studio", "jbr")
+        yield os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                           "Programs", "Android Studio", "jbr")
+    elif sys.platform == "darwin":
+        yield "/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+    else:
+        yield "/opt/android-studio/jbr"
+        yield "/usr/lib/android-studio/jbr"
+        yield os.path.expanduser("~/android-studio/jbr")
+
+
+def find_java(sdk=None):
+    """找 java。优先 `JAVA_HOME`；其次 Android Studio 自带的 JBR；最后由 PATH 兜底。
 
     单独抽出来是因为 apksigner 缺 java 时**退出码仍为 0**，必须提前拦住。
+
+    ⚠️ 这里**不写死任何本机绝对路径**：此前候选列表里留着开发机的 Android Studio JBR
+    路径（报错示例也沿用了它），那属于「构建环境绝对路径」，不该出现在对外仓库里。
+    该路径自 v2.1.1 起已进入公开历史（只改 tip 清不掉），故此前一直留着待随版本处理；
+    现已改为推导式。**不要再把具体机器的路径加回候选列表或错误提示里。**
+    开发机那种「Android Studio 与 SDK 解包在同一个根目录下」的布局由 [sdk] 推出来：
+    取出 SDK 目录的**兄弟目录**中带 `jbr/bin/java` 的那些 —— 推导过程与盘符、
+    目录名都无关，因此对任何同布局的机器都成立。
     """
     jh = os.environ.get("JAVA_HOME")
-    if jh and os.path.isfile(os.path.join(jh, "bin", "java.exe") if os.name == "nt"
-                             else os.path.join(jh, "bin", "java")):
+    if _is_jdk(jh):
         return jh
     if jh and os.path.isdir(jh):
         return jh
-    for cand in (
-        r"D:\Android\androidKF\jbr",
-        r"C:\Program Files\Android\Android Studio\jbr",
-        os.path.expanduser("~/AppData/Local/Programs/Android Studio/jbr"),
-    ):
-        if os.path.isdir(cand):
+
+    candidates = list(_studio_jbr_candidates())
+    if sdk:
+        parent = os.path.dirname(os.path.abspath(sdk.rstrip("/\\")))
+        try:
+            for name in sorted(os.listdir(parent)):
+                candidates.append(os.path.join(parent, name, "jbr"))
+        except OSError:
+            pass
+    for cand in candidates:
+        if _is_jdk(cand):
             return cand
+
     if shutil.which("java"):
         return None  # 直接可用，无需设置
     raise Fail(
         "找不到 Java。apksigner 需要它，且**缺 Java 时它会报错却返回退出码 0**。\n"
-        "      请设置 JAVA_HOME（如 export JAVA_HOME=\"D:\\Android\\androidKF\\jbr\"）后重试。"
+        "      请设置 JAVA_HOME 指向一个 JDK（或 Android Studio 安装目录下自带的 jbr）后重试：\n"
+        "        Windows:     set JAVA_HOME=<JDK 目录>\n"
+        "        macOS/Linux: export JAVA_HOME=<JDK 目录>"
     )
 
 
@@ -119,7 +158,7 @@ def find_sdk(root):
         for line in fh:
             line = line.strip()
             if line.startswith("sdk.dir="):
-                # 值形如 D\:\\Android\\androidRJ，需反转义
+                # 值形如 D\:\\some\\sdk（Windows 上盘符冒号与反斜杠都会被转义），需反转义
                 return line.split("=", 1)[1].replace("\\\\", "\\").replace("\\:", ":")
     raise Fail("local.properties 中没有 sdk.dir。")
 
@@ -294,8 +333,9 @@ def main():
         if missing:
             raise Fail("缺少 APK：\n      " + "\n      ".join(os.path.basename(p) for p in missing))
 
-        java_home = find_java()
+        # SDK 先解析：它既用于定位构建工具，也是 find_java 推导「兄弟目录里的 Android Studio JBR」的依据
         sdk = find_sdk(root)
+        java_home = find_java(sdk)
         env = tool_env(java_home)
         apksigner = find_build_tool(sdk, "apksigner")
         aapt2 = find_build_tool(sdk, "aapt2")
