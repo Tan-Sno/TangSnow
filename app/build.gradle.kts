@@ -81,9 +81,52 @@ if (!keystorePropsFile.exists()) {
 android {
     namespace = "io.github.tan_sno.tangsnow"
     lint {
-        // 仅关闭三类“风格/建议级”检查并写明理由（正确性类保留）：
-        // UseKtx/Overdraw 为编码风格建议；NotifyDataSetChanged 对几十项小列表属可接受用法
-        disable += setOf("UseKtx", "Overdraw", "NotifyDataSetChanged")
+        // 打开全部警告级检查。
+        //
+        // 为什么必须显式写：AGP 默认只报 error/fatal 与**部分** warning，于是
+        // `lintDebug` 输出 "No issues found" 只意味着「默认口径下没问题」，
+        // 很容易被读成「零问题」—— 那正是「一个被关掉的检查比没有检查更危险」的变体：
+        // 它制造「已经检查过了」的错觉。开启后所有 warning 级检查都会进报告。
+        // （实测效应：开启后一次就多出 225 条 warning —— 此前它们全是不可见的。）
+        checkAllWarnings = true
+
+        // 关闭的检查**逐条写明理由**；正确性类检查一律保留。
+        //
+        // 分两组：① 对本项目「整类不适用」的；② 「适用条件在本项目不成立」的。
+        // 每组都写清「为什么关掉它不会漏掉真问题」——否则下一个人只能选择盲信或重查。
+        disable += setOf(
+            // —— ① 整类不适用 ——
+            // 面向 Java：Java 内部类访问外部类私有成员会生成一个合成访问器方法（多一次调用）。
+            // Kotlin **不生成**这类访问器（编译期直接在字节码层处理），故本检查对纯 Kotlin 工程无对象。
+            "SyntheticAccessor",
+            // 建议把直引号换成弯引号（英文排版习惯）。本项目界面为中文，中文引号是「」；
+            // 直引号只出现在英文文案与技术标识里，换成弯引号反而错。
+            "TypographyQuotes",
+            // 编码风格建议：用 KTX 扩展替代等价调用。
+            "UseKtx",
+            // 过度绘制提示：布局层级已按需优化，此项对成品无可执行动作。
+            "Overdraw",
+            // 对几十项的小列表属可接受用法（全量重绑的开销远小于列表规模）。
+            "NotifyDataSetChanged",
+
+            // —— ② 适用条件在本项目不成立 ——
+            // 同名文案语义独立：app_name / home_wordmark / style_tangsnow 都是「棠雪」，
+            // 但三者会各自演进（改应用名不该顺带改风格名）。提取成一条会强行耦合；
+            // 且同名值不增加包体（资源表按 key 存，不按值去重）。
+            "DuplicateStrings",
+            // 包级 `Context.toast` 扩展与 Activity 成员 `toast` 同名（ExtensionsActivity / MainActivity）。
+            // 两套实现语义**完全相同**（都是 Toast.makeText + LENGTH_SHORT），
+            // 而 Kotlin「成员优先于扩展」是确定行为 —— 不存在因遮蔽而调错实现的风险。
+            // 保留成员版是有意的：Activity 内部调用少一个 receiver。
+            "MemberExtensionConflict",
+            // 列表项与可点击行内的文本若设 textIsSelectable，会**劫持父容器的点击手势**
+            // —— 点标签 / 点扩展 / 点文档行会变成「选中文本」，功能直接失效。
+            // 纯展示页里确有复制价值的只有「关于」页的版本号，已在 activity_about.xml 显式启用。
+            "SelectableText",
+            // 全项目仅 1 张 96×96、6.4KB 的图标（ic_ext_darkreader.png）。
+            // 转 WebP 的收益可忽略，却要为构建/维护引入一条图片处理链路；不划算。
+            "ConvertToWebp",
+        )
     }
     compileSdk {
         version = release(37) {
