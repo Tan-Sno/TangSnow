@@ -87,10 +87,10 @@ object UrlUtils {
         return ascii + port + rest
     }
 
-    /** 输入本身是否像一个网址（带协议，或裸域名形态，或本机/内网地址） */
     /** 任意空白字符（含全角空格？不 —— 与旧行为严格一致，仅 \s）。提到文件级避免每次调用重新编译。 */
     private val WHITESPACE = Regex("""\s""")
 
+    /** 输入本身是否像一个网址（带协议，或裸域名形态，或本机/内网地址） */
     fun looksLikeUri(input: String): Boolean {
         val trimmed = input.trim()
         if (trimmed.isEmpty() || trimmed.contains(WHITESPACE)) return false
