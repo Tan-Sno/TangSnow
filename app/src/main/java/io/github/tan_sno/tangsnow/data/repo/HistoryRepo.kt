@@ -41,8 +41,12 @@ object HistoryRepo {
      * 以便给网页内链接着色。一条 `WHERE url IN (...)` 一次查回命中集合，避免逐条查询；
      * 纯查询、不改写任何数据（不回灌内核数据）。返回与 [urls] 等长的布尔数组。
      *
-     * **必须调用在 IO 线程**：GeckoView 把 HistoryDelegate 的回调标注为 `@UiThread`，
-     * 而这里是磁盘 I/O；调用方（BrowserSessionManager.getVisited）已在 ioScope 上调用。
+     * **本函数是 `suspend` 且自带 `Dispatchers.IO`**：GeckoView 把 HistoryDelegate 的回调标注为
+     * `@UiThread`，而这里是磁盘 I/O。早先版本把「必须调用在 IO 线程」写进注释、靠约定维持 ——
+     * 一旦有人在新调用点漏了切线程，就变成主线程读 SQLite（页面每次加载都走一次，
+     * 库被占用时卡顿甚至 ANR）。改成 `suspend` 后由**类型系统**保证：只能在协程里调用，
+     * 且必然落到 IO 线程，不再依赖注释自律。调用方（HistoryDelegate.getVisited）以
+     * 「先返回未完成的 GeckoResult、查完再 complete」的方式对接，无需再套一层线程切换。
      *
      * **分批执行**：`IN (?,?,…)` 的绑定变量数受 SQLite 的 `SQLITE_MAX_VARIABLE_NUMBER`
      * 限制（旧版 Android 自带库默认 **999**）。链接密集的页面（新闻/导航站上千条链接）
@@ -50,8 +54,8 @@ object HistoryRepo {
      * 结果是**静默返回“全部未访问”**——整页链接都不着色，且没有任何日志。
      * 分批后每批都很小，并集语义与单条查询完全一致。
      */
-    fun areVisited(urls: Array<out String>): BooleanArray {
-        if (urls.isEmpty()) return BooleanArray(0)
+    suspend fun areVisited(urls: Array<out String>): BooleanArray = withContext(Dispatchers.IO) {
+        if (urls.isEmpty()) return@withContext BooleanArray(0)
         val db = BrowserDb.get(ApplicationScope.context)
         val hit = HashSet<String>(urls.size)
         for (range in urlBatches(urls.size)) {
@@ -65,7 +69,7 @@ object HistoryRepo {
                 while (c.moveToNext()) hit.add(c.getString(0))
             }
         }
-        return BooleanArray(urls.size) { i -> hit.contains(urls[i]) }
+        BooleanArray(urls.size) { i -> hit.contains(urls[i]) }
     }
 
     /**
