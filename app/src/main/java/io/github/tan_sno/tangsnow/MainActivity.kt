@@ -493,9 +493,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 传入 this 只关闭本 Activity 持有的提示，不会误取消扩展页正在展示的弹窗。
         io.github.tan_sno.tangsnow.extension.ExtensionPrompts.cancelAllPending(this)
         releaseExtensionPromptDelegate()
-        // 退出时清空扩展 UI 宿主并解绑 Action/Tab 委托；按引用比对只清本 Activity 设置的
+        // 退出时清空扩展 UI 宿主并解绑 Action/Tab 委托；按引用比对只清本 Activity 设置的。
+        // 这里**不**用 `runtime?.webExtensionController?.let { … }` 包住整个调用：runtime 已被
+        // shutdown 时那样会连「把本 Activity 从持有方集合里摘掉」一起跳过，导致进程级集合
+        // 强引用已销毁的 Activity、且集合再也回不到空集（见 unmountExtensionDelegates 的注释）。
         if (ExtensionPrompts.popupHost === this) ExtensionPrompts.popupHost = null
-        GeckoHolder.runtime?.webExtensionController?.let { ExtensionPrompts.unmountExtensionDelegates(it, this) }
+        ExtensionPrompts.unmountExtensionDelegates(
+            GeckoHolder.runtime?.webExtensionController, this
+        )
         dismissSelectionPopup()
         clipboardPermissionDialog?.dismiss()
         clipboardPermissionDialog = null
