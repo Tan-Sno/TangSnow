@@ -82,6 +82,7 @@
     <string name="more_copy_link">Copy link</string>
     <string name="more_desktop">Desktop site</string>
     <string name="more_save_pdf">Save PDF</string>
+    <string name="more_print">Print</string>
     <string name="more_need_page">No page to act on</string>
     <string name="more_nothing_to_copy">No link to copy</string>
     <string name="toast_copied">Link copied to clipboard</string>
@@ -91,6 +92,7 @@
     <string name="toast_desktop_off_blank">Mobile site enabled — applies to the next page</string>
     <string name="pdf_saved">PDF saved to Downloads</string>
     <string name="pdf_failed">PDF generation failed. Please try again later.</string>
+    <string name="print_failed">Could not prepare the page for printing. Please try again later.</string>
     <string name="dlg_exit_title">Exit TangSnow</string>
     <string name="dlg_exit_message">Are you sure to exit the browser?</string>
     <string name="toast_exit_again">Press back again to exit</string>

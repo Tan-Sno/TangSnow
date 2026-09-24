@@ -83,6 +83,7 @@
     <string name="more_copy_link">复制链接</string>
     <string name="more_desktop">桌面版</string>
     <string name="more_save_pdf">存 PDF</string>
+    <string name="more_print">打印</string>
     <string name="more_scan_image">相册扫码</string>
     <string name="more_need_page">当前没有可操作的页面</string>
     <string name="more_nothing_to_copy">当前没有可复制的链接</string>
@@ -93,6 +94,7 @@
     <string name="toast_desktop_off_blank">已关闭桌面版，下次打开网页生效</string>
     <string name="pdf_saved">PDF 已保存到系统「下载」</string>
     <string name="pdf_failed">生成 PDF 失败，请稍后重试</string>
+    <string name="print_failed">生成打印内容失败，请稍后重试</string>
     <string name="dlg_exit_title">退出棠雪</string>
     <string name="dlg_exit_message">确定要退出浏览器吗？</string>
     <string name="toast_exit_again">再按一次退出</string>

@@ -1607,6 +1607,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         panel.addView(
             makeSheetRow(this, ::hideMoreSheet, R.drawable.ic_magnifier, getString(R.string.more_find)) { findBarController.open() }
         )
+        // 打印网页：先生成 PDF 落到缓存，再交给系统打印服务（含「保存为 PDF」选项）
+        addSheetDivider(this, panel)
+        panel.addView(
+            makeSheetRow(this, ::hideMoreSheet, R.drawable.ic_print, getString(R.string.more_print)) { printCurrentPage() }
+        )
         addSheetDivider(this, panel)
         panel.addView(makeSheetLibraryRow(this, ::hideMoreSheet))
         // 定制主页：去掉左侧图标，仅保留居中文字（更简洁）
@@ -1905,6 +1910,70 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             },
             { _ -> runOnUiThread { toast(R.string.pdf_failed) } }
         )
+    }
+
+    /**
+     * 打印网页：先让内核把页面渲染成 PDF 落到缓存，再交给系统打印框架。
+     *
+     * 为什么不用 `printPageContent()` + `PrintDelegate`：那条路上的 PDF 是内核**异步回调**给的，
+     * 而打印框架在用户点「打印」之后要求 adapter **当即**交出数据 —— 时序对不上，得额外兜一层。
+     * `saveAsPdf()` 产出的同样是内核渲染的 PDF，且能在协程里直接取用，时序简单得多。
+     *
+     * 临时文件在 adapter 的 `onFinish()` 里删除（成功/失败/取消都会走到），不留缓存残留。
+     */
+    private fun printCurrentPage() {
+        val tab = sessionManager.activeTab ?: return
+        val url = tab.url ?: return
+        if (url.isBlank() || url.startsWith("about:")) {
+            toast(R.string.more_need_page)
+            return
+        }
+        tab.session.saveAsPdf().accept(
+            { input ->
+                if (input == null) {
+                    runOnUiThread { toast(R.string.print_failed) }
+                    return@accept
+                }
+                lifecycleScope.launch {
+                    val file = withContext(Dispatchers.IO) { cachePrintPdf(input) }
+                    if (file == null) {
+                        toast(R.string.print_failed)
+                        return@launch
+                    }
+                    startPrint(file)
+                }
+            },
+            { _ -> runOnUiThread { toast(R.string.print_failed) } }
+        )
+    }
+
+    /** 把内核产出的 PDF 流写进缓存目录；失败返回 null 并清掉半截文件 */
+    private fun cachePrintPdf(input: java.io.InputStream): java.io.File? {
+        val file = java.io.File(java.io.File(cacheDir, "print").apply { mkdirs() }, "TangSnow_print.pdf")
+        return try {
+            input.use { ins -> java.io.FileOutputStream(file).use { out -> ins.copyTo(out) } }
+            file
+        } catch (_: Throwable) {
+            runCatching { file.delete() }
+            null
+        }
+    }
+
+    /** 交给系统打印框架；调用时机必须在主线程 */
+    private fun startPrint(file: java.io.File) {
+        val manager = getSystemService(android.print.PrintManager::class.java)
+        if (manager == null) {
+            // 设备没有打印服务（极少数裁剪系统）：如实告知，并清掉刚生成的临时文件
+            runCatching { file.delete() }
+            toast(R.string.print_failed)
+            return
+        }
+        val adapter = io.github.tan_sno.tangsnow.ui.PrintPdfAdapter(file) {
+            runCatching { file.delete() }
+        }
+        val jobName = "TangSnow_" + java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+            .format(java.util.Date())
+        manager.print(jobName, adapter, android.print.PrintAttributes.Builder().build())
     }
 
     /** @return 是否写入成功（Android 10+ 写入公共下载，旧系统写入应用外部下载目录） */
