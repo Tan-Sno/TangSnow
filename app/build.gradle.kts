@@ -161,8 +161,23 @@ android {
         //     由 ClearFlagsGuardTest 断言守着）；
         //  ④ 扩展安装补回「下载中 n%」进度（此前类注释承诺了、实现没跟上）；
         //  ⑤ 政策正文的加粗标记不再被原样显示成星号，政策「更新日期」同步。
-        versionCode = 35
-        versionName = "2.1.2"
+        // 2.1.3：把 09-22 那批修复**正式收进一个递增的版本号**。
+        //   起因：2.1.2 曾以**同版本号重新打包**发布（说明见该版发布页），versionCode 未变 ⇒
+        //   已装 2.1.2 的用户点「检查更新」不会收到提示。本版把 versionCode 35 → 36，
+        //   让下面这些修复能正常触达已安装用户。无新增对外端点，POLICY_VERSION 不变（19）。
+        //  ① 扩展调用 `tabs.create()` 此前**必然失败**：在 IO 线程建会话，而
+        //     `GeckoSession.open` 的首条指令就是断言主线程（javap 实测）—— 表现为
+        //     扩展里点「在新标签打开」没有任何反应；
+        //  ② 自定义主页图片永久失效时不再静默保留坏配置，改为提示并回退极简；
+        //  ③ 扩展委托持有方在 runtime 已关闭时仍会被摘除（原先整段跳过 ⇒ 进程级集合
+        //     强引用已销毁的 Activity 且再也回不到空集，委托从此无法解绑）；
+        //  ④ `onVisited` / `getVisited` 的取消语义收敛，不再用 runCatching 吞掉取消异常；
+        //  ⑤ 主线程 I/O 收敛：`HistoryRepo.areVisited` 改 suspend + Dispatchers.IO；
+        //     冷启动读会话快照若预读未完成，改为有界等待，不再在主线程重复读盘 + 解析；
+        //  ⑥ lint 开启 `checkAllWarnings`（此前默认口径下不可见的 225 条 warning 已逐条处置，
+        //     全警告口径下仍为 `No issues found`）。
+        versionCode = 36
+        versionName = "2.1.3"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
         // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
         // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。
