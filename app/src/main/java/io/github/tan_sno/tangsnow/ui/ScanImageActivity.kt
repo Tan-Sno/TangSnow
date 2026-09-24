@@ -5,11 +5,11 @@ import android.os.Bundle
 import android.view.Gravity
 import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.Toast
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.CaptureActivity
 import io.github.tan_sno.tangsnow.R
+import io.github.tan_sno.tangsnow.toast
 import io.github.tan_sno.tangsnow.util.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,7 +90,7 @@ class ScanImageActivity : CaptureActivity() {
             val text = withContext(Dispatchers.IO) { decode(uri) }
             if (isFinishing || isDestroyed) return@launch
             if (text == null) {
-                Toast.makeText(this@ScanImageActivity, R.string.scan_no_qr_found, Toast.LENGTH_SHORT).show()
+                toast(R.string.scan_no_qr_found)
             } else {
                 returnResult(text)
             }

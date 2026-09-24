@@ -64,7 +64,7 @@ class AboutActivity : AppCompatActivity() {
     private fun showCrashReports() {
         val files = io.github.tan_sno.tangsnow.util.CrashLogger.list(this)
         if (files.isEmpty()) {
-            android.widget.Toast.makeText(this, R.string.about_crash_none, android.widget.Toast.LENGTH_SHORT).show()
+            toast(R.string.about_crash_none)
             return
         }
         val names = files.map { f ->
@@ -153,7 +153,7 @@ class AboutActivity : AppCompatActivity() {
         runCatching {
             startActivity(android.content.Intent.createChooser(send, getString(R.string.about_crash_share_via)))
         }.onFailure {
-            android.widget.Toast.makeText(this, R.string.toast_share_empty, android.widget.Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_share_empty)
         }
     }
 
