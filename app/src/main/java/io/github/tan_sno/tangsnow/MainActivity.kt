@@ -1949,7 +1949,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     /** 把内核产出的 PDF 流写进缓存目录；失败返回 null 并清掉半截文件 */
     private fun cachePrintPdf(input: java.io.InputStream): java.io.File? {
-        val file = java.io.File(java.io.File(cacheDir, "print").apply { mkdirs() }, "TangSnow_print.pdf")
+        val dir = java.io.File(cacheDir, "print")
+        if (!dir.exists() && !dir.mkdirs()) return null
+        // 先清掉上次的残留：adapter 的 onFinish() 正常会删，但进程被杀时走不到那里。
+        // 删除不会影响「正在打印中的那一份」—— 它的文件描述符仍指向原 inode。
+        runCatching { dir.listFiles()?.forEach { it.delete() } }
+        val file = java.io.File(dir, "TangSnow_print.pdf")
         return try {
             input.use { ins -> java.io.FileOutputStream(file).use { out -> ins.copyTo(out) } }
             file
