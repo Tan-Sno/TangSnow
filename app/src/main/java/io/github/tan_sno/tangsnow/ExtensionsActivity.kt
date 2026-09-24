@@ -73,9 +73,14 @@ class ExtensionsActivity : AppCompatActivity() {
         binding.tabRecommend.setOnClickListener { switchTo(TAB_RECOMMEND) }
         binding.tabInstalled.setOnClickListener { switchTo(TAB_INSTALLED) }
 
+        // hasFixedSize：这两个列表的尺寸都由父布局决定（推荐页是 0dp + weight，已装页是 match_parent），
+        // 不随条目内容变化。声明后 adapter 数据变动时 RecyclerView 可跳过 requestLayout()，
+        // 省掉一次整棵子树的测量 —— 本页两个列表都会频繁整体刷新（安装状态变化），收益明确。
         binding.recommendRecycler.layoutManager = LinearLayoutManager(this)
+        binding.recommendRecycler.setHasFixedSize(true)
         binding.recommendRecycler.adapter = catalogAdapter
         binding.installedRecycler.layoutManager = LinearLayoutManager(this)
+        binding.installedRecycler.setHasFixedSize(true)
         binding.installedRecycler.adapter = installedAdapter
 
         binding.btnInstallUrl.setOnClickListener { installFromUrl() }

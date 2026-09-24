@@ -42,7 +42,10 @@ class LibraryActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener { finish() }
         binding.btnClear.setOnClickListener { confirmClear() }
 
+        // hasFixedSize：列表尺寸是 match_parent，不随条目内容变化。资料库可能有上千条历史，
+        // 声明后每次刷新（切换页签 / 删除条目）都能跳过 requestLayout() 带来的整树测量。
         binding.recycler.layoutManager = LinearLayoutManager(this)
+        binding.recycler.setHasFixedSize(true)
         binding.recycler.addItemDecoration(
             DividerItemDecoration(this, DividerItemDecoration.VERTICAL)
         )
