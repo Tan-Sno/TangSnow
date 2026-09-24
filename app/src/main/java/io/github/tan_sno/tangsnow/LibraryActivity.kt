@@ -8,6 +8,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -33,6 +34,13 @@ class LibraryActivity : AppCompatActivity() {
     /** 刷新序号：快速切页签时只提交最新一次查询，避免慢查询晚到覆盖新页签的列表 */
     private var refreshSeq = 0L
 
+    /** 当前搜索关键词（只作用于当前页签；切页签时清空，见 [switchTo]） */
+    private var keyword = ""
+
+    /** 搜索输入去抖：避免每敲一个字符都重新查库并整表重绑 */
+    private val searchHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var searchTask: Runnable? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -41,6 +49,19 @@ class LibraryActivity : AppCompatActivity() {
 
         binding.btnBack.setOnClickListener { finish() }
         binding.btnClear.setOnClickListener { confirmClear() }
+
+        // 搜索：输入去抖后重新过滤（只作用于当前页签）
+        binding.searchInput.doAfterTextChanged { text ->
+            val next = text?.toString().orEmpty()
+            // 与当前关键词相同就直接返回 —— 「清空」按钮触发的 setText("") 也走这里，
+            // 由于 switchTo/清空处都是「先改 keyword 再 setText」，这里会早退，不会重复刷新。
+            if (next == keyword) return@doAfterTextChanged
+            keyword = next
+            scheduleSearch()
+        }
+        binding.btnClearSearch.setOnClickListener {
+            binding.searchInput.setText("") // 监听里会同步 keyword 并触发一次刷新
+        }
 
         // hasFixedSize：列表尺寸是 match_parent，不随条目内容变化。资料库可能有上千条历史，
         // 声明后每次刷新（切换页签 / 删除条目）都能跳过 requestLayout() 带来的整树测量。
@@ -66,10 +87,32 @@ class LibraryActivity : AppCompatActivity() {
         outState.putInt(KEY_TAB, currentTab)
     }
 
+    override fun onDestroy() {
+        // 摘掉待执行的搜索任务：否则 Handler 仍持有它，回调会摸到已失效的 binding
+        searchTask?.let { searchHandler.removeCallbacks(it) }
+        searchTask = null
+        super.onDestroy()
+    }
+
     private fun switchTo(tab: Int) {
         currentTab = tab
+        // 切页签时清空搜索：否则用户会看到「明明有内容却空着」，无从判断是没匹配还是没数据。
+        // ⚠️ 顺序必须是「先改 keyword 再 setText」：这样输入监听里的 next == keyword 判断能早退，
+        // 不会因为这次程序性赋值再触发一次多余的刷新。
+        if (keyword.isNotEmpty()) {
+            keyword = ""
+            binding.searchInput.setText("")
+        }
         refreshTabStyles()
         refresh()
+    }
+
+    /** 输入去抖：等用户停手后再查库，避免逐字符刷新整个列表（量级与 FindBarController 一致） */
+    private fun scheduleSearch() {
+        searchTask?.let { searchHandler.removeCallbacks(it) }
+        val task = Runnable { refresh() }
+        searchTask = task
+        searchHandler.postDelayed(task, SEARCH_DEBOUNCE_MS)
     }
 
     private fun refreshTabStyles() {
@@ -92,6 +135,9 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun refresh() {
         val seq = ++refreshSeq
+        // 进协程前取一次关键词快照：查询期间用户可能又改了输入，
+        // 用快照才能保证「过滤用的词」与「这批数据」是同一时刻的。
+        val query = keyword.trim()
         lifecycleScope.launch {
             val rows: List<LibRow> = when (currentTab) {
                 TAB_HISTORY -> {
@@ -107,13 +153,30 @@ class LibraryActivity : AppCompatActivity() {
             }
             // 期间用户又切了页签：丢弃本次过期结果，避免错位覆盖
             if (seq != refreshSeq) return@launch
-            adapter.submit(rows)
-            binding.emptyView.text = when (currentTab) {
-                TAB_HISTORY -> getString(R.string.history_empty)
-                TAB_BOOKMARKS -> getString(R.string.bookmarks_empty)
-                else -> getString(R.string.downloads_empty)
+            // 关键词过滤（大小写不敏感，匹配「标题 + 网址 / 文件名」）。
+            // 数据源本身很小 —— 历史上限 HISTORY_KEEP = 200，书签与下载记录更少 ——
+            // 在内存里过滤即可；改仓库层的 SQL LIKE 还要连带改测试，收益不成比例。
+            val shown = if (query.isEmpty()) {
+                rows
+            } else {
+                rows.filter {
+                    it.title.contains(query, ignoreCase = true) ||
+                        it.sub.contains(query, ignoreCase = true)
+                }
             }
-            binding.emptyView.isVisible = rows.isEmpty()
+            adapter.submit(shown)
+            binding.emptyView.text = if (shown.isEmpty() && query.isNotEmpty()) {
+                // 区分「还没有内容」与「有内容但没匹配」：后者要提示用户改关键词，
+                // 而不是让他以为数据丢了。
+                getString(R.string.library_no_match)
+            } else {
+                when (currentTab) {
+                    TAB_HISTORY -> getString(R.string.history_empty)
+                    TAB_BOOKMARKS -> getString(R.string.bookmarks_empty)
+                    else -> getString(R.string.downloads_empty)
+                }
+            }
+            binding.emptyView.isVisible = shown.isEmpty()
         }
     }
 
@@ -227,5 +290,8 @@ class LibraryActivity : AppCompatActivity() {
         const val TAB_HISTORY = 0
         const val TAB_BOOKMARKS = 1
         const val TAB_DOWNLOADS = 2
+
+        /** 搜索输入去抖时长（与 FindBarController 的 250ms 同量级） */
+        private const val SEARCH_DEBOUNCE_MS = 250L
     }
 }
