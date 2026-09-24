@@ -80,11 +80,21 @@ class LibraryActivity : AppCompatActivity() {
         val fromIntent = intent?.getIntExtra(BrowserOpener.EXTRA_LIBRARY_TAB, -1) ?: -1
         val fromState = savedInstanceState?.getInt(KEY_TAB, TAB_HISTORY) ?: TAB_HISTORY
         switchTo(if (fromIntent in 0..2) fromIntent else fromState)
+        // 恢复搜索词 —— 必须在 switchTo 之后：switchTo 里的「清空关键词」是给
+        // 「用户主动切页签」用的语义，而这里是 Activity 重建，不是用户切页签。
+        // 同步 keyword 才能与系统已恢复的搜索框文本保持一致（见 onSaveInstanceState）。
+        savedInstanceState?.getString(KEY_SEARCH)?.takeIf { it.isNotEmpty() }?.let { saved ->
+            keyword = saved
+            binding.searchInput.setText(saved) // 触发输入监听 → 按恢复的词过滤
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putInt(KEY_TAB, currentTab)
+        // 搜索词也要存：EditText 的文本由系统自行恢复（EditText.getFreezesText() 恒为 true），
+        // 而 keyword 是普通字段 —— 不存就会出现「搜索框里有字、列表却没过滤」的不一致。
+        outState.putString(KEY_SEARCH, keyword)
     }
 
     override fun onDestroy() {
@@ -287,6 +297,7 @@ class LibraryActivity : AppCompatActivity() {
 
     companion object {
         private const val KEY_TAB = "lib_tab"
+        private const val KEY_SEARCH = "lib_search"
         const val TAB_HISTORY = 0
         const val TAB_BOOKMARKS = 1
         const val TAB_DOWNLOADS = 2
