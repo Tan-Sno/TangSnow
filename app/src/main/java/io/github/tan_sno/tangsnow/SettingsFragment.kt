@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
@@ -190,7 +189,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
                     if (roleManager != null) {
                         if (roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)) {
                             pref.summary = getString(R.string.pref_default_browser_already)
-                            Toast.makeText(ctx, R.string.pref_default_browser_already, Toast.LENGTH_SHORT).show()
+                            ctx.toast(R.string.pref_default_browser_already)
                             return@setOnPreferenceClickListener true
                         }
                         if (roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) {
@@ -222,7 +221,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
             false
         }
         if (!ok) {
-            Toast.makeText(ctx, R.string.pref_default_browser_unavailable, Toast.LENGTH_SHORT).show()
+            ctx.toast(R.string.pref_default_browser_unavailable)
         }
     }
 
@@ -245,7 +244,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
     private fun bindPrivateMode() {
         findPreference<SwitchPreferenceCompat>(PreferenceStore.KEY_PRIVATE_MODE)?.setOnPreferenceChangeListener { _, _ ->
-            Toast.makeText(requireContext(), R.string.toast_private_mode_restart, Toast.LENGTH_SHORT).show()
+            requireContext().toast(R.string.toast_private_mode_restart)
             true
         }
     }
@@ -309,7 +308,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
     private fun bindPrivacySwitch(key: String, apply: (Boolean) -> Unit) {
         findPreference<SwitchPreferenceCompat>(key)?.setOnPreferenceChangeListener { _, newValue ->
             apply(newValue as? Boolean ?: true)
-            Toast.makeText(requireContext(), R.string.toast_privacy_restart, Toast.LENGTH_SHORT).show()
+            requireContext().toast(R.string.toast_privacy_restart)
             true
         }
     }
@@ -337,7 +336,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
     }
 
     private fun toastTrackingRestart() {
-        Toast.makeText(requireContext(), R.string.toast_tracking_restart, Toast.LENGTH_SHORT).show()
+        requireContext().toast(R.string.toast_tracking_restart)
     }
 
     private fun bindClearData() {
@@ -358,7 +357,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
         findPreference<SwitchPreferenceCompat>(PreferenceStore.KEY_SECURE_SCREEN)
             ?.setOnPreferenceChangeListener { _, newValue ->
                 PreferenceStore(requireContext()).secureScreen = newValue as? Boolean ?: false
-                Toast.makeText(requireContext(), R.string.toast_secure_screen_applied, Toast.LENGTH_SHORT).show()
+                requireContext().toast(R.string.toast_secure_screen_applied)
                 true
             }
     }
@@ -399,7 +398,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
             val nothing = !options.cookiesAndSiteData && !options.cache &&
                 !options.history && !options.sessionSnapshot && !options.downloadRecords
             if (nothing) {
-                Toast.makeText(requireContext(), R.string.toast_data_nothing_selected, Toast.LENGTH_SHORT).show()
+                requireContext().toast(R.string.toast_data_nothing_selected)
                 return@setOnClickListener
             }
             dialog.dismiss()
@@ -418,7 +417,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 result.kernelOk -> R.string.toast_data_partially_cleared
                 else -> R.string.toast_data_clear_failed
             }
-            Toast.makeText(ctx, msgRes, Toast.LENGTH_SHORT).show()
+            ctx.toast(msgRes)
         }
     }
 
@@ -533,7 +532,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
         runCatching {
             ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }.onFailure {
-            Toast.makeText(ctx, R.string.update_failed, Toast.LENGTH_SHORT).show()
+            ctx.toast(R.string.update_failed)
         }
     }
 

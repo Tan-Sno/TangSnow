@@ -186,9 +186,7 @@ class LibraryActivity : AppCompatActivity() {
                 TAB_BOOKMARKS -> BookmarkRepo.clear()
                 else -> DownloadRepo.clearRecords(this@LibraryActivity)
             }
-            android.widget.Toast.makeText(
-                this@LibraryActivity, R.string.toast_cleared, android.widget.Toast.LENGTH_SHORT
-            ).show()
+            toast(R.string.toast_cleared)
             refresh()
         }
     }
@@ -220,7 +218,8 @@ class LibraryActivity : AppCompatActivity() {
             DownloadRepo.Result.NO_APP ->
                 if (share) R.string.toast_share_file_failed else R.string.toast_open_file_failed
         }
-        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+        // msg 是 R.string.* 资源 id，与 Context.toast(resId) 扩展（同包，无需 import）语义一致
+        toast(msg)
     }
 
     companion object {

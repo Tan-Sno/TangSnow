@@ -11,7 +11,6 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -227,7 +226,7 @@ class HomeCustomizeActivity : AppCompatActivity() {
 
     private fun showAddDialog() {
         if (prefs.homeShortcuts.size >= PreferenceStore.MAX_HOME_SHORTCUTS) {
-            Toast.makeText(this, R.string.shortcut_max, Toast.LENGTH_SHORT).show()
+            toast(R.string.shortcut_max)
             return
         }
         val nameInput = EditText(this).apply { hint = getString(R.string.shortcut_name_hint) }
@@ -252,7 +251,7 @@ class HomeCustomizeActivity : AppCompatActivity() {
                     urlInput.text.toString(),
                 )
                 if (!ok) {
-                    Toast.makeText(this, R.string.shortcut_invalid, Toast.LENGTH_SHORT).show()
+                    toast(R.string.shortcut_invalid)
                 }
                 refreshShortcuts()
             }
