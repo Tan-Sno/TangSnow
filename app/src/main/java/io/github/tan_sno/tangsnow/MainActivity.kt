@@ -924,7 +924,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             onClose = { tab -> closeTab(tab) },
             onLongClick = { tab -> showTabBatchMenu(tab) },
         )
+        // hasFixedSize：网格尺寸是 match_parent，不随标签数量变化。标签面板每次打开/切换 /
+        // 关标签都会整体刷新，声明后可跳过 requestAdapter 后的 requestLayout() 整树测量。
         binding.tabsContent.tabsRecycler.layoutManager = GridLayoutManager(this, 2)
+        binding.tabsContent.tabsRecycler.setHasFixedSize(true)
         binding.tabsContent.tabsRecycler.adapter = tabsAdapter
         binding.tabsContent.btnCloseTabs.setOnClickListener { hideTabsPanel() }
         binding.tabsContent.btnPrivateTab.setOnClickListener { onPrivateTabFromPanel() }
