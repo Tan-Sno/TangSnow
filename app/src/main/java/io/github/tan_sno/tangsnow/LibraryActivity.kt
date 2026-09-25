@@ -12,13 +12,16 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
+import io.github.tan_sno.tangsnow.data.BookmarkHtml
 import io.github.tan_sno.tangsnow.data.repo.BookmarkRepo
 import io.github.tan_sno.tangsnow.data.repo.DownloadRepo
 import io.github.tan_sno.tangsnow.data.repo.HistoryRepo
 import io.github.tan_sno.tangsnow.databinding.ActivityLibraryBinding
 import io.github.tan_sno.tangsnow.ui.LibraryAdapter
 import io.github.tan_sno.tangsnow.ui.LibRow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** 资料库：历史 / 书签 / 下载（三个页签同处一行） */
 class LibraryActivity : AppCompatActivity() {
@@ -41,6 +44,13 @@ class LibraryActivity : AppCompatActivity() {
     private val searchHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var searchTask: Runnable? = null
 
+    /** 书签导入：系统文件选择器（Netscape HTML，各浏览器「导出书签」的标准格式） */
+    private val importBookmarksLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) importBookmarks(uri)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -49,6 +59,7 @@ class LibraryActivity : AppCompatActivity() {
 
         binding.btnBack.setOnClickListener { finish() }
         binding.btnClear.setOnClickListener { confirmClear() }
+        binding.btnBookmarkTools.setOnClickListener { showBookmarkTools() }
 
         // 搜索：输入去抖后重新过滤（只作用于当前页签）
         binding.searchInput.doAfterTextChanged { text ->
@@ -106,6 +117,8 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun switchTo(tab: Int) {
         currentTab = tab
+        // 书签导入/导出仅对书签页签有意义：其余页签隐藏该入口
+        binding.btnBookmarkTools.isVisible = tab == TAB_BOOKMARKS
         // 切页签时清空搜索：否则用户会看到「明明有内容却空着」，无从判断是没匹配还是没数据。
         // ⚠️ 顺序必须是「先改 keyword 再 setText」：这样输入监听里的 next == keyword 判断能早退，
         // 不会因为这次程序性赋值再触发一次多余的刷新。
@@ -262,6 +275,143 @@ class LibraryActivity : AppCompatActivity() {
             toast(R.string.toast_cleared)
             refresh()
         }
+    }
+
+    // ------------------------------------------------------------- 书签导入 / 导出
+
+    /**
+     * 书签导入/导出入口（仅书签页签可见）。导入/导出均为 Netscape 书签 HTML ——
+     * Chrome / Firefox / Edge「导出书签」的统一格式，互相可交换。
+     */
+    private fun showBookmarkTools() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.bookmark_tools_title)
+            .setItems(
+                arrayOf(
+                    getString(R.string.bookmark_menu_export),
+                    getString(R.string.bookmark_menu_import),
+                )
+            ) { _, which ->
+                when (which) {
+                    0 -> exportBookmarks()
+                    else -> importBookmarksLauncher.launch(
+                        arrayOf("text/html", "text/plain", "*/*")
+                    )
+                }
+            }
+            .show()
+    }
+
+    /** 导出：全部书签 → Netscape HTML → 公共「下载」目录（零存储权限，与存为 PDF 同路） */
+    private fun exportBookmarks() {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val list = BookmarkRepo.list()
+                if (list.isEmpty()) return@withContext null
+                list.size to writeBookmarksHtml(BookmarkHtml.export(list))
+            }
+            if (isFinishing || isDestroyed) return@launch
+            when {
+                result == null -> toast(R.string.bookmark_export_empty)
+                result.second -> toast(
+                    // 复数文案（en 下 1 条与多条不同）；第一个参数选 quantity，第二个进格式化
+                    resources.getQuantityString(
+                        R.plurals.bookmark_export_done, result.first, result.first
+                    )
+                )
+                else -> toast(R.string.bookmark_export_failed)
+            }
+        }
+    }
+
+    /** 写盘；文件名带时间戳避免覆盖既有导出。@return 是否成功 */
+    private fun writeBookmarksHtml(html: String): Boolean {
+        val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+            .format(java.util.Date())
+        val name = "tangsnow_bookmarks_$stamp.html"
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                val resolver = contentResolver
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/html")
+                    put(
+                        android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+                        android.os.Environment.DIRECTORY_DOWNLOADS
+                    )
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = resolver.insert(
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+                ) ?: return false
+                val written = resolver.openOutputStream(uri)?.use { out ->
+                    out.write(html.toByteArray(Charsets.UTF_8))
+                } != null
+                if (!written) {
+                    // 失败时清掉占位行，避免下载目录留下 0 字节幽灵文件
+                    runCatching { resolver.delete(uri, null, null) }
+                    return false
+                }
+                values.clear()
+                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+                true
+            } else {
+                // API 26-28：无存储权限，写应用专属下载目录（文件管理器仍可见）
+                val dir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+                    ?: return false
+                java.io.File(dir, name).writeText(html, Charsets.UTF_8)
+                true
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** 导入：Netscape HTML → 解析 → 清洗（scheme 白名单/去重/上限）→ 逐条入库 */
+    private fun importBookmarks(uri: android.net.Uri) {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val text = readImportText(uri) ?: return@withContext null
+                val raw = BookmarkHtml.parseImport(text)
+                val existing = BookmarkRepo.list().mapTo(HashSet()) { it.url }
+                val (entries, skipped) = BookmarkHtml.sanitize(raw, existing)
+                entries.forEach { BookmarkRepo.add(it.url, it.title) }
+                entries.size to skipped
+            }
+            if (isFinishing || isDestroyed) return@launch
+            if (result == null) {
+                toast(R.string.bookmark_import_failed)
+                return@launch
+            }
+            toast(
+                resources.getQuantityString(
+                    R.plurals.bookmark_import_done, result.first, result.first, result.second
+                )
+            )
+            refresh()
+        }
+    }
+
+    /** 读入导入文件全文（UTF-8），超 [BookmarkHtml.MAX_IMPORT_CHARS] 视为无效返回 null */
+    private fun readImportText(uri: android.net.Uri): String? = try {
+        contentResolver.openInputStream(uri)?.use { ins ->
+            val buf = StringBuilder()
+            val chunk = CharArray(8192)
+            java.io.InputStreamReader(ins, Charsets.UTF_8).use { reader ->
+                while (true) {
+                    val n = reader.read(chunk)
+                    if (n <= 0) break
+                    buf.append(chunk, 0, n)
+                    if (buf.length > BookmarkHtml.MAX_IMPORT_CHARS) return@use null
+                }
+            }
+            buf.toString()
+        }
+    } catch (_: Exception) {
+        null
     }
 
     /**

@@ -174,8 +174,17 @@ interface PromptHandler {
  * 策略性放行（静音自动播放等）由 SessionManager 内部决定，不打扰界面层。
  */
 interface PermissionHandler {
-    /** 需要弹窗征询的内容权限（定位/通知/本地设备/本地网络）：done(true)=允许 */
-    fun onContentPermission(uri: String, permission: Int, done: (Boolean) -> Unit)
+    /**
+     * 需要弹窗征询的内容权限（定位/通知/本地设备/本地网络）：done(true)=允许。
+     * [perm] 是内核递来的完整授权对象（uri / permission / privateMode 等齐全），
+     * 供界面展示与「记住我的选择」的持久化（StorageController.setPermission）使用；
+     * [isPrivate] 即 perm.privateMode —— 无痕会话不得持久化任何授权决定。
+     */
+    fun onContentPermission(
+        perm: GeckoSession.PermissionDelegate.ContentPermission,
+        isPrivate: Boolean,
+        done: (Boolean) -> Unit,
+    )
     /** getUserMedia：done(true)=授予首个可用音视频源 */
     fun onMediaPermission(host: String, needsVideo: Boolean, needsAudio: Boolean, done: (Boolean) -> Unit)
     /** Gecko 请求的 Android 运行时权限（CAMERA/RECORD_AUDIO 等）：done(true)=已授予 */
@@ -1165,7 +1174,7 @@ class BrowserSessionManager private constructor(
                             val h = permissionHandler
                             if (h == null) {
                                 result.complete(deny)
-                            } else h.onContentPermission(perm.uri.orEmpty(), perm.permission) { granted ->
+                            } else h.onContentPermission(perm, perm.privateMode) { granted ->
                                 result.complete(if (granted) allow else deny)
                             }
                         }
