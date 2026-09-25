@@ -4,7 +4,7 @@
 
 # 用户协议 / User Agreement
 
-> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 19`。
+> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 20`。
 > 最后更新：（见正文）
 > **请勿直接编辑**；请修改 `strings.xml` 后运行 `python tools/export_legal_docs.py` 重新导出。
 

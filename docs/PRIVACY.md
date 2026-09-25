@@ -4,8 +4,8 @@
 
 # 隐私政策 / Privacy Policy
 
-> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 19`。
-> 最后更新：2026年09月21日
+> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 20`。
+> 最后更新：2026年09月25日
 > **请勿直接编辑**；请修改 `strings.xml` 后运行 `python tools/export_legal_docs.py` 重新导出。
 
 **目录 / Contents**　[中文](#隐私政策) · [English](#english)
@@ -14,11 +14,11 @@
 
 ## 隐私政策
 
-更新日期：2026年09月21日
+更新日期：2026年09月25日
 
 1. 我们处理哪些信息、为了什么
 
-本应用为纯本地浏览工具。正常使用中，我们不在您的设备之外收集任何个人信息：书签、浏览历史、标签页会话快照（用于在进程被系统回收后恢复您上次打开的标签页，仅保存普通标签，无痕标签不落盘；默认开启，可在设置中关闭，关闭后立即清除已保存的快照）、主页定制与设置等数据仅保存在您的设备本地。处理这些数据的目的，是向您提供网页浏览与本地辅助功能（例如历史联想）；这是为履行您所使用的本地工具功能所必需，本应用不将这些数据用于营销、画像或任何自动化决策。本应用不含统计、广告或追踪 SDK，不出售个人信息。
+本应用为纯本地浏览工具。正常使用中，我们不在您的设备之外收集任何个人信息：书签、浏览历史、标签页会话快照（用于在进程被系统回收后恢复您上次打开的标签页，仅保存普通标签，无痕标签不落盘；默认开启，可在设置中关闭，关闭后立即清除已保存的快照）、主页定制与设置、以及您在站点权限弹窗勾选「记住我的选择」后对应站点的授权决定（允许/拒绝，**仅保存在本机**；可经「清除浏览数据」的『Cookie 与站点数据』一并清除，未勾选时不保存）等数据仅保存在您的设备本地。处理这些数据的目的，是向您提供网页浏览与本地辅助功能（例如历史联想）；这是为履行您所使用的本地工具功能所必需，本应用不将这些数据用于营销、画像或任何自动化决策。本应用不含统计、广告或追踪 SDK，不出售个人信息。
 
 2. 权限说明（最小化原则）
 
@@ -86,11 +86,11 @@
 
 ## English
 
-Last updated: 2026-09-21
+Last updated: 2026-09-25
 
 1. What we process and why
 
-TangSnow is a strictly local browser tool. In normal use we do not collect any personal information outside your device: bookmarks, history, tab session snapshots (to restore your last open tabs if the process is reclaimed by the system; only normal tabs are saved, never private tabs; on by default and can be turned off in Settings, which clears any saved snapshot immediately), homepage customization and settings live only on this device. These data are processed solely to provide browsing and local assistant features (e.g. history suggestions); this is necessary to provide the local-tool functionality you use. The app does not use your data for marketing, profiling or automated decision-making. It contains no analytics, advertising or tracking SDKs and does not sell personal information.
+TangSnow is a strictly local browser tool. In normal use we do not collect any personal information outside your device: bookmarks, history, tab session snapshots (to restore your last open tabs if the process is reclaimed by the system; only normal tabs are saved, never private tabs; on by default and can be turned off in Settings, which clears any saved snapshot immediately), homepage customization and settings, **as well as the per-site permission decisions (allow/deny) for prompts where you ticked "Remember my choice" (stored on this device only; cleared together with "Cookies and site data" via Clear browsing data; nothing is stored unless you tick it)** live only on this device. These data are processed solely to provide browsing and local assistant features (e.g. history suggestions); this is necessary to provide the local-tool functionality you use. The app does not use your data for marketing, profiling or automated decision-making. It contains no analytics, advertising or tracking SDKs and does not sell personal information.
 
 2. Permissions (minimized)
 
