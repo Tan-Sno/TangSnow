@@ -44,6 +44,21 @@
                 android:textSize="19sp"
                 android:textStyle="bold"
                 android:textColor="@android:color/white" />
+
+            <!-- 无痕标签角标：无痕与普通标签在网格里肉眼可分（隐私状态的可见性） -->
+            <TextView
+                android:id="@+id/tabPrivateBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_margin="6dp"
+                android:background="@drawable/bg_tile_label"
+                android:text="@string/tab_private_badge"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOnSurface"
+                android:visibility="gone"
+                tools:ignore="SmallSp" />
         </FrameLayout>
 
         <TextView

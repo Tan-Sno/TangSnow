@@ -130,4 +130,53 @@ object UrlUtils {
      */
     fun resolve(input: String, engine: SearchEngine): String? =
         resolveInfo(input, engine)?.url
+
+    /**
+     * 从 ACTION_SEND 分享来的任意文本里提取第一个 http(s) 链接。
+     *
+     * 为什么不直接整段交给浏览器：分享文本常见的形态是「标题 + 链接」或「链接 + 广告尾巴」，
+     * 整段塞给地址栏会被 [resolveInfo] 判成搜索词。这里只取**第一个**链接，并做两层收口：
+     *  1. **CJK 标点硬截断**：分享文案常把说明文字直接黏在链接后（无空格，`\S+` 会一并
+     *     捕获成 `https://x.com/1。转疯了`），而 CJK 标点在真实 URL 里几乎不存在，
+     *     故从第一个 CJK 标点处截断；
+     *  2. **尾随标点剥离**：链接写在句尾时的句号、逗号、右括号、引号不属于 URL，
+     *     连续剥到不再命中（Wikipedia 式 `/页_(消歧义)` 的**成对**右括号也会被剥，
+     *     这是刻意的取舍 —— 分享场景里「链接括号结尾后接正文」远比「URL 以右括号
+     *     结尾」常见，宁可少半个字符也不给地址栏塞标点）。
+     * 末尾再清一次「被截断的百分号编码残渣」（合法编码恒为 `%` + 两位十六进制）。
+     * 提取不出链接（纯文本分享）返回 null，由调用方决定提示方式。
+     * 纯字符串运算（不碰 android.net.Uri），可直接被 JVM 单测覆盖。
+     */
+    private val URL_IN_TEXT = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
+
+    /** CJK 标点：从这里起硬截断（真实 URL 几乎不含，是说明文字黏连的切点） */
+    private val CJK_URL_CUTTER = Regex("""[。，、；：！？「」『』《》〈〉【】（）…—]""")
+
+    /** 链接尾随的标点集合：英文标点 + 全角/CJK 闭合符号（连续剥到不再命中） */
+    private val TRAILING_URL_PUNCTUATION = """.,;:!?'""" + "()[]{}<>\"“”‘’）］｝]》」』›»。"
+
+    fun extractUrlFromText(text: String): String? {
+        val raw = URL_IN_TEXT.find(text)?.value ?: return null
+        val cut = CJK_URL_CUTTER.find(raw)?.range?.first ?: raw.length
+        var url = raw.substring(0, cut)
+        // 剥离连续的尾随标点（如句尾的「.」、右括号、引号）
+        while (url.isNotEmpty() && url.last() in TRAILING_URL_PUNCTUATION) {
+            url = url.dropLast(1)
+        }
+        // 截断的百分号编码残渣：合法编码恒为「% + 两位十六进制」，结尾若是 '%'
+        // 或 '%+一位十六进制'（被标点/换行截断所致）则剥回完整边界；
+        // 完整的 %XY 保留 —— 那是 URL 的正常组成部分（如 %20）
+        while (true) {
+            val n = url.length
+            when {
+                url.endsWith("%") -> url = url.dropLast(1)
+                n >= 2 && url[n - 2] == '%' && url.last().isHexDigit() -> url = url.dropLast(2)
+                else -> break
+            }
+        }
+        return url.ifEmpty { null }
+    }
+
+    private fun Char.isHexDigit(): Boolean =
+        this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
 }

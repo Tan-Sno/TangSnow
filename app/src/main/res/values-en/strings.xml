@@ -28,6 +28,7 @@
     <string name="scan_no_handler">No app can open this link</string>
     <string name="scan_copy">Copy</string>
     <string name="scan_copied">Copied to clipboard</string>
+    <string name="share_no_link_found">No link to open in the shared content</string>
     <string name="clipboard_external_write">Clipboard content was updated</string>
     <string name="clipboard_clear">Clear</string>
     <string name="clipboard_read_title">Allow clipboard access?</string>
@@ -314,6 +315,8 @@
     <string name="toast_privacy_restart">This privacy setting takes effect on the next launch of TangSnow</string>
     <string name="pref_clear_data_title">Clear browsing data</string>
     <string name="pref_clear_data_summary">Clear cookies, cache and site data</string>
+    <string name="pref_exit_clear_title">Clear browsing data on exit</string>
+    <string name="pref_exit_clear_summary">When exiting TangSnow, automatically clear cookies and site data, cache, history and the tab snapshot; bookmarks and downloads are kept. \"Restore last tabs\" stops taking effect</string>
 
     <string name="pref_version_title">Version</string>
     <string name="pref_about_title">About TangSnow</string>
@@ -500,6 +503,7 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
 \nThis app uses Mozilla GeckoView (MPL 2.0), OkHttp and ZXing (Apache License 2.0); see “Open source notice” for statements and license links.</string>
     <string name="about_version_format">v%1$s</string>
     <string name="tabs_count_format">%1$d</string>
+    <string name="tab_private_badge">Private</string>
     <string name="arrow_open">▾</string>
     <string name="arrow_closed">▸</string>
     <string name="extension_install_interrupted">The previous install was interrupted — try again</string>

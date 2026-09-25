@@ -93,6 +93,8 @@ class TabsAdapter(
         val newTabLabel = ctx.getString(io.github.tan_sno.tangsnow.R.string.tabs_new)
         holder.binding.tabTitle.text = tab.title.ifBlank { tab.url ?: newTabLabel }
         holder.binding.tabUrl.text = tab.url ?: ""
+        // 无痕标签必须与普通标签肉眼可分：预览/首字母之外的显式角标
+        holder.binding.tabPrivateBadge.isVisible = tab.isPrivate
         holder.binding.root.setOnClickListener { onOpen(tab) }
         holder.binding.root.setOnLongClickListener {
             onLongClick?.invoke(tab)

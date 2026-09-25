@@ -130,6 +130,14 @@
             app:title="@string/pref_clear_data_title"
             app:summary="@string/pref_clear_data_summary" />
 
+        <!-- 退出时自动清除：复用「清除浏览数据」用例（Cookie与站点数据+缓存+历史+标签快照），
+             不动书签与下载。开启后与「恢复上次的标签页」事实上互斥（退出即不留痕） -->
+        <SwitchPreferenceCompat
+            app:key="exit_clear_browsing_data"
+            app:title="@string/pref_exit_clear_title"
+            app:summary="@string/pref_exit_clear_summary"
+            app:defaultValue="false" />
+
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/prefs_cat_advanced">

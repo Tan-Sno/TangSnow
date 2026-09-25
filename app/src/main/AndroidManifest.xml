@@ -47,6 +47,13 @@
                 <data android:scheme="http" />
                 <data android:scheme="https" />
             </intent-filter>
+            <!-- 分享入口：其它应用「分享」纯文本时，棠雪可作为目标打开其中的链接。
+                 文本里提取不出 http(s) 链接时不导航（见 MainActivity.handleIntent） -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
         <activity

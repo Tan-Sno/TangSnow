@@ -115,4 +115,86 @@ class UrlUtilsTest {
             UrlUtils.resolve("example.com", engine),
         )
     }
+
+    // ------------------------------------------------------------- extractUrlFromText
+
+    @Test
+    fun `分享提取_纯链接原样返回`() {
+        assertEquals(
+            "https://example.com/a/b?q=1",
+            UrlUtils.extractUrlFromText("https://example.com/a/b?q=1"),
+        )
+    }
+
+    @Test
+    fun `分享提取_链接前后有文字时取第一个链接`() {
+        assertEquals(
+            "https://x.com/1",
+            UrlUtils.extractUrlFromText("看看这个 https://x.com/1 还有 https://y.com/2"),
+        )
+    }
+
+    @Test
+    fun `分享提取_句尾标点被剥离`() {
+        assertEquals(
+            "https://x.com/1",
+            UrlUtils.extractUrlFromText("快看 https://x.com/1."),
+        )
+        assertEquals(
+            "https://x.com/1",
+            UrlUtils.extractUrlFromText("快看 (https://x.com/1)"),
+        )
+    }
+
+    @Test
+    fun `分享提取_说明文字黏在链接后被 CJK 标点截断`() {
+        // 无空格黏连：\S+ 会连「。转疯了」一起捕获，必须从 CJK 标点处硬截断
+        assertEquals(
+            "https://x.com/1",
+            UrlUtils.extractUrlFromText("https://x.com/1。转疯了"),
+        )
+        assertEquals(
+            "https://x.com/1",
+            UrlUtils.extractUrlFromText("https://x.com/1，快看"),
+        )
+    }
+
+    @Test
+    fun `分享提取_截断的百分号编码残渣被剥掉而完整编码保留`() {
+        // 完整编码（如 %20）是 URL 的正常组成部分，必须保留
+        assertEquals(
+            "https://x.com/a%20b",
+            UrlUtils.extractUrlFromText("https://x.com/a%20b。"),
+        )
+        // 「% + 不足两位十六进制」的不完整残渣剥回边界；已形如完整编码的尾巴
+        // （%B8）与真实编码无法区分，保守保留 —— 宁可多留两位也不损坏合法 URL
+        assertEquals(
+            "https://x.com/a%E4",
+            UrlUtils.extractUrlFromText("https://x.com/a%E4%B"),
+        )
+        assertEquals(
+            "https://x.com/a%E4%B8",
+            UrlUtils.extractUrlFromText("https://x.com/a%E4%B8%"),
+        )
+        assertEquals(
+            "https://x.com/a",
+            UrlUtils.extractUrlFromText("https://x.com/a%"),
+        )
+    }
+
+    @Test
+    fun `分享提取_大写 scheme 原样保留`() {
+        assertEquals(
+            "HTTP://X.com/Path",
+            UrlUtils.extractUrlFromText("HTTP://X.com/Path"),
+        )
+    }
+
+    @Test
+    fun `分享提取_无链接的纯文本返回 null`() {
+        assertNull(UrlUtils.extractUrlFromText("今天天气不错"))
+        assertNull(UrlUtils.extractUrlFromText(""))
+        assertNull(UrlUtils.extractUrlFromText("ftp://example.com/file"))
+        assertNull(UrlUtils.extractUrlFromText("example.com/无协议地址"))
+    }
 }
