@@ -59,8 +59,13 @@ object LegalDocs {
      *     「除官方服务（addons.mozilla.org 与名单服务）之外」。
      *  另：扩展目录移除 Ghostery（其定位含广告拦截），政策与用户协议同步声明精选目录
      *  只收录隐私保护与工具类扩展。
+     *
+     *  19 → 20（2026-09-25，站点权限「记住我的选择」）：新增一类本机数据 —— 用户在
+     *  站点权限询问弹窗勾选「记住我的选择」后，对应站点的授权决定（允许/拒绝）经内核
+     *  StorageController 持久化在本机；可经「清除浏览数据 → Cookie 与站点数据」一并
+     *  清除，未勾选时不保存，无痕会话一律不提供该勾选。政策 §1 数据枚举与摘要同步补句。
      */
-    const val POLICY_VERSION = 19
+    const val POLICY_VERSION = 20
 
     // 注意：以下资源引用保持「非 const」，避免 Kotlin IR 在编译期常量折叠时
     // 因 R 常量跨模块求值触发 InterpreterMethodNotFoundError 内部错误。

@@ -9,14 +9,17 @@ import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.text.InputType
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import io.github.tan_sno.tangsnow.GeckoHolder
 import io.github.tan_sno.tangsnow.R
 import io.github.tan_sno.tangsnow.browser.PermissionHandler
 import io.github.tan_sno.tangsnow.browser.PromptHandler
@@ -556,9 +559,14 @@ class WebPrompts(
 
     // ------------------------------------------------------------- PermissionHandler
 
-    override fun onContentPermission(uri: String, permission: Int, done: (Boolean) -> Unit) {
+    override fun onContentPermission(
+        perm: GeckoSession.PermissionDelegate.ContentPermission,
+        isPrivate: Boolean,
+        done: (Boolean) -> Unit,
+    ) {
+        val uri = perm.uri.orEmpty()
         val host = Uri.parse(uri).host?.takeIf { it.isNotBlank() } ?: uri
-        val messageRes = when (permission) {
+        val messageRes = when (perm.permission) {
             GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION ->
                 R.string.perm_location_message
             GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION ->
@@ -571,15 +579,57 @@ class WebPrompts(
         fun once(v: Boolean) {
             if (!called) { called = true; done(v) }
         }
+        // 「记住我的选择」：勾选后把授权决定持久化到内核，同站点同权限此后不再询问。
+        // 仅普通会话提供 —— 无痕会话不得持久化任何授权决定（与隐私政策承诺一致）。
+        var remember = false
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = activity.dp(20)
+            setPadding(pad, pad / 2, pad, 0)
+            addView(TextView(activity).apply { text = activity.getString(messageRes, host) })
+            if (!isPrivate) {
+                addView(CheckBox(activity).apply {
+                    text = activity.getString(R.string.perm_remember)
+                    setOnCheckedChangeListener { _, checked -> remember = checked }
+                })
+            }
+        }
         tracked(
             AlertDialog.Builder(activity)
                 .setTitle(host)
-                .setMessage(activity.getString(messageRes, host))
-                .setPositiveButton(R.string.perm_allow) { _, _ -> once(true) }
-                .setNegativeButton(R.string.perm_deny) { _, _ -> once(false) }
+                .setView(box)
+                .setPositiveButton(R.string.perm_allow) { _, _ ->
+                    rememberPermission(perm, allow = true, persist = remember && !isPrivate)
+                    once(true)
+                }
+                .setNegativeButton(R.string.perm_deny) { _, _ ->
+                    rememberPermission(perm, allow = false, persist = remember && !isPrivate)
+                    once(false)
+                }
                 .setOnCancelListener { once(false) }
                 .create()
         )
+    }
+
+    /**
+     * 持久化授权决定（「记住我的选择」勾选时调用；普通会话限定，见调用点）。
+     * 经内核 StorageController.setPermission 写入；同站点同权限此后由内核在回调前
+     * 自查存储、不再走到弹窗。清除出口 = 「清除浏览数据 → Cookie 与站点数据」
+     * （位掩码含 PERMISSIONS，政策 §7 已披露），不提供逐条管理界面。
+     */
+    private fun rememberPermission(
+        perm: GeckoSession.PermissionDelegate.ContentPermission,
+        allow: Boolean,
+        persist: Boolean,
+    ) {
+        if (!persist) return
+        runCatching {
+            GeckoHolder.runtime?.storageController?.setPermission(
+                perm,
+                if (allow) GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                else GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY,
+            )
+        }
     }
 
     override fun onMediaPermission(

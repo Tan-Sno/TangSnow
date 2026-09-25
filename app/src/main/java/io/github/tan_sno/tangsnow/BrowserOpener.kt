@@ -104,3 +104,8 @@ fun Context.toast(message: String) {
 fun Context.toast(resId: Int) {
     Toast.makeText(this, resId, Toast.LENGTH_SHORT).show()
 }
+
+/** 带格式化参数的版本（如「已导入 %1$d 条…」）；语义与上面的单参版一致 */
+fun Context.toast(resId: Int, vararg args: Any) {
+    Toast.makeText(this, this.getString(resId, *args), Toast.LENGTH_SHORT).show()
+}

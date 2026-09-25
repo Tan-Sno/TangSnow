@@ -428,7 +428,7 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
 
     <!-- Privacy summary (keep in sync with full policy) -->
     <string name="legal_privacy_summary">TangSnow is a local browser tool designed with privacy in mind:\n\n· Local-only data
-\nBookmarks, history, homepage customization and settings are kept only on this device. The app does not collect or upload your personal information and contains no analytics, ads or tracking SDKs. Crash logs from catchable unexpected errors are also kept on this device only (limited to the version, device and stack details needed for debugging, and possibly the domain of the most recently visited site — the domain only, never the full URL or search terms), where you can view or delete them from the About page — they are never uploaded automatically.
+\nBookmarks, history, homepage customization and settings, and remembered site-permission decisions are kept only on this device. The app does not collect or upload your personal information and contains no analytics, ads or tracking SDKs. Crash logs from catchable unexpected errors are also kept on this device only (limited to the version, device and stack details needed for debugging, and possibly the domain of the most recently visited site — the domain only, never the full URL or search terms), where you can view or delete them from the About page — they are never uploaded automatically.
 \n
 \n· Minimal permissions
 \nInternet — load sites you visit and fetch extension metadata/packages. Camera — only used when you actively scan a QR code. Clipboard — written only when you tap copy (scan results, copy link, copy selection, one-tap clear). In addition, to warn you when the clipboard is rewritten, the app listens for new system-clipboard content while it is in the foreground and holds window focus; this is used only to show a reminder with a one-tap clear, at most once per foreground session. The listener never reads, stores or uploads clipboard content, and never attributes the change to a particular site (the system provides no origin information).
@@ -446,8 +446,8 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
 \nDisagreeing with this summary is the same as disagreeing with the full policy — the app exits immediately. The full privacy policy and user agreement are always available on this page and via Settings → About TangSnow; making TangSnow your default browser is always your own explicit choice.</string>
 
     <!-- Full privacy policy -->
-    <string name="privacy_policy_text">Last updated: 2026-09-21\n\n1. What we process and why
-\nTangSnow is a strictly local browser tool. In normal use we do not collect any personal information outside your device: bookmarks, history, tab session snapshots (to restore your last open tabs if the process is reclaimed by the system; only normal tabs are saved, never private tabs; on by default and can be turned off in Settings, which clears any saved snapshot immediately), homepage customization and settings live only on this device. These data are processed solely to provide browsing and local assistant features (e.g. history suggestions); this is necessary to provide the local-tool functionality you use. The app does not use your data for marketing, profiling or automated decision-making. It contains no analytics, advertising or tracking SDKs and does not sell personal information.\n\n2. Permissions (minimized)
+    <string name="privacy_policy_text">Last updated: 2026-09-25\n\n1. What we process and why
+\nTangSnow is a strictly local browser tool. In normal use we do not collect any personal information outside your device: bookmarks, history, tab session snapshots (to restore your last open tabs if the process is reclaimed by the system; only normal tabs are saved, never private tabs; on by default and can be turned off in Settings, which clears any saved snapshot immediately), homepage customization and settings, **as well as the per-site permission decisions (allow/deny) for prompts where you ticked "Remember my choice" (stored on this device only; cleared together with "Cookies and site data" via Clear browsing data; nothing is stored unless you tick it)** live only on this device. These data are processed solely to provide browsing and local assistant features (e.g. history suggestions); this is necessary to provide the local-tool functionality you use. The app does not use your data for marketing, profiling or automated decision-making. It contains no analytics, advertising or tracking SDKs and does not sell personal information.\n\n2. Permissions (minimized)
 \n· INTERNET — load pages and fetch extension metadata and packages.
 \n· CAMERA — used only when you actively scan a QR code; nothing is recorded or stored.
 \n· Engine operations (ordinary permissions declared by the Mozilla GeckoView engine; never prompted, no personal data involved): ACCESS_NETWORK_STATE (check connectivity), WAKE_LOCK (keep the device awake during media playback), MODIFY_AUDIO_SETTINGS (adjust media volume and audio settings).
@@ -504,6 +504,24 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
     <string name="about_version_format">v%1$s</string>
     <string name="tabs_count_format">%1$d</string>
     <string name="tab_private_badge">Private</string>
+    <!-- Bookmark import / export (Netscape HTML, the cross-browser format) -->
+    <string name="bookmark_tools_desc">Import and export bookmarks</string>
+    <string name="bookmark_tools_title">Import / export bookmarks</string>
+    <string name="bookmark_menu_export">Export bookmarks (to Downloads)</string>
+    <string name="bookmark_menu_import">Import bookmarks from file</string>
+    <string name="bookmark_export_empty">No bookmarks to export</string>
+    <string name="bookmark_export_failed">Export failed, please retry</string>
+    <plurals name="bookmark_export_done">
+        <item quantity="one">Exported %1$d bookmark to Downloads</item>
+        <item quantity="other">Exported %1$d bookmarks to Downloads</item>
+    </plurals>
+    <plurals name="bookmark_import_done">
+        <item quantity="one">Imported %1$d bookmark, skipped %2$d (duplicates or invalid)</item>
+        <item quantity="other">Imported %1$d bookmarks, skipped %2$d (duplicates or invalid)</item>
+    </plurals>
+    <string name="bookmark_import_failed">Import failed: the file cannot be read or is not a bookmarks file</string>
+    <!-- "Remember my choice" on the site-permission dialog: normal sessions only (never persisted for private) -->
+    <string name="perm_remember">Remember my choice</string>
     <string name="arrow_open">▾</string>
     <string name="arrow_closed">▸</string>
     <string name="extension_install_interrupted">The previous install was interrupted — try again</string>

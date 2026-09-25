@@ -34,6 +34,18 @@
             android:textSize="@dimen/title_text_size"
             android:textColor="?attr/colorOnSurface" />
 
+        <!-- 顶栏右侧：书签导入/导出（仅书签页签可见），与清空键同宽同风格 -->
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/btnBookmarkTools"
+            android:layout_width="@dimen/title_action_size"
+            android:layout_height="@dimen/title_action_size"
+            android:src="@drawable/ic_import_export"
+            app:tint="?attr/colorOnSurfaceVariant"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:visibility="gone"
+            tools:ignore="ContentDescription"
+            android:contentDescription="@string/bookmark_tools_desc" />
+
         <!-- 顶栏右侧：清空当前页签（历史/书签/下载记录），与返回键等宽对称 -->
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/btnClear"
