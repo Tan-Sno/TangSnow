@@ -264,17 +264,29 @@ class LibraryActivity : AppCompatActivity() {
         }
     }
 
-    /** 打开下载文件：按仓库返回的分级结果给出准确提示（不再一律"无法打开"） */
+    /**
+     * 打开下载文件：按仓库返回的分级结果给出准确提示（不再一律"无法打开"）。
+     * open 为 suspend（文件存在性等检查在 IO 线程），经 lifecycleScope 挂起等待后回主线程提示；
+     * 期间页面已销毁则静默放弃，不再对已失效的界面做任何动作。
+     */
     private fun openDownload(item: DownloadRepo.Item) {
-        showDownloadResult(DownloadRepo.open(this, item), share = false)
+        lifecycleScope.launch {
+            val result = DownloadRepo.open(this@LibraryActivity, item)
+            if (isFinishing || isDestroyed) return@launch
+            showDownloadResult(result, share = false)
+        }
     }
 
-    /** 长按下载行：分享已完成的文件（含 URI 读取授权，一次会话内有效） */
+    /** 长按下载行：分享已完成的文件（含 URI 读取授权，一次会话内有效）；线程约定同 [openDownload] */
     private fun onLongPressRow(row: LibRow): Boolean {
         // 只认「行自己是下载行」，不再依赖 currentTab（同上：切页签的滚动窗口内
         // currentTab 与界面上显示的行可能不一致）
         val item = row.tag as? DownloadRepo.Item ?: return false
-        showDownloadResult(DownloadRepo.share(this, item), share = true)
+        lifecycleScope.launch {
+            val result = DownloadRepo.share(this@LibraryActivity, item)
+            if (isFinishing || isDestroyed) return@launch
+            showDownloadResult(result, share = true)
+        }
         return true
     }
 

@@ -40,7 +40,15 @@ class TabPreviewController(private val activity: MainActivity) {
                 runCatching { tab.session.releaseDisplay(display) }
             }
         }
+        val handler = Handler(Looper.getMainLooper())
+        // 兜底：若 GeckoResult 迟迟不回调，8 秒后强制释放 display，防止句柄泄漏。
+        // ⚠️ 看门狗只能在「结果已落定」时（onBitmap）摘除：capturePixels 失败会转入
+        // screenshot() 兜底，若在转入兜底前就摘掉看门狗而兜底也永不回调，
+        // display 将无人释放——修复前正是这个窗口泄漏句柄。
+        val watchdog = Runnable { releaseOnce() }
         fun onBitmap(bmp: Bitmap?) {
+            // 结果已落定：先摘看门狗再释放 display；看门狗已先行释放时此处幂等
+            handler.removeCallbacks(watchdog)
             releaseOnce()
             if (bmp != null && bmp.width > 0 && !activity.isDestroyed) {
                 activity.runOnUiThread {
@@ -51,23 +59,13 @@ class TabPreviewController(private val activity: MainActivity) {
                 }
             }
         }
-        // 兜底：若 GeckoResult 迟迟不回调，8 秒后强制释放 display，防止句柄泄漏
-        val watchdog = Runnable { releaseOnce() }
-        val handler = Handler(Looper.getMainLooper())
         handler.postDelayed(watchdog, 8_000L)
         try {
             display.capturePixels().accept(
-                { bmp ->
-                    handler.removeCallbacks(watchdog)
-                    if (bmp != null) onBitmap(bmp) else tryScreenshotBuilder(display, ::onBitmap)
-                },
-                { _ ->
-                    handler.removeCallbacks(watchdog)
-                    tryScreenshotBuilder(display, ::onBitmap)
-                }
+                { bmp -> if (bmp != null) onBitmap(bmp) else tryScreenshotBuilder(display, ::onBitmap) },
+                { _ -> tryScreenshotBuilder(display, ::onBitmap) }
             )
         } catch (_: Throwable) {
-            handler.removeCallbacks(watchdog)
             tryScreenshotBuilder(display, ::onBitmap)
         }
     }

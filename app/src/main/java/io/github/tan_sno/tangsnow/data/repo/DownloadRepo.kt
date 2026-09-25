@@ -506,30 +506,58 @@ object DownloadRepo {
     }
 
     /**
+     * [open] / [share] 的共享前置：就绪判定 + 解析可对外交付的 URI 与 MIME。
+     *
+     * 为什么抽出来并放到 IO 线程：[resolvedUri] 对自管 file:// 记录要做 `File.exists()`、
+     * 经 FileProvider 做路径换算，[share] 还要向 DownloadManager 查 MIME —— 都是
+     * 磁盘 / Binder I/O。debug 构建开启了 StrictMode detectAll，主线程 I/O 会被点名，
+     * 故统一在此完成，调用方恢复主线程后再真正唤起外部应用。
+     */
+    private class ExternalTarget(
+        /** 非 null 表示可直接返回的分级结果（未下完 / 已失败 / 文件缺失） */
+        val earlyResult: Result?,
+        val uri: android.net.Uri?,
+        val mime: String?,
+    )
+
+    private fun prepareExternal(context: Context, item: Item, forShare: Boolean): ExternalTarget {
+        readiness(item).takeIf { it != Result.OK }?.let { return ExternalTarget(it, null, null) }
+        val uri = resolvedUri(context, item) ?: return ExternalTarget(Result.MISSING, null, null)
+        val mime = when {
+            // open 沿用原行为：只看记录自带 MIME
+            !forShare -> item.mime ?: "*/*"
+            item.managed -> item.mime ?: "*/*"
+            else -> {
+                val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                runCatching { dm.getMimeTypeForDownloadedFile(item.id) }.getOrNull()
+                    ?: (item.mime ?: "*/*")
+            }
+        }
+        return ExternalTarget(null, uri, mime)
+    }
+
+    /**
      * 打开下载文件。
      * 返回分级结果而非 Boolean：调用方据此给出准确提示（未下完 / 下载失败 / 文件已失效 / 无可用应用），
      * 不再像早期实现那样一律提示"无法打开该文件"而让用户无从判断。
+     *
+     * `suspend`：前置检查在 IO 线程完成，`startActivity` 在调用方（lifecycleScope，主线程）恢复后执行。
      */
-    fun open(context: Context, item: Item): Result {
-        readiness(item).takeIf { it != Result.OK }?.let { return it }
-        val uri = resolvedUri(context, item) ?: return Result.MISSING
-        return viewIntent(context, uri, item.mime ?: "*/*")
+    suspend fun open(context: Context, item: Item): Result {
+        val target = withContext(Dispatchers.IO) { prepareExternal(context, item, forShare = false) }
+        target.earlyResult?.let { return it }
+        val uri = target.uri ?: return Result.MISSING
+        return viewIntent(context, uri, target.mime ?: "*/*")
     }
 
-    /** 分享下载文件；结果分级同 [open] */
-    fun share(context: Context, item: Item): Result {
-        readiness(item).takeIf { it != Result.OK }?.let { return it }
-        val uri = resolvedUri(context, item) ?: return Result.MISSING
-        val mime = if (item.managed) {
-            item.mime ?: "*/*"
-        } else {
-            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            runCatching { dm.getMimeTypeForDownloadedFile(item.id) }.getOrNull()
-                ?: (item.mime ?: "*/*")
-        }
+    /** 分享下载文件；结果分级与线程约定同 [open] */
+    suspend fun share(context: Context, item: Item): Result {
+        val target = withContext(Dispatchers.IO) { prepareExternal(context, item, forShare = true) }
+        target.earlyResult?.let { return it }
+        val uri = target.uri ?: return Result.MISSING
         return runCatching {
             val send = Intent(Intent.ACTION_SEND).apply {
-                type = mime
+                type = target.mime ?: "*/*"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -577,14 +605,21 @@ object DownloadRepo {
             Result.OK
         }.getOrDefault(Result.NO_APP)
 
-    /** 删除下载记录与文件 */
-    fun remove(context: Context, item: Item) {
+    /**
+     * 删除下载记录与文件。
+     *
+     * `suspend` + IO：对系统下载器 / 内容提供器的删除与 `File.delete()` 都是磁盘级操作，
+     * 不能留在主线程（此前由 LibraryActivity 在 lifecycleScope 主线程协程里直接调用，
+     * StrictMode 会点名磁盘写）。
+     */
+    suspend fun remove(context: Context, item: Item) = withContext(Dispatchers.IO) {
         if (!item.managed) {
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             runCatching { dm.remove(item.id) }
-            return
+            return@withContext
         }
-        val uri = runCatching { android.net.Uri.parse(item.localUri) }.getOrNull() ?: return
+        val uri = runCatching { android.net.Uri.parse(item.localUri) }.getOrNull()
+            ?: return@withContext
         when (uri.scheme) {
             "content" -> runCatching { context.contentResolver.delete(uri, null, null) }
             "file" -> runCatching { java.io.File(uri.path.orEmpty()).delete() }

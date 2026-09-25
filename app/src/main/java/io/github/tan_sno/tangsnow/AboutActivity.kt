@@ -4,10 +4,14 @@ import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import io.github.tan_sno.tangsnow.databinding.ActivityAboutBinding
 import io.github.tan_sno.tangsnow.update.UpdateChecker
 import io.github.tan_sno.tangsnow.util.LegalText
 import io.github.tan_sno.tangsnow.util.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 「关于棠雪」：应用信息 + 三个文档入口。
@@ -47,45 +51,64 @@ class AboutActivity : AppCompatActivity() {
         refreshCrashSummary()
     }
 
-    /** 刷新“崩溃报告”行的摘要（日志条数） */
+    /** 刷新“崩溃报告”行的摘要（日志条数）。listFiles 属磁盘 I/O，放 IO 线程（StrictMode 干净） */
     private fun refreshCrashSummary() {
-        val count = io.github.tan_sno.tangsnow.util.CrashLogger.list(this).size
-        binding.txtRowCrashesSub.text = if (count == 0) {
-            getString(R.string.about_crash_summary_empty)
-        } else {
-            getString(R.string.about_crash_summary_format, count)
+        lifecycleScope.launch {
+            val count = withContext(Dispatchers.IO) {
+                io.github.tan_sno.tangsnow.util.CrashLogger.list(this@AboutActivity).size
+            }
+            if (isFinishing || isDestroyed) return@launch
+            binding.txtRowCrashesSub.text = if (count == 0) {
+                getString(R.string.about_crash_summary_empty)
+            } else {
+                getString(R.string.about_crash_summary_format, count)
+            }
         }
     }
 
     /** 崩溃日志文件名 `crash-yyyyMMdd-HHmmss.txt` 的展示格式化；预编译，避免每次都编译正则 */
     private val crashNamePattern = Regex("""^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$""")
 
-    /** 崩溃日志选择（无日志时仅提示） */
+    /** 崩溃日志选择（无日志时仅提示）。文件枚举在 IO 线程完成后回主线程弹窗 */
     private fun showCrashReports() {
-        val files = io.github.tan_sno.tangsnow.util.CrashLogger.list(this)
-        if (files.isEmpty()) {
-            toast(R.string.about_crash_none)
-            return
-        }
-        val names = files.map { f ->
-            // crash-20260908-101530.txt → 2026-09-08 10:15:30（仅展示用，删除仍用原文件）
-            f.name.removePrefix("crash-").removeSuffix(".txt")
-                .replace(crashNamePattern, "$1-$2-$3 $4:$5:$6")
-        }
-        var chosen = 0
-        AlertDialog.Builder(this)
-            .setTitle(R.string.about_crash_title)
-            .setSingleChoiceItems(names.toTypedArray(), 0) { _: android.content.DialogInterface, which: Int -> chosen = which }
-            .setNegativeButton(R.string.dlg_cancel, null)
-            .setPositiveButton(R.string.about_crash_view) { _: android.content.DialogInterface, _: Int ->
-                if (chosen in files.indices) showCrashDetail(files[chosen])
+        lifecycleScope.launch {
+            val files = withContext(Dispatchers.IO) {
+                io.github.tan_sno.tangsnow.util.CrashLogger.list(this@AboutActivity)
             }
-            .show()
+            if (isFinishing || isDestroyed) return@launch
+            if (files.isEmpty()) {
+                toast(R.string.about_crash_none)
+                return@launch
+            }
+            val names = files.map { f ->
+                // crash-20260908-101530.txt → 2026-09-08 10:15:30（仅展示用，删除仍用原文件）
+                f.name.removePrefix("crash-").removeSuffix(".txt")
+                    .replace(crashNamePattern, "$1-$2-$3 $4:$5:$6")
+            }
+            var chosen = 0
+            AlertDialog.Builder(this@AboutActivity)
+                .setTitle(R.string.about_crash_title)
+                .setSingleChoiceItems(names.toTypedArray(), 0) { _: android.content.DialogInterface, which: Int -> chosen = which }
+                .setNegativeButton(R.string.dlg_cancel, null)
+                .setPositiveButton(R.string.about_crash_view) { _: android.content.DialogInterface, _: Int ->
+                    if (chosen in files.indices) showCrashDetail(files[chosen])
+                }
+                .show()
+        }
     }
 
-    /** 查看单条崩溃日志：可分享 / 删除 */
+    /** 查看单条崩溃日志：可分享 / 删除。正文读盘在 IO 线程，回主线程后建窗 */
     private fun showCrashDetail(file: java.io.File) {
-        val text = io.github.tan_sno.tangsnow.util.CrashLogger.content(file).ifBlank { getString(R.string.about_crash_empty_file) }
+        lifecycleScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                io.github.tan_sno.tangsnow.util.CrashLogger.content(file)
+            }
+            if (isFinishing || isDestroyed) return@launch
+            showCrashDetailDialog(file, text.ifBlank { getString(R.string.about_crash_empty_file) })
+        }
+    }
+
+    private fun showCrashDetailDialog(file: java.io.File, text: String) {
         val tv = android.widget.TextView(this).apply {
             this.text = text
             textSize = 11f
@@ -115,8 +138,11 @@ class AboutActivity : AppCompatActivity() {
             .setTitle(file.name)
             .setView(box)
             .setNegativeButton(R.string.about_crash_delete) { _: android.content.DialogInterface, _: Int ->
-                file.delete()
-                refreshCrashSummary()
+                // 文件删除属磁盘写，放 IO 线程；完成后异步刷新计数
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { runCatching { file.delete() } }
+                    refreshCrashSummary()
+                }
             }
             .setPositiveButton(R.string.about_crash_share) { _: android.content.DialogInterface, _: Int ->
                 confirmShareCrash(file)
@@ -142,18 +168,23 @@ class AboutActivity : AppCompatActivity() {
             .show()
     }
 
-    /** 通过系统分享面板把崩溃日志内容发给别人（如开发者） */
+    /** 通过系统分享面板把崩溃日志内容发给别人（如开发者）。读盘在 IO 线程，发送回主线程 */
     private fun shareCrashFile(file: java.io.File) {
-        val body = io.github.tan_sno.tangsnow.util.CrashLogger.content(file)
-        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(android.content.Intent.EXTRA_SUBJECT, file.name)
-            putExtra(android.content.Intent.EXTRA_TEXT, body.ifBlank { getString(R.string.about_crash_empty_file) })
-        }
-        runCatching {
-            startActivity(android.content.Intent.createChooser(send, getString(R.string.about_crash_share_via)))
-        }.onFailure {
-            toast(R.string.toast_share_empty)
+        lifecycleScope.launch {
+            val body = withContext(Dispatchers.IO) {
+                io.github.tan_sno.tangsnow.util.CrashLogger.content(file)
+            }
+            if (isFinishing || isDestroyed) return@launch
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, file.name)
+                putExtra(android.content.Intent.EXTRA_TEXT, body.ifBlank { getString(R.string.about_crash_empty_file) })
+            }
+            runCatching {
+                startActivity(android.content.Intent.createChooser(send, getString(R.string.about_crash_share_via)))
+            }.onFailure {
+                toast(R.string.toast_share_empty)
+            }
         }
     }
 
