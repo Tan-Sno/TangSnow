@@ -187,6 +187,20 @@ class PreferenceStore(context: Context) {
         }
 
     /**
+     * 退出浏览器时自动清除浏览数据（默认关闭）。
+     *
+     * 生效范围 = 「清除浏览数据」的 Cookie与站点数据 + 缓存 + 历史 + 标签页会话快照，
+     * **不含**书签与下载记录（与清空语义一致：书签永不纳入，下载文件是用户资产）。
+     * 开启后本设置项与「恢复上次的标签页」事实上互斥 —— 退出即不留痕是它的本意。
+     * 复用既有清除用例（ClearDataUseCase），不新增任何数据流或对外请求。
+     */
+    var exitClearBrowsingData: Boolean
+        get() = prefs.getBoolean(KEY_EXIT_CLEAR, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_EXIT_CLEAR, value).apply()
+        }
+
+    /**
      * 已接受的隐私政策/用户协议版本（见 [LegalDocs.POLICY_VERSION]）。
      * 小于当前版本说明需要重新征得同意（首次安装或政策更新后）。
      */
@@ -394,6 +408,7 @@ class PreferenceStore(context: Context) {
         const val KEY_JAVASCRIPT = "javascript"
         const val KEY_PRIVATE_MODE = "private_mode"
         const val KEY_SECURE_SCREEN = "secure_screen"
+        const val KEY_EXIT_CLEAR = "exit_clear_browsing_data"
         const val KEY_SESSION_RESTORE = "session_restore_enabled"
         const val KEY_TOOLBAR_BOTTOM = "toolbar_bottom"
         /** 老版本的单布尔开关键：仅用于迁移到新模式（tracking_mode 不存在时读取） */

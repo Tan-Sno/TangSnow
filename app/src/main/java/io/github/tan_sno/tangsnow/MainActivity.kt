@@ -34,6 +34,7 @@ import io.github.tan_sno.tangsnow.browser.BrowserSessionManager
 import io.github.tan_sno.tangsnow.browser.Tab
 import io.github.tan_sno.tangsnow.browser.TabEvents
 import io.github.tan_sno.tangsnow.data.repo.BookmarkRepo
+import io.github.tan_sno.tangsnow.data.ClearDataUseCase
 import io.github.tan_sno.tangsnow.data.ConsentGate
 import io.github.tan_sno.tangsnow.data.repo.DownloadRepo
 import io.github.tan_sno.tangsnow.data.EngineIcons
@@ -621,6 +622,20 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         if (!url.isNullOrBlank()) {
             val newTab = intent?.getBooleanExtra(BrowserOpener.EXTRA_OPEN_NEW_TAB, false) == true
             if (newTab) navigateInNewTab(url) else navigateToUrl(url)
+            return
+        }
+        // 分享入口（ACTION_SEND text/plain，见 Manifest）：其它应用「分享」文本进来时，
+        // 提取其中的第一个 http(s) 链接开新标签。与 VIEW 走同一套 scheme 白名单的下游
+        // 校验（navigateInNewTab → loadInTab 只管加载，scheme 闸门在 externalUrl 同源
+        // 的 UrlUtils/内核导航策略里），纯文本分享（无链接）给明确提示、不导航。
+        if (intent?.action == Intent.ACTION_SEND) {
+            val shared = intent.getStringExtra(Intent.EXTRA_TEXT)
+                ?.let { UrlUtils.extractUrlFromText(it) }
+            if (shared != null) {
+                navigateInNewTab(shared)
+            } else {
+                toast(R.string.share_no_link_found)
+            }
             return
         }
         val libTab = intent?.getIntExtra(BrowserOpener.EXTRA_LIBRARY_TAB, -1) ?: -1
@@ -1330,7 +1345,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private fun confirmExitByDoubleBack() {
         val now = SystemClock.elapsedRealtime()
         if (now - lastBackPressAt < 2000L) {
-            finish()
+            performExit()
         } else {
             lastBackPressAt = now
             toast(R.string.toast_exit_again)
@@ -2106,12 +2121,59 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             .setTitle(R.string.dlg_exit_title)
             .setMessage(R.string.dlg_exit_message)
             .setNegativeButton(R.string.dlg_cancel, null)
-            .setPositiveButton(R.string.dlg_ok) { _, _ ->
-                detachActiveSession()
-                sessionManager.shutdown()
-                finishAffinity()
-            }
+            .setPositiveButton(R.string.dlg_ok) { _, _ -> performExit() }
             .show()
+    }
+
+    /** 退出流程进行中标记：异步清除 → 关停 → finishAffinity 期间屏蔽二次触发 */
+    private var exiting = false
+
+    /**
+     * 统一的退出收口（[confirmExit] 与 [confirmExitByDoubleBack] 两条路径共用，
+     * 避免「菜单退出清了数据、双击退出没清」这类分叉）：
+     *  - 开关关闭：原语义直接退出（会话快照由 onPause 正常落盘）；
+     *  - 开关开启：「退出即不留痕」——复用 [ClearDataUseCase] 清除 Cookie与站点数据、
+     *    缓存、历史与标签页会话快照后退出。清除结果**如实**反馈：失败/部分失败照样
+     *    退出，但绝不说「已清除」（本仓库禁假反馈）。markPurged 置位后，紧随其后的
+     *    onPause → saveState 会跳过，刚清掉的快照不会被写回。
+     * 退出动作不受清除结果影响：清除只负责如实报告，退出必然执行。
+     */
+    private fun performExit() {
+        if (exiting) return
+        exiting = true
+        if (!prefs.exitClearBrowsingData) {
+            detachActiveSession()
+            sessionManager.shutdown()
+            finishAffinity()
+            return
+        }
+        lifecycleScope.launch {
+            val result: ClearDataUseCase.Result? = try {
+                ClearDataUseCase.clear(
+                    applicationContext,
+                    ClearDataUseCase.Options(
+                        cookiesAndSiteData = true,
+                        cache = true,
+                        history = true,
+                        sessionSnapshot = true,
+                    ),
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+            toast(
+                when {
+                    result == null || !result.kernelOk -> R.string.toast_data_clear_failed
+                    result.localFailedCount > 0 -> R.string.toast_data_partially_cleared
+                    else -> R.string.toast_data_cleared
+                }
+            )
+            detachActiveSession()
+            sessionManager.shutdown()
+            finishAffinity()
+        }
     }
 
     // ------------------------------------------------------------- 工具

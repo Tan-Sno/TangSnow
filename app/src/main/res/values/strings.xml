@@ -29,6 +29,7 @@
     <string name="scan_no_handler">没有能打开该链接的应用</string>
     <string name="scan_copy">复制内容</string>
     <string name="scan_copied">已复制到剪贴板</string>
+    <string name="share_no_link_found">分享的内容里没有可打开的链接</string>
     <!-- 剪贴板变化提示：系统不提供来源信息，故**不断言“网页写入”**（分屏/悬浮窗下别的应用复制也会触发）。
          隐私政策已披露本监听行为，且仅在应用前台且持有焦点时、每个前台周期提示一次。 -->
     <string name="clipboard_external_write">剪贴板内容有更新</string>
@@ -319,6 +320,8 @@
     <string name="toast_privacy_restart">该隐私设置将在棠雪下次启动时生效</string>
     <string name="pref_clear_data_title">清除浏览数据</string>
     <string name="pref_clear_data_summary">清除 Cookie、缓存与站点数据</string>
+    <string name="pref_exit_clear_title">退出时自动清除浏览数据</string>
+    <string name="pref_exit_clear_summary">退出棠雪时自动清除 Cookie 与站点数据、缓存、历史与标签页快照，书签与下载不受影响；开启后「恢复上次的标签页」不再生效</string>
 
     <string name="pref_version_title">版本</string>
     <string name="pref_about_title">关于棠雪</string>
@@ -431,6 +434,7 @@
     <string name="user_agreement_text">1. 服务性质\n本应用是一款本地网页辅助工具，提供网页渲染、扩展（来自 Mozilla 官方签名源 AMO）、二维码识别（含相机扫码与从相册选图）、将本地图片设为主页背景、生成页面 PDF、桌面版切换、标签页会话恢复（进程被系统回收后恢复上次打开的标签页，仅本地保存）、资料库（历史/书签/下载记录的管理与一键清空；清空下载记录不删除文件）、连接安全状态提示（完全在本机判断）与可选的「禁止截屏」等能力；不提供、不聚合、不审核任何网页内容；网页产生的缓存等浏览数据仅保存在设备本地（见隐私政策第 1、7 条）。\n\n2. 同意机制与变更\n首次安装或本协议/隐私政策更新时，应用会在使用前展示协议摘要，您需点击「同意并继续」方可使用；点击「不同意」将立即退出。协议如有变化将以应用内最新版本为准，并在下次启动时重新征得同意。\n\n3. 扩展功能说明\n扩展均来自 Mozilla 官方渠道并由 Mozilla 签名，本应用不提供、不引导安装任何第三方镜像或未签名扩展；部分扩展可能因官方地区合规限制而无法安装。\n您也可以从设备本地导入 .xpi 文件安装：文件仍须携带 Mozilla 官方签名，未签名或签名不符的文件会被内核拒绝；本地导入仅在本机校验与安装，不绕过任何地区限制，也不视为本应用对第三方分发渠道的认可。\n部分广告与内容过滤类扩展（如广告拦截器）在不同司法辖区的可获取性与法律评价存在差异，其发行方可能为遵守当地法律法规或生效裁判而在特定地区限制提供；此类工具是否安装与使用，由您自行了解并判断，并自行承担相应责任。本应用不内置、也不推荐任何广告拦截类扩展：精选扩展目录只收录隐私保护与工具类扩展。\n\n4. 搜索引擎与内容合规\n默认搜索为国内可访问的持证搜索服务。境外搜索引擎、自定义搜索地址仅由您主动选择使用，请确保在自身所在地区合规的网络与法律环境下使用，并自行承担由此产生的责任。应用不提供任何规避网络审查的手段。\n\n5. 设为默认浏览器\n您可在「设置 → 高级」中主动申请将棠雪设为系统默认浏览器；本应用绝不未经用户操作自行修改系统默认应用。\n\n6. 用户责任\n您应遵守中华人民共和国法律法规，不得使用本应用访问、传播、存储违法内容（包括但不限于危害国家安全、色情低俗、侵犯他人知识产权与个人信息的内容）。下载的文件请自行确认来源与安全性。\n\n7. 未成年人保护\n未成年人应在监护人指导下使用本应用。\n\n8. 侵权与举报\n网页与扩展内容分别由其站点与扩展方提供；如权利受到侵害，请优先联系对应方处理。就本应用自身问题，可通过本项目 GitHub 仓库提交的 Issue 与我们联系，收到有效通知后将及时处理。\n\n9. 免责条款\n因第三方网站内容、第三方扩展行为、用户自行下载文件或自行启用境外/自定义搜索引起的任何争议或损失，与本应用开发者无关。\n\n10. 开源许可\n本应用使用 Mozilla GeckoView（MPL 2.0）、OkHttp 与 ZXing（Apache License 2.0）等开源组件，相关声明与许可链接见「开源声明」。</string>
     <string name="about_version_format">v%1$s</string>
     <string name="tabs_count_format">%1$d</string>
+    <string name="tab_private_badge">无痕</string>
     <string name="arrow_open">▾</string>
     <string name="arrow_closed">▸</string>
     <string name="extension_install_interrupted">上次的安装被中断，可重新获取重试</string>
