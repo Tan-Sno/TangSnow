@@ -142,10 +142,14 @@ class ExtensionsActivity : AppCompatActivity() {
         runCatching { installCoordinatorRef?.cancelAll() }
         importingFile = false
         urlInstalling = false
-        runCatching {
-            File(cacheDir, "exts").listFiles { f -> f.name.startsWith("import-") }
-                ?.forEach { it.delete() }
-        }
+        // lifecycleScope 在 onDestroy 时已取消，清理挪到一次性后台线程；
+        // 只删缓存里的导入残包，失败无碍（下次导入前还会再清一遍）
+        Thread({
+            runCatching {
+                File(cacheDir, "exts").listFiles { f -> f.name.startsWith("import-") }
+                    ?.forEach { it.delete() }
+            }
+        }, "exts-cleanup").apply { isDaemon = true }.start()
         // 展示中的安装/权限确认框必须先关闭并应答：否则页面侧 GeckoResult 永不完成
         //（安装流程永久挂起），且对话框会作为泄漏窗口留在已销毁的 Activity 上。
         // 只关闭本 Activity 持有的弹窗 —— MainActivity 销毁时不得误取消本页的活动弹窗。

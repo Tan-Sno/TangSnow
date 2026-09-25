@@ -1527,6 +1527,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 兜底取 URL 末段并自动剥离查询串 / 百分号解码 / 非法字符清洗
         val fileName = DownloadRepo.parseFileName(disposition, response.uri)
         val url = response.uri
+        // Content-Length 明确超过阈值的大文件：直接交系统下载器（阈值依据见
+        // DownloadRepo.BIG_FILE_ROUTE_BYTES）。长度未知的响应不在此列 —— 那类下载
+        // （登录态附件）依赖本次响应里的 Cookie 上下文，仍优先进程内流式。
+        val contentLength = response.headers.entries
+            .firstOrNull { it.key.equals("content-length", ignoreCase = true) }
+            ?.value?.trim()?.toLongOrNull()
+        val routeToDownloadManager =
+            contentLength != null && contentLength > DownloadRepo.BIG_FILE_ROUTE_BYTES
         // ⚠️ 可执行 / 安装类文件：**无条件**先确认，且刻意不提供「不再询问」选项。
         // 理由：这类文件运行后会改变设备状态（安装应用、执行脚本），一句永久开关
         // 不应把它的确认一并免掉；而普通文档仍尊重用户的「不再询问」偏好。
@@ -1536,14 +1544,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 .setMessage(getString(R.string.dl_executable_message, fileName))
                 .setNegativeButton(R.string.dlg_cancel, null)
                 .setPositiveButton(R.string.dl_executable_continue) { _, _ ->
-                    startDownload(response, url, fileName)
+                    startDownload(response, url, fileName, routeToDownloadManager)
                 }
                 .show()
             return
         }
         // 用户已关掉「下载前询问」：直接开始
         if (!prefs.askBeforeDownload) {
-            startDownload(response, url, fileName)
+            startDownload(response, url, fileName, routeToDownloadManager)
             return
         }
         // 下载先征询用户，避免“页面偷偷开始下载”的体验与合规风险；
@@ -1558,20 +1566,29 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.download_confirm_ok) { _, _ ->
                 if (noAsk[0]) prefs.askBeforeDownload = false
-                startDownload(response, url, fileName)
+                startDownload(response, url, fileName, routeToDownloadManager)
             }
             .show()
     }
 
-    /** 真正执行下载：优先消费内核响应流，失败退回系统下载器 */
-    private fun startDownload(response: WebResponse, url: String, fileName: String) {
+    /**
+     * 真正执行下载：小文件优先消费内核响应流，失败退回系统下载器；
+     * [forceDownloadManager]（大文件路由，见 [DownloadRepo.BIG_FILE_ROUTE_BYTES]）时跳过流式。
+     */
+    private fun startDownload(
+        response: WebResponse,
+        url: String,
+        fileName: String,
+        forceDownloadManager: Boolean = false,
+    ) {
         lifecycleScope.launch {
             // 优先直接消费内核响应流：Cookie/Referer/登录态都在这次响应里，
             // 系统下载器二次 GET 拿不到这些上下文（登录态附件会下到登录页）。
             toast(R.string.toast_start_download)
-            val ok = DownloadRepo.saveFromStream(this@MainActivity, response, fileName)
-            if (!ok) {
-                // 无响应体等场景退回系统下载器（附 Referer/UA，尽力而为）
+            val streamed = !forceDownloadManager &&
+                DownloadRepo.saveFromStream(this@MainActivity, response, fileName)
+            if (!streamed) {
+                // 无响应体 / 大文件路由等场景交系统下载器（附 Referer/UA，尽力而为）
                 DownloadRepo.launch(this@MainActivity, url, fileName, referer = url)
             }
         }
