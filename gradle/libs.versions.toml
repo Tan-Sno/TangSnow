@@ -12,6 +12,9 @@ material = "1.14.0"
 activityKtx = "1.13.0"
 constraintlayout = "2.2.2"
 okhttp = "5.5.0"
+# 仅测试用：android.jar 里的 org.json 在 JVM 单元测试中是抛 Stub! 异常的桩，
+# 用 Maven 的真实实现覆盖 test classpath，SessionStore 等纯 JSON 逻辑才能被单测。
+json = "20260814"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -28,6 +31,7 @@ zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCo
 # 引用处以 isTransitive = false 引入，避免它再拉一份 zxing-core 与上面的版本打架。
 zxing-embed = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbed" }
 geckoview = { group = "org.mozilla.geckoview", name = "geckoview", version.ref = "geckoView" }
+json = { group = "org.json", name = "json", version.ref = "json" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 

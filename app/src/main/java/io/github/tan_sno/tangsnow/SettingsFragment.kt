@@ -451,17 +451,19 @@ class SettingsFragment : PreferenceFragmentCompat() {
         val context = requireContext()
         val current = UpdateChecker.current(context)
 
-        // 积极按钮（下载）在 Builder 阶段就声明，结果回来后只做显示/隐藏 ——
-        // 避免 show() 之后再 setButton 可能加不上按钮的问题。
+        // 积极按钮（下载）与中性按钮（打开发布页）在 Builder 阶段就声明，结果回来后只做
+        // 显示/隐藏 —— 避免 show() 之后再 setButton 可能加不上按钮的问题。
         val dialog = AlertDialog.Builder(context)
             .setTitle(R.string.update_dialog_title)
             .setMessage(getString(R.string.update_checking))
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.update_download, null)
+            .setNeutralButton(R.string.update_open_releases, null)
             .create()
         updateDialog = dialog
         dialog.show()
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isVisible = false
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.isVisible = false
 
         lifecycleScope.launch {
             // 沿用本文件既有风格，用全限定名引用 Build（文件里其它几处也这么写）
@@ -474,8 +476,19 @@ class SettingsFragment : PreferenceFragmentCompat() {
             if (!dialog.isShowing) return@launch
 
             when {
-                release == null ->
+                release == null -> {
                     dialog.setMessage(getString(R.string.update_check_failed))
+                    // api.github.com 在部分网络下不可达是常态而非异常：给一个不依赖该接口的
+                    // 兜底出口 —— 发布页是普通网页，换条网络路径总能到。如实区分：
+                    // 「检查失败」是结果，「打开发布页」是出路，不能把失败说成已是最新。
+                    dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.let { btn ->
+                        btn.isVisible = true
+                        btn.setOnClickListener {
+                            openReleasesPage()
+                            dialog.dismiss()
+                        }
+                    }
+                }
 
                 // 读不到本机版本时**不能**继续比对：`isNewer(远端, "")` 会返回 false，
                 // 于是界面会说「已是最新」—— 那是**假反馈**（本仓库明令禁止）。
@@ -522,6 +535,16 @@ class SettingsFragment : PreferenceFragmentCompat() {
      * 若没有与本机 ABI 匹配的包（[UpdateChecker.Release.apkUrl] 为 null），
      * 退回到打开发布页让用户自己选 —— 而不是给一个装不上的链接。
      */
+    /** 打开 GitHub 发布页（检查更新失败时的兜底出口）；线程/生命周期约定同 [openUpdate] */
+    private fun openReleasesPage() {
+        val ctx = context ?: return
+        runCatching {
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(UpdateChecker.RELEASES_URL)))
+        }.onFailure {
+            ctx.toast(R.string.update_failed)
+        }
+    }
+
     private fun openUpdate(release: UpdateChecker.Release) {
         // 这里用可空的 `context` 而不是 `requireContext()`：本函数**已经在失败分支上**了
         // （没拿到匹配的包 / 用户点了下载），若此刻 Fragment 已 detach，

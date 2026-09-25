@@ -208,7 +208,9 @@ object SessionStore {
         }
     }
 
-    private fun buildJson(snapshot: Snapshot): String {
+    // internal 供 JVM 单元测试直接覆盖（SessionStoreJsonTest）：这两个函数承载
+    // 「清除后快照不得复活」与进程回收恢复的正确性，边界必须被测试钉住。
+    internal fun buildJson(snapshot: Snapshot): String {
         val arr = JSONArray()
         snapshot.tabs.forEach { tab ->
             arr.put(
@@ -224,7 +226,8 @@ object SessionStore {
             .toString()
     }
 
-    private fun parse(text: String): Snapshot? {
+    /** 损坏输入会抛 JSONException（由调用方 runCatching 兜成 null），见 [read]。 */
+    internal fun parse(text: String): Snapshot? {
         val root = JSONObject(text)
         val active = root.optInt("active", 0)
         val arr = root.optJSONArray("tabs") ?: return null

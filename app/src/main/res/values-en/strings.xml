@@ -237,6 +237,7 @@
     <string name="update_download">Download update</string>
     <string name="update_failed">Cannot open the download link, please retry later</string>
     <string name="update_check_failed">Update check failed, please retry later (it may just be a network problem)</string>
+    <string name="update_open_releases">Open releases page</string>
     <string name="update_version_unreadable">Could not read the installed version, so no comparison is possible. You can check it under About TangSnow</string>
     <string name="pref_version_unknown">Unknown</string>
 
@@ -517,5 +518,5 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
     <string name="toast_secure_screen_applied">Saved — takes effect immediately in browsing screens</string>
 
     <!-- ==== Notice before sharing a crash log (P3) ==== -->
-    <string name="about_crash_share_notice">This file may contain the domain of the site you most recently visited (domain only, never the full URL). Please review before sharing.</string>
+    <string name="about_crash_share_notice">This file may contain the domain of the site you most recently visited (domain only, never the full URL). Please review before sharing. Stack traces from release builds are obfuscated and need the matching mapping.txt to decode; please include the app version when sharing.</string>
 </resources>

@@ -278,4 +278,7 @@ dependencies {
     // 仅 JVM 单元测试（app/src/test）。仪器测试件（espresso / androidx.test）已移除：
     // 项目没有 androidTest 源码，留着它们属于空转依赖（见 defaultConfig 注释）。
     testImplementation(libs.junit)
+    // android.jar 的 org.json 在 JVM 测试里是抛 Stub! 的桩；用 Maven 真实实现覆盖
+    // test classpath（仅测试可见，不进产物），SessionStore 的 JSON 往返才能被单测。
+    testImplementation(libs.json)
 }
