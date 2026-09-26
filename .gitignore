@@ -61,4 +61,6 @@ signing/
 *.apk
 *.aab
 *.hprof
+# R8 输出映射：泄露混淆名↔源名的对应关系，且体积巨大，不入库
+mapping.txt
 

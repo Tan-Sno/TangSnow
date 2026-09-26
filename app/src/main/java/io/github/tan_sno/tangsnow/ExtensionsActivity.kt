@@ -143,10 +143,12 @@ class ExtensionsActivity : AppCompatActivity() {
         importingFile = false
         urlInstalling = false
         // lifecycleScope 在 onDestroy 时已取消，清理挪到一次性后台线程；
+        // 先在主线程取好 File 再进线程 —— 避免后台闭包短暂持有已销毁的 Activity。
         // 只删缓存里的导入残包，失败无碍（下次导入前还会再清一遍）
+        val extsCacheDir = File(cacheDir, "exts")
         Thread({
             runCatching {
-                File(cacheDir, "exts").listFiles { f -> f.name.startsWith("import-") }
+                extsCacheDir.listFiles { f -> f.name.startsWith("import-") }
                     ?.forEach { it.delete() }
             }
         }, "exts-cleanup").apply { isDaemon = true }.start()

@@ -217,11 +217,13 @@ android {
         //     冷启动读会话快照若预读未完成，改为有界等待，不再在主线程重复读盘 + 解析；
         //  ⑥ lint 开启 `checkAllWarnings`（此前默认口径下不可见的 225 条 warning 已逐条处置，
         //     全警告口径下仍为 `No issues found`）。
-        // 2.1.4：**披露准确性 + 发布链路加固**。政策升至 21 —— §4 的名单主机此前写的
-        //   是一个本应用已禁用、并不产生流量的地址（真实主机是 Mozilla Remote Settings）；
-        //   「请勿跟踪（DNT）」在 GeckoView 155 无 API 可用、属无法兑现的承诺，已移除；
-        //   AMO 的「图标」用途不成立（图标全部内嵌 APK）。全量用户下次启动会重新同意，
-        //   这是预期的。无新增对外端点与权限。
+        // 2.1.4：**披露纠错 + 发布链路加固 + 局域网权限**。政策升至 **22** ——
+        //   ① 名单主机纠错：§4 原写的 shavar.services.mozilla.com 只服务已禁用的
+        //      safebrowsing gethash（omni.ja 实测），真实主机是 Mozilla Remote Settings；
+        //   ② DNT 承诺移除（GeckoView 155 无 API 可用，无法兑现）；
+        //   ③ AMO「图标」用途移除（图标全部内嵌 APK）；
+        //   ④ 新增 ACCESS_LOCAL_NETWORK（Android 17 起访问局域网必需，按需申请）。
+        //   全量用户下次启动会重新同意，这是预期的。无新增对外端点。
         //  ① 发布链路：`gradlew` 补可执行位（非 Windows 环境 `./gradlew` 会 Permission denied）；
         //     签名守卫补**执行期安全网**，堵住 `build` / `assemble` 绕过配置期检查仍去打包
         //     签名的盲区；未登记 ABI 改配置期硬失败；`verify_release.py` 补 minSdk/targetSdk
