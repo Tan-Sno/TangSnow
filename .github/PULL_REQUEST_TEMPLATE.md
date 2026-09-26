@@ -1,23 +1,25 @@
-## 这个 PR 做了什么
+## What this PR does
 
-<!-- 一句话说清解决的问题。关联的 Issue 请写「Closes #123」。 -->
+<!-- One sentence on the problem it solves. Reference an issue with "Closes #123" if there is one. -->
 
-## 为什么这样改
+## Why this way
 
-<!-- 说明取舍与理由。若试过其他方案，简述为什么没采用。 -->
+<!-- Explain the trade-offs and the reasoning. If you tried other approaches, briefly say why they were dropped. -->
 
-## 如何验证
+## How it was verified
 
-<!-- 复现/验证步骤，或说明为什么难以手工验证。涉及界面改动请附截图。 -->
+<!-- Reproduction/verification steps, or why manual verification is impractical. Attach screenshots for UI changes. -->
 
-## 自查清单
+Feel free to write in Chinese if that is easier for you.
 
-- [ ] 一个 PR 只解决一个问题
-- [ ] `./gradlew :app:assembleDebug` 通过
-- [ ] `./gradlew :app:lintDebug` 通过，且无新增问题
-- [ ] `./gradlew :app:testDebugUnitTest` 通过
-- [ ] 用户可见文案已同时维护中文（`values/`）与英文（`values-en/`），键集合一致
-- [ ] 未引入遥测、统计或广告类依赖
-- [ ] 若涉及新增联网行为或权限，已在描述中说明用途
-- [ ] 未直接编辑 `docs/PRIVACY.md` 与 `docs/TERMS.md`（这两份由脚本从 `strings.xml` 导出）
-- [ ] 未提交任何凭据或本机专属内容（`keystore.properties`、签名文件、口令、绝对路径）
+## Checklist
+
+- [ ] One PR solves one problem
+- [ ] `./gradlew :app:assembleDebug` passes
+- [ ] `./gradlew :app:lintDebug` passes with no new issues
+- [ ] `./gradlew :app:testDebugUnitTest` passes
+- [ ] User-visible strings are maintained in both Chinese (`values/`) and English (`values-en/`), with matching key sets
+- [ ] No telemetry, analytics or advertising dependency was introduced
+- [ ] Any new network call or permission is explained in the description
+- [ ] `docs/PRIVACY.md` and `docs/TERMS.md` were not edited directly (both are exported from `strings.xml` by a script)
+- [ ] No credentials or machine-specific content was committed (`keystore.properties`, signing files, passwords, absolute paths)
