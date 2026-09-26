@@ -251,4 +251,18 @@ class UrlUtilsTest {
         assertFalse(UrlUtils.isLocalNetworkAddress("http://[2001:4860:4860::8888]/"))
         assertFalse(UrlUtils.isLocalNetworkAddress("http://[::1]/"))
     }
+
+    @Test
+    fun `非标准点分十进制字面量不判局域网`() {
+        // 内核不认前导零/带符号的 IPv4 字面量（会走 DNS）——按它们弹权限框纯属误扰，
+        // 故 isLocalIpv4 必须严格点分十进制（审查 L4）
+        for (url in listOf(
+            "http://010.0.0.1",     // 前导零
+            "http://+10.0.0.1",     // 带符号
+            "http://192.168.01.1",  // 段内前导零
+            "http://1.2.3.999",     // 段超界
+        )) {
+            assertFalse("不应判为局域网：$url", UrlUtils.isLocalNetworkAddress(url))
+        }
+    }
 }

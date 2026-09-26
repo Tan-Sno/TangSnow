@@ -344,17 +344,25 @@ class LibraryActivity : AppCompatActivity() {
                 val uri = resolver.insert(
                     android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
                 ) ?: return false
-                val written = resolver.openOutputStream(uri)?.use { out ->
-                    out.write(html.toByteArray(Charsets.UTF_8))
-                } != null
+                // 写流与「IS_PENDING 清零 update」整体入 try：update 抛异常也清占位行
+                val written = try {
+                    resolver.openOutputStream(uri)?.use { out ->
+                        out.write(html.toByteArray(Charsets.UTF_8))
+                    }
+                    values.clear()
+                    values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+                    true
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    runCatching { resolver.delete(uri, null, null) }
+                    throw e
+                } catch (_: Exception) {
+                    false
+                }
                 if (!written) {
-                    // 失败时清掉占位行，避免下载目录留下 0 字节幽灵文件
                     runCatching { resolver.delete(uri, null, null) }
                     return false
                 }
-                values.clear()
-                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
-                resolver.update(uri, values, null, null)
                 true
             } else {
                 // API 26-28：无存储权限，写应用专属下载目录（文件管理器仍可见）
@@ -395,20 +403,26 @@ class LibraryActivity : AppCompatActivity() {
         }
     }
 
-    /** 读入导入文件全文（UTF-8），超 [BookmarkHtml.MAX_IMPORT_CHARS] 视为无效返回 null */
+    /**
+     * 读入导入文件全文（UTF-8）。
+     * 超过 [BookmarkHtml.MAX_IMPORT_CHARS] 视为无效返回 **null**（由调用方按
+     * 「导入失败」提示）—— 注意 `return@use` 只能退出内层 `reader.use`，
+     * 故这里用 over 标志穿透两层 use，而不是带标签 return。
+     */
     private fun readImportText(uri: android.net.Uri): String? = try {
         contentResolver.openInputStream(uri)?.use { ins ->
             val buf = StringBuilder()
             val chunk = CharArray(8192)
+            var overLimit = false
             java.io.InputStreamReader(ins, Charsets.UTF_8).use { reader ->
-                while (true) {
+                while (!overLimit) {
                     val n = reader.read(chunk)
                     if (n <= 0) break
                     buf.append(chunk, 0, n)
-                    if (buf.length > BookmarkHtml.MAX_IMPORT_CHARS) return@use null
+                    if (buf.length > BookmarkHtml.MAX_IMPORT_CHARS) overLimit = true
                 }
             }
-            buf.toString()
+            if (overLimit) null else buf.toString()
         }
     } catch (_: Exception) {
         null
