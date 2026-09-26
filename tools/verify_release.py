@@ -37,6 +37,15 @@ import shutil
 import subprocess
 import sys
 
+# Windows 控制台默认 GBK/CP936 时，✅/❌/⚠️ 等字符会抛 UnicodeEncodeError，
+# 让发布校验本身在打印第一行时就崩掉（部分机器实测）。统一把输出流重配为
+# UTF-8（无法解码的字符用 replace 兜底）；极老 Python 无 reconfigure 时静默降级。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
+
 # ---------------------------------------------------------------------------
 # 期望值 —— 这些是本项目「对外已披露」的事实，改动必须是有意的
 # ---------------------------------------------------------------------------
@@ -363,7 +372,7 @@ def main():
 
         # ① 工作区
         check_git_clean(root)
-        say("  ✅ ① 工作区干净 —— 产物可对应到确切提交")
+        say("  ✅ ① 工作区干净（此刻无未提交改动；与 HEAD 的对应关系见下方 ⑥）")
 
         # 可追溯性（只打印，不拦截）：本仓库流程是「提交 → 构建 → verify → push →
         # 打 tag」，verify 时刻 HEAD 本来就领先远端 —— 检查「是否已推送」只会误伤
