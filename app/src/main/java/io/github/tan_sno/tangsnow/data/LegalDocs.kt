@@ -75,8 +75,15 @@ object LegalDocs {
      *  ③ §4 与摘要中 AMO 的网络用途去掉「图标」—— 扩展/引擎图标全部内嵌于 APK，
      *     不构成网络访问。
      *  ④ 用户协议正文补更新日期（docs/TERMS.md 头部「见正文」指针由此落到实处）。
+     *
+     *  21 → 22（2026-09-26，新增权限披露）：声明 ACCESS_LOCAL_NETWORK。
+     *  Android 17（API 37）起，targetSdk ≥ 37 的应用访问局域网必须持有该运行时权限，
+     *  否则连接被内核直接拦掉（TCP 超时 / UDP 报 EPERM），连渲染内核也无法绕过 ——
+     *  表现为浏览器打不开路由器 / NAS / 打印机的管理页，且没有任何提示。
+     *  应用仅在用户要打开局域网地址时按需申请（MainActivity.needsLocalNetworkGrant）。
+     *  政策 §2 权限清单与同意页摘要同步补句。
      */
-    const val POLICY_VERSION = 21
+    const val POLICY_VERSION = 22
 
     // 注意：以下资源引用保持「非 const」，避免 Kotlin IR 在编译期常量折叠时
     // 因 R 常量跨模块求值触发 InterpreterMethodNotFoundError 内部错误。

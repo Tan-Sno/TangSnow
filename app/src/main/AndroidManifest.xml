@@ -4,6 +4,12 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Android 17（API 37）起，访问局域网设备（路由器 / NAS / 打印机的管理页）需要该权限，
+         否则连接会被内核直接拦掉且**没有任何提示**（TCP 超时 / UDP 报 EPERM）——
+         连渲染内核也无法绕过，因为限制在网络栈深处。
+         仅在用户要打开局域网地址时按需申请，不在启动时索取
+         （见 MainActivity.needsLocalNetworkGrant / UrlUtils.isLocalNetworkAddress）。 -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- 相机仅在扫码时按需申请；无摄像头设备（含部分 ChromeOS）可正常安装 -->
     <uses-feature
         android:name="android.hardware.camera"
