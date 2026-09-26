@@ -126,7 +126,7 @@ class SuggestionsController(private val activity: MainActivity) {
         val panelView = panel ?: return
         listView.removeAllViews()
         val subtitleColor = activity.getColor(R.color.accent_muted)
-        val textColor = activity.getColor(R.color.accent)
+        val textColor = activity.getColor(R.color.accent_text)
         matches.forEach { (title, url) ->
             val row = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
@@ -165,7 +165,7 @@ class SuggestionsController(private val activity: MainActivity) {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(activity.dp(18), activity.dp(14), activity.dp(18), activity.dp(14))
-            setTextColor(activity.getColor(R.color.accent))
+            setTextColor(activity.getColor(R.color.accent_text))
             textSize = 15f
             setOnClickListener {
                 hide()

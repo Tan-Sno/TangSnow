@@ -244,7 +244,7 @@
                 android:layout_marginTop="12dp"
                 android:gravity="center"
                 android:text="@string/shortcut_add"
-                android:textColor="?attr/colorPrimary"
+                android:textColor="@color/accent_text"
                 android:textSize="14sp"
                 android:background="@drawable/bg_btn_pill_outline" />
         </LinearLayout>

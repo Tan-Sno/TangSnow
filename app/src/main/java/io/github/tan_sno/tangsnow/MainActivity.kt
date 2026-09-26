@@ -1679,20 +1679,22 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private fun refreshQuickRow() {
         val host = quickRowHost ?: return
         host.removeAllViews()
+        // 图标与文字分色：图标用 accent（≥3:1），文字用 accent_text（面板背景 ≥4.5:1）
         val activeColor = getColor(R.color.accent)
+        val activeTextColor = getColor(R.color.accent_text)
         val idleColor = getColor(R.color.accent_muted)
         val desktopOn = prefs.desktopMode
 
         // 「刷新」已提升到地址栏胶囊内的一级入口（随加载态在刷新/停止间切换），
         // 这里不再重复放置，避免同一动作两处入口、占据宝贵的一屏位置
-        val copy = makeSheetActionCell(this, ::hideMoreSheet, 
+        val copy = makeSheetActionCell(this, ::hideMoreSheet,
             R.drawable.ic_link, getString(R.string.more_copy_link),
             idleColor, idleColor
         ) { copyCurrentUrl() }
-        val desktop = makeSheetActionCell(this, ::hideMoreSheet, 
+        val desktop = makeSheetActionCell(this, ::hideMoreSheet,
             R.drawable.ic_desktop, getString(R.string.more_desktop),
             if (desktopOn) activeColor else idleColor,
-            if (desktopOn) activeColor else idleColor,
+            if (desktopOn) activeTextColor else idleColor,
         ) { toggleDesktopMode() }
         val savePdf = makeSheetActionCell(this, ::hideMoreSheet, 
             R.drawable.ic_pdf, getString(R.string.more_save_pdf),

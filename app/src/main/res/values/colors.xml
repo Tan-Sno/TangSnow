@@ -5,7 +5,11 @@
     设计依据：
       1. Material Design 3 色彩系统：种子色 → 色调板 → 语义角色；
          浅色 primary = tone40、primaryContainer = tone90。
-      2. Google Blue 体系：主色 Blue 600 #1A73E8，与白字对比度 4.52:1（WCAG AA 正文达标）。
+      2. Google Blue 体系：主色 Blue 600 #1A73E8。⚠️ 它与纯白的对比度实测为
+         4.51:1（4.5050，此前注释自报 4.52 偏乐观）—— 踩线达标，且在浅色语义
+         背景上（surface_variant 4.05 / accent_container 3.47）**不达标**。
+         故**文字一律用 accent_text**（本文件下方，全浅背景 ≥6.1:1），
+         #1A73E8 只用于图标 / tint / 大面积填充（≥3:1 即可）。
       3. 命名一律用**语义角色**（accent / page_bg / blob_*），不再用「作用位置」命名
          （旧名 tab_active 曾被 5 个与标签页无关的模块引用，属误命名，已收敛为 accent）。
 
@@ -16,6 +20,11 @@
 
     <!-- ============ 强调色 ============ -->
     <color name="accent">#1A73E8</color>
+    <!-- accent 的「文字专用」变体：浅色取 Blue 800 #174EA6（与 on_accent_container
+         同源），在白 / surface_variant / accent_container / 首页渐变等全部浅背景上
+         ≥6.1:1，满足配色规范「正文 ≥4.5:1」的硬要求；夜间沿用 accent（暗底 7.8:1）。
+         图标 / tint / 填充继续用 accent（≥3:1 即可），两者不要混用。 -->
+    <color name="accent_text">#174EA6</color>
     <color name="accent_muted">#5F6368</color>
     <color name="accent_container">#D3E3FD</color>
     <color name="on_accent">#FFFFFF</color>

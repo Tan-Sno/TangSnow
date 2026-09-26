@@ -96,7 +96,7 @@ class HomeCustomizeActivity : AppCompatActivity() {
         fun style(container: LinearLayout, label: TextView, active: Boolean) {
             label.setTextColor(
                 ContextCompat.getColor(
-                    this, if (active) R.color.accent else R.color.accent_muted
+                    this, if (active) R.color.accent_text else R.color.accent_muted
                 )
             )
             label.typeface = if (active) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
@@ -197,7 +197,7 @@ class HomeCustomizeActivity : AppCompatActivity() {
         texts.addView(TextView(this).apply {
             text = shortcut.name
             textSize = 15f
-            setTextColor(ContextCompat.getColor(context, R.color.accent))
+            setTextColor(ContextCompat.getColor(context, R.color.accent_text))
         })
         texts.addView(TextView(this).apply {
             text = shortcut.url

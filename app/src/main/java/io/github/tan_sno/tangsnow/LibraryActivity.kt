@@ -143,7 +143,7 @@ class LibraryActivity : AppCompatActivity() {
             tv.setTextColor(
                 ContextCompat.getColor(
                     this,
-                    if (active) R.color.accent else R.color.accent_muted
+                    if (active) R.color.accent_text else R.color.accent_muted
                 )
             )
             tv.typeface = if (active) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
