@@ -5,7 +5,7 @@
     「打开 / 分享」时按次授权读取（Intent.FLAG_GRANT_READ_URI_PERMISSION）。
 
     为什么必须用它：Android 7.0（API 24）起，把 file:// 交给外部应用会抛
-    FileUriExposedException；而本应用承诺「仅 INTERNET + CAMERA 两项权限」，
+    FileUriExposedException；而本应用只申请极少量权限（其中**不含任何存储权限**），
     不能靠申请存储权限绕过，故走 content:// 按次授权。
 -->
 <paths>

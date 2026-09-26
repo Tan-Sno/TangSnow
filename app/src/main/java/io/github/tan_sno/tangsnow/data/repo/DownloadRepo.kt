@@ -195,7 +195,7 @@ object DownloadRepo {
      *
      * 为什么路由：进程内消费 [saveFromStream] 的响应流发生在本进程 —— 应用退后台被
      * 系统回收时下载即中断，且应用侧给不了进度通知（自行发通知需要申请
-     * POST_NOTIFICATIONS，与「仅 INTERNET + CAMERA」的权限承诺冲突）。系统下载器
+     * POST_NOTIFICATIONS，与「权限极简、不额外索取权限」的承诺冲突）。系统下载器
      * 自带进度通知与暂停/续传语义，又不占应用权限，是大文件的更优归宿。
      * 未给出 Content-Length 的响应（常见于登录态附件）不做此路由 —— 那类下载依赖
      * 本次响应里的 Cookie/Referer 上下文，只有进程内流式才拿得到。
