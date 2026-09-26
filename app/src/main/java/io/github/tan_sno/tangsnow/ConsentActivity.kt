@@ -12,6 +12,7 @@ import io.github.tan_sno.tangsnow.data.SessionStore
 import io.github.tan_sno.tangsnow.data.ThemeController
 import io.github.tan_sno.tangsnow.databinding.ActivityConsentBinding
 import io.github.tan_sno.tangsnow.util.LegalText
+import io.github.tan_sno.tangsnow.util.UrlUtils
 
 /**
  * 首次冷启动 / 政策版本更新时的同意页。
@@ -60,14 +61,50 @@ class ConsentActivity : AppCompatActivity() {
         binding = ActivityConsentBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // 深链：同意后原样转交给主界面
-        pendingUrl = intent.getStringExtra(BrowserOpener.EXTRA_OPEN_URL)
-        pendingLibraryTab = intent.getIntExtra(BrowserOpener.EXTRA_LIBRARY_TAB, -1)
+        // 深链：同意后原样转交给主界面（读取口径见 adoptIntentExtras —— onCreate 与
+        // onNewIntent 两处共用同一实现，否则「本页已在栈上」那一路会丢链接）
+        adoptIntentExtras(intent)
 
         binding.rowFullPrivacy.setOnClickListener { openDocOrInline(LegalActivity.DOC_PRIVACY) }
         binding.rowAgreement.setOnClickListener { openDocOrInline(LegalActivity.DOC_AGREEMENT) }
         binding.btnAgree.setOnClickListener { agreeAndContinue() }
         binding.btnDisagree.setOnClickListener { disagreeAndExit() }
+    }
+
+    /**
+     * 记下随本页一起进来的「待打开目标」，同意通过后原样转交主界面。
+     *
+     * 为什么必须抽出来、并在 onCreate 与 [onNewIntent] **两处**都调用：本页是 `singleTask`
+     * （见 Manifest），实例已在栈上时系统只会回调 `onNewIntent`，**不会**再走 onCreate ——
+     * 而 MainActivity 的门禁重定向（未同意时它把外部链接 / 分享转发到本页）走的正是这条路。
+     * 只在 onCreate 里读 extras 的话，就会出现「同意页已经开着 → 从外部点开一条链接 / 在别的
+     * 应用里分享一条链接进来 → 用户点同意 → 落在主页」：链接被静默吞掉，且没有任何提示。
+     *
+     * 读取口径与 MainActivity 的门禁转发一致：`EXTRA_OPEN_URL` 优先；若拿到的是 SEND 分享
+     * （正常路径下 extras 已被上游归一化，这里作兜底），从文本里提取第一个 http(s) 链接。
+     * 只在拿到非空值时覆盖既有值，避免「拿不到新目标」把先前那次也抹掉。
+     */
+    private fun adoptIntentExtras(intent: Intent?) {
+        if (intent == null) return
+        val url = intent.getStringExtra(BrowserOpener.EXTRA_OPEN_URL)
+            ?: intent.takeIf { it.action == Intent.ACTION_SEND }
+                ?.getStringExtra(Intent.EXTRA_TEXT)
+                ?.let { UrlUtils.extractUrlFromText(it) }
+        url?.takeIf { it.isNotBlank() }?.let { pendingUrl = it }
+        val libTab = intent.getIntExtra(BrowserOpener.EXTRA_LIBRARY_TAB, -1)
+        if (libTab in 0..2) pendingLibraryTab = libTab
+    }
+
+    /**
+     * 本页在栈上时系统投递新 intent 的入口（singleTask 的复用路径）。
+     * 除重取 extras 外，还要复核门禁：这期间用户可能在别处（系统设置等）已同意过，那就直接放行。
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // 同步当前 intent：后续任何地方再读 getIntent() 拿到的都是最新值（与 MainActivity 同口径）
+        setIntent(intent)
+        adoptIntentExtras(intent)
+        if (!ConsentGate.needsConsent(prefs)) openMainAndFinish()
     }
 
     /** 阅读入口：优先开整页；启动失败则原地弹全文，避免“点开就退回”观感 */
