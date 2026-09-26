@@ -1426,6 +1426,16 @@ class BrowserSessionManager private constructor(
     fun saveState() {
         saveTask?.let { mainHandler.removeCallbacks(it) }
         saveTask = null
+        // 已关停（正在退出）：一律不再落盘。
+        //
+        // 退出路径是 performExit 里的「先 saveState() 存真实快照 → markPurged() → shutdown()」，
+        // 而 shutdown() 会 closeAll() 清空 tabs —— 紧随其后的 onPause → saveState 若继续走到
+        // 下方「无普通标签 → 清空快照」分支，就会把刚存的那份删掉（表现：开着「恢复上次的
+        // 标签页」，一次正常退出就丢掉全部标签）。
+        // 此前只靠 SessionStore.markPurged 压制那一笔，但该标志会被 closeAll() 期间迟到的
+        // onLocationChange 复位（见本文件 navigationDelegate 里的 clearPurged），挡不住这种
+        // 时序；shutDown 只在本对象内、由主线程置位，不受内核回调影响。
+        if (shutDown) return
         // 刚被"清除浏览数据"清掉快照、且尚未产生新浏览活动：跳过落盘，
         // 否则会把用户刚清掉的标签快照立刻又写回来
         if (SessionStore.shouldSkipSave()) return
