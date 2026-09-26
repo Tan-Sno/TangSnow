@@ -1,60 +1,58 @@
-# 安全政策
+**English** | [简体中文](SECURITY.zh-CN.md)
 
-## 支持的版本
+# Security Policy
 
-本项目仅对最新发布版本提供安全更新。旧版本的问题请先升级到最新版再确认是否仍然存在。
+## Supported versions
 
-| 版本 | 是否提供安全更新 |
+Security updates are provided for the latest release only. If you are on an older version, please upgrade to the latest release first and check whether the issue still occurs.
+
+| Version | Security updates |
 |---|---|
 | 2.1.x | ✅ |
 | < 2.1 | ❌ |
 
-> **2.0.x 用户请注意**：自 2.1.0 起应用标识（`applicationId`）由 `com.tangsnow.tangsnow`
-> 变更为 `io.github.tan_sno.tangsnow`，因此 **2.1.x 无法覆盖升级 2.0.x**。
-> 两个版本可以并存安装，确认新版可用后再卸载旧版即可；旧版的书签、历史与设置不会自动迁移。
+> **Note for 2.0.x users:** since 2.1.0 the application ID (`applicationId`) changed from
+> `com.tangsnow.tangsnow` to `io.github.tan_sno.tangsnow`, so **2.1.x cannot be installed over 2.0.x**.
+> The two versions can co-exist: install the new one, confirm it works, then uninstall the old one.
+> Bookmarks, history and settings are not migrated automatically.
 
-## 报告安全漏洞
+## Reporting a vulnerability
 
-**请不要通过公开 Issue 报告安全漏洞。** 公开的漏洞细节会让所有用户在本项目发布修复之前
-处于风险之中。请改用下面的私密渠道。
+**Please do not report security vulnerabilities through a public issue.** Public details put every user at risk until a fix is released. Use the private channel below instead.
 
-请通过 GitHub 的私密漏洞报告入口提交：
+Submit through GitHub's private vulnerability reporting form:
 
 <https://github.com/Tan-Sno/TangSnow/security/advisories/new>
 
-该入口只有维护者可见。如果无法使用，也可以通过维护者的 GitHub 主页
-<https://github.com/Tan-Sno> 发起站内联系，并在第一条消息中就说明「这是安全报告」。
+That form is visible to the maintainer only. If you cannot use it, you can also contact the maintainer through their GitHub profile <https://github.com/Tan-Sno>, stating in your very first message that it is a security report.
 
-报告中请尽量包含：
+Please include as much of the following as you can:
 
-- 受影响版本（设置 → 关于棠雪）
-- 设备型号与 Android 版本
-- 复现步骤，或最小可复现样例
-- 影响评估：能做到什么（例如读取本机数据、绕过某项隐私防护、远端执行代码）
-- 如有概念验证代码或录屏，请一并附上
+- Affected version (Settings → About TangSnow)
+- Device model and Android version
+- Reproduction steps, or a minimal reproducible example
+- Impact assessment: what an attacker could do (for example read on-device data, bypass a privacy protection, execute code remotely)
+- Proof-of-concept code or a screen recording, if you have one
 
-## 处理流程
+## Process
 
-- **确认收到**：我们会在收到报告后 7 天内回复，告知是否受理。
-- **初步评估**：说明初步判断（是否成立、影响范围、严重程度），以及是否需要更多信息。
-- **修复与发布**：确认成立的问题会在修复后随新版本发布，并在
-  [Releases](https://github.com/Tan-Sno/TangSnow/releases) 中说明。
-- **致谢**：如果你希望署名，我们会在发布说明中致谢；也可以选择匿名。
-- **不予受理**：如果评估后认为不构成安全问题，我们会说明理由。
+- **Acknowledgement**: we reply within 7 days of receiving a report, confirming whether we accept it.
+- **Initial assessment**: we share our preliminary judgement (whether it holds, the affected scope, the severity) and say whether we need more information.
+- **Fix and release**: confirmed issues are fixed and shipped in a new release, described in
+  [Releases](https://github.com/Tan-Sno/TangSnow/releases).
+- **Credit**: we credit you in the release notes if you would like to be named; you may also stay anonymous.
+- **Not accepted**: if we conclude it is not a security issue, we explain our reasoning.
 
-## 范围说明
+## Scope
 
-为免误会，以下事项**不属于**本政策所指的安全漏洞：
+To avoid misunderstandings, the following are **not** security vulnerabilities under this policy:
 
-- **第三方组件自身的漏洞**（如 GeckoView、OkHttp、AndroidX）—— 请向对应上游项目报告。
-  本项目会在上游发布修复后尽快跟进升级。
-- **需要设备已被 root、已开启调试，或攻击者已具备本机代码执行能力**才能触发的问题。
-- **本应用刻意设计的隐私行为**，例如不接入遥测、关闭内核安全浏览的远程查询、
-  不内置广告拦截等。这些是产品取舍，详见 [README](README.md) 与
-  [隐私政策](docs/PRIVACY.md)。
+- **Vulnerabilities in third-party components** (GeckoView, OkHttp, AndroidX and so on) — please report those to the upstream project. We follow up with upgrades as soon as the upstream fix ships.
+- Issues that require the device to be **rooted, debugging-enabled, or already compromised** by an attacker with local code execution.
+- **Privacy behaviours this app deliberately chooses**, such as collecting no telemetry, disabling the engine's remote Safe Browsing lookups, or bundling no ad-blocking extension. These are product trade-offs; see the [README](README.md) and the [privacy policy](docs/PRIVACY.md).
 
-## 用户协议与隐私
+## User agreement and privacy
 
-- 隐私政策：[docs/PRIVACY.md](docs/PRIVACY.md)
-- 用户协议：[docs/TERMS.md](docs/TERMS.md)
-- 社区行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Privacy policy: [docs/PRIVACY.md](docs/PRIVACY.md)
+- User agreement: [docs/TERMS.md](docs/TERMS.md)
+- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
