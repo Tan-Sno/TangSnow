@@ -11,21 +11,29 @@
     android:fitsSystemWindows="true"
     android:background="@color/scrim_strong">
 
-    <LinearLayout
+    <!-- 内滚容器：横屏小屏 + 大字号下内容超出可用高度时，「继续」键仍可滚动触达；
+         内容不超限时 wrap_content + 上下居中约束，观感与同意页卡片一致 -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
+        android:layout_margin="24dp"
         android:background="@drawable/bg_consent_card"
         android:elevation="10dp"
-        android:paddingHorizontal="22dp"
-        android:paddingTop="24dp"
-        android:paddingBottom="18dp"
+        android:fillViewport="true"
+        android:overScrollMode="never"
         app:layout_constraintWidth_max="440dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_margin="24dp">
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="22dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="18dp">
 
         <TextView
             android:layout_width="match_parent"
@@ -79,5 +87,6 @@
             android:textColor="?attr/colorOnSurface"
             android:background="@drawable/bg_btn_consent" />
     </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
