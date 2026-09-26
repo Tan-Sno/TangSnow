@@ -170,7 +170,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      *
      * ⚠️ 本 launcher 在**属性初始化**（构造期）就注册了，早于 `onCreate` —— 于是审查会问
      *    「待决结果会不会在注册瞬间同步派发、抢在 onCreate 恢复 `pendingLocalNetworkUrl` 之前」。
-     *    实测不会（本机 sources jar：androidx.activity 1.8.0 Java / 1.13.0 Kotlin 均为同一形态）：
+     *    实测不会（本机 sources jar：androidx.activity 1.8.0 Java / 1.13.0 Kotlin 均为同一形态；
+     *    2026-09-26 取证）：
      *    待决结果是在 `Lifecycle.Event.ON_START` 的观察者里投递的，而 ON_START 必然晚于 onCreate
      *    ⇒ onCreate 内恢复即已足够，**无需**把恢复提到 `super.onCreate()` 之后（那样也挡不住
      *    "注册瞬间派发"，因为注册发生在构造期）。
@@ -523,6 +524,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 🔍 这里**不会**漏掉「实例已被系统回收、随后又有新请求」那种情况（外部审查提过三次，
         //    在此留痕以免重复排查）：记录被复用时，新 intent 不靠 onCreate 重放，而是由框架
         //    排队后**在 onResume 之前以 onNewIntent 投递** ——
+        //    ⚠️ 下列符号名取自 **AOSP main（`services/core/java/com/android/server/wm/`）
+        //    与本机 SDK 37.2 源码**、2026-09-26 取证；括号里的行号属于**当时版本**，
+        //    只有符号名才是稳定锚（`ActivityTaskSupervisor` 是 R 之后才叫这个名字）。
         //    `ActivityStarter.complyActivityFlags`(CLEAR_TOP) → `deliverNewIntent`
         //    → `ActivityRecord.deliverNewIntentLocked`（非 RESUMED/PAUSED 时入 `newIntents`，
         //    该字段的注释原文即 "any pending new intents for single-top mode"）
