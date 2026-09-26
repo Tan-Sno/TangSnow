@@ -58,7 +58,6 @@ import io.github.tan_sno.tangsnow.ui.showSelectionPopup
 import io.github.tan_sno.tangsnow.util.SecureScreen
 import io.github.tan_sno.tangsnow.util.UrlUtils
 import io.github.tan_sno.tangsnow.util.dp
-import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1714,28 +1713,38 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     }
 
     /**
-     * 真正执行下载：一律优先消费内核响应流，失败退回系统下载器。
+     * 真正执行下载：一律优先消费内核响应流；**只有内核没给响应体时**才退回系统下载器。
      *
      * 为什么**不再**按体积路由到系统下载器（2026-09-26 审查撤销）：CL 已知的
      * 登录态大附件（NAS / 私有云场景）交系统下载器二次 GET 时没有 Cookie，
      * 会把登录页 HTML 存成目标文件名还报成功 —— 错误内容比中断更糟。
      * 大文件退后台被杀的旧风险重新成立，两全方案（GeckoWebExecutor 带
      * Cookie 流式 + 通知）留待 javap/真机验证后另行实施。
+     *
+     * 同理，**写盘失败也不再退回系统下载器**：那条路同样是"另一次不带 Cookie 的 GET"，
+     * 撤销大文件路由的同一个理由对它一字不差地成立（此前 false 把「无响应体」与「写失败」
+     * 混成一种，于是这两种情形共用了一条回退路径）。
      */
     private fun startDownload(response: WebResponse, url: String, fileName: String) {
         lifecycleScope.launch {
-            // 优先直接消费内核响应流：Cookie/Referer/登录态都在这次响应里，
-            // 系统下载器二次 GET 拿不到这些上下文（登录态附件会下到登录页）。
             toast(R.string.toast_start_download)
-            val streamed = DownloadRepo.saveFromStream(this@MainActivity, response, fileName)
-            if (!streamed) {
-                // 无响应体等场景退回系统下载器（附 Referer/UA，尽力而为）
-                val id = DownloadRepo.launch(this@MainActivity, url, fileName, referer = url)
-                if (id < 0) {
-                    // 系统下载器也拒绝（URL scheme 不受支持等）：如实提示失败，
-                    // 不让上面那句「开始下载」变成空头支票
-                    toast(R.string.download_start_failed)
+            when (DownloadRepo.saveFromStream(this@MainActivity, response, fileName)) {
+                // 已落盘并登记（落盘失败时的占位行清理由 DownloadRepo 收口）
+                DownloadRepo.SaveOutcome.SAVED -> Unit
+
+                // 内核没给响应体：手上本就没有内容，退回系统下载器是唯一出路（附 Referer/UA）
+                DownloadRepo.SaveOutcome.NO_BODY -> {
+                    val id = DownloadRepo.launch(this@MainActivity, url, fileName, referer = url)
+                    if (id < 0) {
+                        // 系统下载器也拒绝（URL scheme 不受支持等）：如实提示失败，
+                        // 不让上面那句「开始下载」变成空头支票
+                        toast(R.string.download_start_failed)
+                    }
                 }
+
+                // 有内容但没落下去：如实报失败。绝不退回系统下载器二次 GET ——
+                // 那会拿登录页 HTML 冒充用户要的文件，且系统下载器还会报"成功"。
+                DownloadRepo.SaveOutcome.FAILED -> toast(R.string.download_start_failed)
             }
         }
     }
@@ -2069,7 +2078,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                     return@accept
                 }
                 lifecycleScope.launch {
-                    val ok = withContext(Dispatchers.IO) { writePdf(input) }
+                    val ok = writePdf(input)
                     toast(if (ok) R.string.pdf_saved else R.string.pdf_failed)
                 }
             },
@@ -2147,53 +2156,17 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     }
 
     /** @return 是否写入成功（Android 10+ 写入公共下载，旧系统写入应用外部下载目录） */
-    private suspend fun writePdf(input: java.io.InputStream): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun writePdf(input: java.io.InputStream): Boolean {
         val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
             .format(java.util.Date())
         val name = "TangSnow_$stamp.pdf"
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= 29) {
-                val values = android.content.ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
-                    put(MediaStore.MediaColumns.IS_PENDING, 1)
-                }
-                val uri = contentResolver
-                    .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@withContext false
-                // 写入段失败（含中途异常）都清掉 IS_PENDING 占位行，避免幽灵行
-                val written = try {
-                    input.use { ins ->
-                        contentResolver.openOutputStream(uri)?.use { out -> ins.copyTo(out) }
-                    } != null
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    runCatching { contentResolver.delete(uri, null, null) }
-                    throw e
-                } catch (_: Exception) {
-                    false
-                }
-                if (!written) {
-                    // 失败时清掉占位行，避免下载目录留下 0 字节幽灵文件
-                    runCatching { contentResolver.delete(uri, null, null) }
-                    return@withContext false
-                }
-                values.clear()
-                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                contentResolver.update(uri, values, null, null)
-                true
-            } else {
-                val dir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
-                    ?: return@withContext false
-                java.io.File(dir, name).outputStream().use { out -> input.use { it.copyTo(out) } }
-                true
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // 取消要原样传播：本函数是 suspend，Activity 销毁会取消协程，
-            // 若在此吞成 false，调用方会把「已取消」当成「保存失败」而弹出错误提示。
-            throw e
-        } catch (e: Exception) {
-            false
-        }
+        // 落盘走统一出口（IS_PENDING 占位行、失败清理、update 行数判定都在那里收口）。
+        // 此前这里自己抄了一份 MediaStore 代码，与书签导出、内核流下载并成三份同构副本，
+        // 且已漂成三种语义（本处把 update 留在 try 外 ⇒ 它抛异常就留 IS_PENDING=1 的幽灵行）。
+        // 副本越少，越不会被改漏。
+        return DownloadRepo.writeToDownloads(this, name, "application/pdf") { out ->
+            input.use { it.copyTo(out) }
+        } != null
     }
 
     private fun showMoreSheet() {
