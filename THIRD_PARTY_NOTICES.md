@@ -8,7 +8,7 @@
 | 组件 | 版本 | 许可证 | 用途 |
 |---|---|---|---|
 | Mozilla GeckoView | 155.0.20260903215306 | Mozilla Public License 2.0 | 网页渲染内核（基于 Gecko 引擎） |
-| OkHttp | 5.5.0 | Apache License 2.0 | 扩展目录 / 图标 / 更新清单等 HTTP 请求 |
+| OkHttp | 5.5.0 | Apache License 2.0 | 扩展目录 / 元数据 / 应用内更新检查等 HTTP 请求 |
 | ZXing core | 3.5.4 | Apache License 2.0 | 二维码解码 |
 | ZXing Android Embedded | 4.3.0 | Apache License 2.0 | 扫码取景与相机权限处理 |
 | AndroidX（activity/appcompat/core/recyclerview/preference 等） | 见版本目录 | Apache License 2.0 | 界面与系统组件 |
