@@ -6,6 +6,17 @@ Thanks for your interest in contributing to TangSnow.
 
 By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Language
+
+The repository's outward-facing documents (this file, `README`, `SECURITY`, `CODE_OF_CONDUCT`,
+`THIRD_PARTY_NOTICES`) are bilingual, with **English as the default**. This file has a
+[Simplified Chinese version](CONTRIBUTING.zh-CN.md).
+
+**Code comments, commit messages and the maintainer's internal notes are written in Chinese.** That
+is the project's working language and is not a barrier we can remove cheaply, so please expect it.
+Issues and pull requests may be written in **Chinese or English** — whichever you prefer; the
+templates say so explicitly.
+
 ## Reporting issues
 
 Please file them under [Issues](https://github.com/Tan-Sno/TangSnow/issues). The repository ships issue

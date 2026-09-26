@@ -6,6 +6,15 @@
 
 参与本项目即表示你同意遵守[社区行为准则](CODE_OF_CONDUCT.zh-CN.md)。
 
+## 语言
+
+仓库的对外文档（本文件、`README`、`SECURITY`、`CODE_OF_CONDUCT`、`THIRD_PARTY_NOTICES`）
+均为**中英双语**，且**以英文为默认**；本文件另有
+[英文版](CONTRIBUTING.md)。
+
+**代码注释、提交信息与维护者的内部记录以中文为主** —— 这是本项目的工作语言，改造成本极高，
+请提前知悉。Issue 与 Pull Request 则**中英文都可以**，用你顺手的那种即可（模板里已注明）。
+
 ## 报告问题
 
 请在 [Issues](https://github.com/Tan-Sno/TangSnow/issues) 中提交。仓库已配置好提交模板，
