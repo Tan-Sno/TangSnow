@@ -461,10 +461,12 @@
     </plurals>
     <string name="bookmark_import_failed">导入失败：文件无法读取或不是书签文件</string>
     <string name="download_start_failed">下载启动失败，请重试</string>
-    <!-- 落盘失败（内容已在手上、但没能写下去）：与「启动失败」是两件不同的事实，故单列一条。
-         文案要点出**没有**退回系统下载器 —— 那是刻意的：系统下载器是另一次 GET，拿不到
-         本次响应的 Cookie，登录态附件会把登录页 HTML 存成目标文件名还报成功。 -->
-    <string name="download_save_failed">保存失败：内容未能写入存储（未改用系统下载器，以免把登录页存成文件）</string>
+    <!-- 落盘失败：与「启动失败」是两件不同的事实，故单列一条。
+         措辞刻意留有余地（「未能确认已写入」）—— 有一种情形是内容**已经完整落盘**、
+         只是没能转正（对外不可见），说"未能写入"就过头了。
+         至于"为什么没退回系统下载器"，属维护者信息，写在 MainActivity.startDownload 的注释里；
+         它也不适用于无 Cookie 的公共下载，不该占用用户可见文案。 -->
+    <string name="download_save_failed">保存失败：未能确认文件已写入存储</string>
     <!-- 站点权限弹窗的「记住我的选择」：仅普通会话展示（无痕不持久化授权决定） -->
     <string name="perm_remember">记住我的选择</string>
     <string name="arrow_open">▾</string>
