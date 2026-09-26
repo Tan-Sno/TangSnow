@@ -114,7 +114,9 @@ object DownloadRepo {
      * 存量记录存的是 `file://`（API 26-28 的应用专属下载目录），Android 7.0 起
      * 直接外传会抛 FileUriExposedException，故此处统一转成 FileProvider 的
      * `content://`；MediaStore 记录本就是 `content://`，原样返回。
-     * 转换失败（文件不在白名单路径内等）时退回原值，由调用方 runCatching 兜底。
+     * 转换失败（文件不在白名单内等）返回 **null**：绝不把 file:// 兜底交给外部
+     * 应用 —— 那会抛 FileUriExposedException 并被 runCatching 吞成 NO_APP，
+     * 让「文件在但无法安全交付」被谎报成「没有应用能打开」；上层按 MISSING 提示。
      */
     private fun externalizableUri(context: Context, raw: String): android.net.Uri? {
         val uri = runCatching { android.net.Uri.parse(raw) }.getOrNull() ?: return null
@@ -123,7 +125,7 @@ object DownloadRepo {
             "file" -> runCatching {
                 val path = uri.path ?: return@runCatching null
                 FileProvider.getUriForFile(context, FILE_PROVIDER_AUTHORITY, File(path))
-            }.getOrNull() ?: uri
+            }.getOrNull()
             else -> uri
         }
     }
@@ -320,9 +322,18 @@ object DownloadRepo {
                     val uri = resolver.insert(
                         android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
                     ) ?: return@withContext false
-                    val written = resolver.openOutputStream(uri)?.use { out ->
-                        ins.copyTo(out)
-                    } != null
+                    // 写入段整体失败（打不开流 / 中途断网）都要清掉 IS_PENDING 占位行，
+                    // 否则半截行会挂到系统回收前 —— 「pending 幽灵行」。
+                    val written = try {
+                        resolver.openOutputStream(uri)?.use { out ->
+                            ins.copyTo(out)
+                        } != null
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        runCatching { resolver.delete(uri, null, null) }
+                        throw e
+                    } catch (_: Exception) {
+                        false
+                    }
                     if (!written) {
                         runCatching { resolver.delete(uri, null, null) }
                         return@withContext false
@@ -407,18 +418,21 @@ object DownloadRepo {
                 ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
         }.getOrNull()
 
-    /** 同目录下不重复的文件名（a.ext → a (1).ext） */
+    /** 同目录下不重复的文件名（a.ext → a (1).ext）。原子占位式：并发下载不会互相截断 */
     private fun uniqueFile(dir: java.io.File, name: String): java.io.File {
+        // createNewFile 是原子操作：先占位者得。旧的「exists() 检查 → 创建」两步间
+        // 有 TOCTOU 窗口 —— API 26-28 两个并发同名下载会选中同一路径，后者截断
+        // 前者正在写的文件造成损坏（API 29+ 走 MediaStore 由系统去重，无此问题）。
         var f = java.io.File(dir, name)
-        if (!f.exists()) return f
+        if (!f.exists() && f.createNewFile()) return f
         val base = name.substringBeforeLast('.', name)
         val ext = name.substringAfterLast('.', "").takeIf { it.isNotBlank() }?.let { ".$it" } ?: ""
         var i = 1
-        while (f.exists()) {
+        while (true) {
             f = java.io.File(dir, "$base ($i)$ext")
+            if (f.createNewFile()) return f
             i++
         }
-        return f
     }
 
     /** 文件名清洗：防路径穿越 / 非法字符注入，仅保留安全的基本文件名 */
@@ -646,7 +660,9 @@ object DownloadRepo {
      * 一键清空若连文件一起删，误操作不可逆；这里只让「下载」页回到空态。
      * 需要删除具体文件时仍走逐行 remove。
      */
-    fun clearRecords(context: Context) {
+    fun clearRecords(context: Context) = synchronized(recordsLock) {
+        // 与 rememberId/rememberManaged 同锁：否则「清空」与并发下载的完成登记
+        // 读-改-写交错时，在途写入会用旧列表把刚清掉的记录整体写回
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .remove(KEY_IDS)
