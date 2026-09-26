@@ -170,7 +170,7 @@ class ExtensionsActivity : AppCompatActivity() {
         fun style(tv: TextView, active: Boolean) {
             tv.setTextColor(
                 ContextCompat.getColor(
-                    this, if (active) R.color.accent else R.color.accent_muted
+                    this, if (active) R.color.accent_text else R.color.accent_muted
                 )
             )
             tv.typeface = if (active) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
@@ -850,7 +850,7 @@ class ExtensionsActivity : AppCompatActivity() {
         val text = TextView(this).apply {
             text = label
             textSize = 15f
-            setTextColor(getColor(R.color.accent))
+            setTextColor(getColor(R.color.accent_text))
         }
         row.addView(text)
         return row
@@ -1044,7 +1044,7 @@ class ExtensionsActivity : AppCompatActivity() {
                         btnAction.isEnabled = false
                         btnAction.text = getString(R.string.extension_installed_label)
                         btnAction.setBackgroundResource(R.drawable.bg_btn_pill_outline)
-                        btnAction.setTextColor(ContextCompat.getColor(root.context, R.color.accent))
+                        btnAction.setTextColor(ContextCompat.getColor(root.context, R.color.accent_text))
                     }
                     else -> {
                         btnAction.isEnabled = true

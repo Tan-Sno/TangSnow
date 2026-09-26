@@ -138,7 +138,7 @@
                         android:paddingVertical="6dp"
                         android:text="@string/extension_official_store"
                         android:textSize="12sp"
-                        android:textColor="?attr/colorPrimary"
+                        android:textColor="@color/accent_text"
                         android:background="?attr/selectableItemBackground"
                         android:clickable="true"
                         android:focusable="true" />
@@ -202,7 +202,7 @@
                             android:gravity="center"
                             android:text="@string/extension_import_file"
                             android:textSize="14sp"
-                            android:textColor="?attr/colorPrimary"
+                            android:textColor="@color/accent_text"
                             android:background="@drawable/bg_btn_pill_outline" />
 
                         <TextView

@@ -54,7 +54,7 @@
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:visibility="gone"
-                android:textColor="?attr/colorPrimary"
+                android:textColor="@color/accent_text"
                 android:textSize="14sp" />
         </LinearLayout>
 

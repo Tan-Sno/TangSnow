@@ -50,7 +50,7 @@
         android:gravity="center"
         android:text="@string/find_prev"
         android:textSize="12sp"
-        android:textColor="?attr/colorPrimary"
+        android:textColor="@color/accent_text"
         android:background="?attr/selectableItemBackground" />
 
     <TextView
@@ -61,7 +61,7 @@
         android:gravity="center"
         android:text="@string/find_next"
         android:textSize="12sp"
-        android:textColor="?attr/colorPrimary"
+        android:textColor="@color/accent_text"
         android:background="?attr/selectableItemBackground" />
 
     <androidx.appcompat.widget.AppCompatImageButton

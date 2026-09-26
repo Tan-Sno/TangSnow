@@ -71,7 +71,7 @@ fun makeSheetRow(
     val text = TextView(context).apply {
         text = label
         textSize = 15f
-        setTextColor(context.getColor(R.color.accent))
+        setTextColor(context.getColor(R.color.accent_text))
     }
     row.addView(icon, LinearLayout.LayoutParams(context.dp(iconSizeDp), context.dp(iconSizeDp)).apply { marginEnd = context.dp(12) })
     row.addView(text)
@@ -90,7 +90,7 @@ fun makeSheetTextRow(context: Context, dismiss: () -> Unit, label: String, onCli
     val text = TextView(context).apply {
         text = label
         textSize = 15f
-        setTextColor(context.getColor(R.color.accent))
+        setTextColor(context.getColor(R.color.accent_text))
     }
     row.addView(text)
     return row
@@ -121,7 +121,11 @@ fun makeSheetLibraryRow(context: Context, dismiss: () -> Unit): View {
 }
 
 fun makeSheetLibraryCell(context: Context, dismiss: () -> Unit, iconRes: Int, label: String, onClick: () -> Unit): View =
-    makeSheetVerticalCell(context, dismiss, iconRes, label, context.getColor(R.color.accent), context.getColor(R.color.accent), onClick)
+    // 图标用 accent（≥3:1），文字用 accent_text（面板背景上 ≥4.5:1）—— 两者别混
+    makeSheetVerticalCell(
+        context, dismiss, iconRes, label,
+        context.getColor(R.color.accent), context.getColor(R.color.accent_text), onClick
+    )
 
 /** 快捷操作单元格：图标 28dp + 15sp 说明（次级视觉，紧凑） */
 fun makeSheetActionCell(

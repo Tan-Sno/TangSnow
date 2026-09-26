@@ -43,7 +43,7 @@ fun showSelectionPopup(
         val tv = TextView(context).apply {
             text = label
             textSize = 14f
-            setTextColor(context.getColor(R.color.accent))
+            setTextColor(context.getColor(R.color.accent_text))
             setPadding(context.dp(18), context.dp(10), context.dp(18), context.dp(10))
             setOnClickListener { onBeforeAction(); onClick() }
         }

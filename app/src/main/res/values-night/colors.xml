@@ -13,6 +13,8 @@
 
     <!-- ============ 强调色 ============ -->
     <color name="accent">#8AB4F8</color>
+    <!-- 夜间 accent 在暗底上本就 7.8:1，文字角色直接沿用同一色相（见 values 同名注释） -->
+    <color name="accent_text">#8AB4F8</color>
     <color name="accent_muted">#9AA0A6</color>
     <color name="accent_container">#0B3A75</color>
     <color name="on_accent">#0A2E63</color>
