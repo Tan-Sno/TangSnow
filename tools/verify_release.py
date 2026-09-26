@@ -358,10 +358,21 @@ def main():
         # 打 tag」，verify 时刻 HEAD 本来就领先远端 —— 检查「是否已推送」只会误伤
         # 流程。这里把 SHA 与领先数打印出来供发布说明记录，事后可追溯性同样达到。
         head = run(["git", "rev-parse", "--short", "HEAD"], cwd=root)
-        branch = run(["git", "--no-optional-locks", "status", "-b", "--porcelain"], cwd=root)
-        m = re.search(r"\[ahead (\d+)\]", branch.stdout or "")
+        # 领先 upstream 数：对 origin/<当前分支> 用 rev-list 计数。
+        # 不用 `git status -b` 的 `[ahead N]` —— 那要求分支**已绑定** upstream，
+        # 而本仓库历次以 `git push origin main`（未加 -u）推送、分支并未绑定，
+        # 该命令只会输出 `## main`，正则匹配不到 ⇒ 恒显示 `?`（2026-09-26 实测）。
+        # rev-parse / rev-list 本身是只读命令，不需要 --no-optional-locks。
+        branch_name = (run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                           cwd=root).stdout or "").strip()
+        ahead = "?"
+        if branch_name and branch_name != "HEAD":  # detached HEAD 时无从比对
+            rev = run(["git", "rev-list", "--count",
+                       "origin/%s..HEAD" % branch_name], cwd=root)
+            if rev.returncode == 0 and (rev.stdout or "").strip().isdigit():
+                ahead = rev.stdout.strip()
         say("      HEAD: %s（领先 upstream %s 个提交 —— push 后归零）"
-            % ((head.stdout or "").strip(), m.group(1) if m else "?"))
+            % ((head.stdout or "").strip(), ahead))
 
         exp = read_gradle_expectations(root)
         say("  ✅ ② 构建脚本声明：%s (versionCode %d)" % (exp["versionName"], exp["versionCode"]))
