@@ -54,6 +54,7 @@
     <string name="toast_file_not_ready">文件还没下载完，完成后才能打开</string>
     <string name="toast_file_download_failed">这次下载没有成功，没有可打开的文件</string>
     <string name="toast_file_missing">文件已不存在，可能已被删除或清理</string>
+    <string name="toast_local_network_denied">访问局域网地址需要「附近设备」权限，可在系统设置中开启</string>
     <string name="toast_start_download">开始下载</string>
     <string name="download_confirm_title">开始下载</string>
     <string name="download_confirm_message">文件名：%1$s\n\n是否下载该文件？</string>
