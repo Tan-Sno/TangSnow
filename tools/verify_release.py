@@ -60,6 +60,8 @@ ABI_SPLITS = {
 EXPECTED_PERMISSIONS = {
     "android.permission.INTERNET",
     "android.permission.CAMERA",
+    # Android 17 起访问局域网必需（否则连接被内核拦掉）；仅在打开局域网地址时按需申请
+    "android.permission.ACCESS_LOCAL_NETWORK",
     "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.WAKE_LOCK",
     "android.permission.MODIFY_AUDIO_SETTINGS",

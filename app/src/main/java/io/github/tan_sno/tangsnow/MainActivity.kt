@@ -74,6 +74,12 @@ import org.mozilla.geckoview.GeckoView
  *
  *  会话管理器是应用级单例：Activity 因主题切换/系统回收而重建时，标签页保持不变。
  */
+// `ACCESS_LOCAL_NETWORK` —— Android 17 引入的运行时权限。刻意写字符串字面量而不是
+// `android.Manifest.permission.ACCESS_LOCAL_NETWORK`：后者只在 compileSdk ≥ 37 的 SDK 里存在，
+// 写字面量可避免将来调整 compileSdk 时编译失败。
+// （用行注释而非 KDoc：紧贴在类 KDoc 之后会形成「两个连续 KDoc」，落单的那个不进文档。）
+private const val PERM_ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+
 class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     internal lateinit var binding: ActivityMainBinding
@@ -147,6 +153,29 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { grants ->
             webPrompts.onAndroidPermissionsResult(grants.values.all { it })
         }
+
+    /**
+     * 本地网络访问权限（`ACCESS_LOCAL_NETWORK`）。
+     *
+     * Android 17（API 37）起，`targetSdk ≥ 37` 的应用访问局域网必须有它，否则连接会被
+     * 内核直接拦掉（TCP 超时 / UDP 报 EPERM）—— 表现就是浏览器打不开路由器 / NAS /
+     * 打印机的管理页，而且没有任何提示。授权成功后自动续跑那次被暂缓的导航。
+     */
+    private val requestLocalNetworkAccess =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+            localNetworkPromptInFlight = false
+            val pending = pendingLocalNetworkUrl
+            pendingLocalNetworkUrl = null
+            if (granted && !pending.isNullOrBlank()) {
+                sessionManager.activeTab?.let { loadInTab(it, pending) }
+            }
+        }
+
+    /** 因等待本地网络权限而暂缓的导航目标（授权后自动续跑；只由 [loadInTab] 写入） */
+    private var pendingLocalNetworkUrl: String? = null
+
+    /** 权限请求进行中：同一个 launcher 不能并发 launch（第二次会抛异常），据此去重 */
+    private var localNetworkPromptInFlight = false
 
     private lateinit var webPrompts: io.github.tan_sno.tangsnow.ui.WebPrompts
 
@@ -239,6 +268,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             if (!url.isNullOrBlank()) {
                 // 供本地崩溃日志记录“最近访问站点”（仅域名），便于复现定位；不上传
                 io.github.tan_sno.tangsnow.util.CrashLogger.noteVisit(url)
+            }
+            // 页面内跳转到的局域网地址（不是 loadInTab 发起的，那里拦不到）：同样按需申请权限。
+            // 这里**既不挂起也不续跑**导航 —— 内核此刻已经在加载了，让用户授权后自行刷新即可，
+            // 免得与进行中的加载抢标签。目的只是别让「连不上」变成毫无解释的静默失败。
+            if (!url.isNullOrBlank() && needsLocalNetworkGrant(url)) {
+                requestLocalNetworkPromptIfIdle()
             }
             if (sessionManager.activeTab === tab && url != null) {
                 // 地址栏正在输入时不被页面跳转打断；搜索结果页显示关键词而非完整 URL
@@ -1369,7 +1404,51 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         showBrowser()
     }
 
-    private fun loadInTab(tab: Tab, url: String) = tab.session.loadUri(url)
+    /**
+     * 导航前的最后一站 —— 所有**应用内发起**的导航都经过这里
+     * （地址栏 / 外部 intent / 书签 / 历史 / 扫码结果）。
+     *
+     * Android 17 起访问局域网需要 `ACCESS_LOCAL_NETWORK`，故在真正 `loadUri` 之前
+     * **按需**申请：只在目标确实落在局域网时才弹，与「权限极简」的定位一致；
+     * 授权后由 [requestLocalNetworkAccess] 的回调自动续跑这次被暂缓的导航。
+     *
+     * 页面内自己点出来的局域网链接不经过这里（由内核直接发起），那条路由
+     * [tabEvents] 的 `onLocationChanged` 兜底提示。
+     */
+    private fun loadInTab(tab: Tab, url: String) {
+        if (needsLocalNetworkGrant(url)) {
+            pendingLocalNetworkUrl = url
+            requestLocalNetworkPromptIfIdle()
+            return
+        }
+        tab.session.loadUri(url)
+    }
+
+    /** 该地址落在局域网、且当前尚未取得本地网络权限 */
+    private fun needsLocalNetworkGrant(url: String): Boolean =
+        UrlUtils.isLocalNetworkAddress(url) && !hasLocalNetworkAccess()
+
+    /**
+     * 是否已具备本地网络访问权限。
+     *
+     * `ACCESS_LOCAL_NETWORK` 是 Android 17 才引入的权限：更低版本上 `checkSelfPermission`
+     * 必然返回「未授予」，但那些系统本就不限制局域网，故低于 37 一律按已授予处理 ——
+     * 否则会在旧机型上弹一个系统里根本不存在的权限，用户点「允许」也不会有任何反应。
+     * （Android 16 上该权限是可选的 opt-in，本应用未选择加入，同样不受限。）
+     */
+    private fun hasLocalNetworkAccess(): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < 37) return true
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+            this, PERM_ACCESS_LOCAL_NETWORK
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    /** 去重地发起权限请求：同一 launcher 并发 launch 会抛异常 */
+    private fun requestLocalNetworkPromptIfIdle() {
+        if (localNetworkPromptInFlight) return
+        localNetworkPromptInFlight = true
+        requestLocalNetworkAccess.launch(PERM_ACCESS_LOCAL_NETWORK)
+    }
 
     private fun showBrowser() {
         homeVisible = false

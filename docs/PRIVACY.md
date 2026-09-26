@@ -4,8 +4,8 @@
 
 # 隐私政策 / Privacy Policy
 
-> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 21`。
-> 最后更新：2026年09月25日
+> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 22`。
+> 最后更新：2026年09月26日
 > **请勿直接编辑**；请修改 `strings.xml` 后运行 `python tools/export_legal_docs.py` 重新导出。
 
 **目录 / Contents**　[中文](#隐私政策) · [English](#english)
@@ -14,7 +14,7 @@
 
 ## 隐私政策
 
-更新日期：2026年09月25日
+更新日期：2026年09月26日
 
 1. 我们处理哪些信息、为了什么
 
@@ -25,6 +25,8 @@
 · INTERNET：加载网页、获取扩展元数据与扩展包；
 
 · CAMERA：仅在您主动使用「扫码」功能时调用，用于识别二维码，不做任何拍摄存储；
+
+· ACCESS_LOCAL_NETWORK（Android 17 及以上）：仅在您打开局域网地址（例如路由器、NAS、打印机的管理页）时按需申请，用于与局域网内的设备建立连接。更低版本的系统没有这项权限，也不存在该限制；
 
 · 内核运行所需（普通权限，由 Mozilla GeckoView 内核声明，系统不弹窗询问，亦不涉及个人数据）：ACCESS_NETWORK_STATE（检查网络连接状态）、WAKE_LOCK（播放音视频时保持唤醒）、MODIFY_AUDIO_SETTINGS（调节音量等音频设置）；
 
@@ -86,7 +88,7 @@
 
 ## English
 
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 
 1. What we process and why
 
@@ -97,6 +99,8 @@ TangSnow is a strictly local browser tool. In normal use we do not collect any p
 · INTERNET — load pages and fetch extension metadata and packages.
 
 · CAMERA — used only when you actively scan a QR code; nothing is recorded or stored.
+
+· ACCESS_LOCAL_NETWORK (Android 17 and later) — requested on demand only when you open a local network address (for example the admin page of your router, NAS or printer), so the app can connect to devices on that network. Older systems have no such permission and carry no such restriction.
 
 · Engine operations (ordinary permissions declared by the Mozilla GeckoView engine; never prompted, no personal data involved): ACCESS_NETWORK_STATE (check connectivity), WAKE_LOCK (keep the device awake during media playback), MODIFY_AUDIO_SETTINGS (adjust media volume and audio settings).
 

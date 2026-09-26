@@ -103,6 +103,76 @@ object UrlUtils {
             toAsciiUrl(trimmed) != null
     }
 
+    /**
+     * 目标是否落在**局域网**上（RFC 1918 私有段 / 链路本地 / IPv6 ULA / `.local`）。
+     *
+     * 用途：Android 17（API 37）起，`targetSdk ≥ 37` 的应用访问局域网必须持有
+     * `ACCESS_LOCAL_NETWORK` 运行时权限，否则连接会被内核直接拦掉（TCP 超时 /
+     * UDP 报 EPERM），见 Android 官方《Local network permission》。浏览器必须能打开
+     * 路由器 / NAS / 打印机的管理页，因此要在真正导航前据此申请权限。
+     *
+     * 判定口径：
+     *  - 回环（`localhost`、`127.0.0.0/8`）**不算** —— 它不经过本地网络，不受该限制；
+     *  - IPv4 只认 RFC 1918 三段与 169.254/16 链路本地；
+     *  - IPv6 只认 fe80::/10 与 fc00::/7；
+     *  - 主机名只认 `.local` 后缀（mDNS / Bonjour）。其余单标签名（`nas`、`router`）
+     *    无法与公网短名可靠区分，**宁可漏判**（用户仍可在系统设置里手动授权），
+     *    也不误判给每个域名都弹权限。
+     *
+     * 刻意不依赖 `android.net.Uri`：一是普通 JVM 单测里它是抛 `Stub!` 的桩，
+     * 二是 `Uri.parse` 对无 scheme 的裸 host 会把整串当成 path。这里自己拆。
+     */
+    internal fun isLocalNetworkAddress(input: String): Boolean {
+        val host = hostOf(input)?.trim()?.trimEnd('.')?.lowercase().orEmpty()
+        if (host.isEmpty()) return false
+        if (host == "localhost" || host.endsWith(".localhost")) return false
+        if (host.endsWith(".local")) return true
+        return if (host.contains(':')) isLocalIpv6(host) else isLocalIpv4(host)
+    }
+
+    /** 从「URL」或「裸 host[:port]」里取主机名；取不到返回 null。IPv6 字面量的方括号会被剥掉 */
+    private fun hostOf(input: String): String? {
+        val s = input.trim()
+        if (s.isEmpty()) return null
+        val schemeEnd = s.indexOf("://")
+        val afterScheme = if (schemeEnd >= 0) s.substring(schemeEnd + 3) else s
+        val authority = afterScheme.takeWhile { it != '/' && it != '?' && it != '#' }
+        val hostPort = authority.substringAfterLast('@')
+        if (hostPort.isEmpty()) return null
+        if (hostPort.startsWith("[")) {
+            val end = hostPort.indexOf(']')
+            return if (end > 1) hostPort.substring(1, end) else null
+        }
+        return hostPort.substringBefore(':').ifEmpty { null }
+    }
+
+    /** 仅 RFC 1918 三段 + 169.254/16；回环 `127.0.0.0/8` 明确排除 */
+    private fun isLocalIpv4(host: String): Boolean {
+        val parts = host.split('.')
+        if (parts.size != 4) return false
+        val o = IntArray(4)
+        for (i in 0..3) {
+            val v = parts[i].toIntOrNull() ?: return false
+            if (v !in 0..255) return false
+            o[i] = v
+        }
+        return when {
+            o[0] == 10 -> true                        // 10.0.0.0/8
+            o[0] == 172 && o[1] in 16..31 -> true     // 172.16.0.0/12
+            o[0] == 192 && o[1] == 168 -> true        // 192.168.0.0/16
+            o[0] == 169 && o[1] == 254 -> true        // 169.254.0.0/16 链路本地
+            else -> false
+        }
+    }
+
+    /** fe80::/10（链路本地）与 fc00::/7（ULA）；按首段十六进制前缀判断即可覆盖实际取值 */
+    private fun isLocalIpv6(host: String): Boolean {
+        val h = host.lowercase()
+        return h.startsWith("fe8") || h.startsWith("fe9") ||
+            h.startsWith("fea") || h.startsWith("feb") ||   // fe80::/10
+            h.startsWith("fc") || h.startsWith("fd")        // fc00::/7
+    }
+
     /** 地址栏输入解析结果：url = 可加载地址；isSearch = 是否走了搜索引擎 */
     data class Resolved(val url: String, val isSearch: Boolean)
 

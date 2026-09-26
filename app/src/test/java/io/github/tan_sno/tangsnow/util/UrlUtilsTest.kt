@@ -197,4 +197,58 @@ class UrlUtilsTest {
         assertNull(UrlUtils.extractUrlFromText("ftp://example.com/file"))
         assertNull(UrlUtils.extractUrlFromText("example.com/无协议地址"))
     }
+
+    // ------------------------------------------------------ isLocalNetworkAddress
+
+    /**
+     * 判定「要不要为该地址申请本地网络权限」（Android 17 起访问局域网必需）。
+     * 误判的代价不对称：**漏判**只是用户需要去系统设置里手动授权；
+     * **误判**则会给每个公网域名都弹一次权限。故边界值必须钉住。
+     */
+    @Test
+    fun `局域网地址被识别`() {
+        for (url in listOf(
+            "http://192.168.1.1",
+            "http://192.168.0.1:8080/admin",
+            "https://10.0.0.5/",
+            "http://10.255.255.254",
+            "http://172.16.0.1",
+            "http://172.31.255.1:5000",
+            "http://169.254.1.1",
+            "nas.local",
+            "http://printer.local:631/",
+        )) {
+            assertTrue("应判为局域网：$url", UrlUtils.isLocalNetworkAddress(url))
+        }
+    }
+
+    @Test
+    fun `公网地址与回环不被判为局域网`() {
+        for (url in listOf(
+            "https://example.com",
+            "https://addons.mozilla.org/firefox/",
+            "http://8.8.8.8",
+            "http://172.15.0.1",   // 172.16/12 的下边界外侧
+            "http://172.32.0.1",   // 172.16/12 的上边界外侧
+            "http://11.0.0.1",     // 10/8 之外
+            "http://192.169.1.1",  // 192.168/16 之外
+            "http://127.0.0.1",    // 回环不经本地网络，不受该权限限制
+            "localhost",
+            "http://localhost:8080/",
+            "http://[::1]:8080/",  // IPv6 回环
+            "",
+            "not a url",
+        )) {
+            assertFalse("不应判为局域网：$url", UrlUtils.isLocalNetworkAddress(url))
+        }
+    }
+
+    @Test
+    fun `IPv6 局域网段识别正确`() {
+        assertTrue(UrlUtils.isLocalNetworkAddress("http://[fe80::1]/"))
+        assertTrue(UrlUtils.isLocalNetworkAddress("http://[fd00::1]:8080/"))
+        assertTrue(UrlUtils.isLocalNetworkAddress("http://[fc00::abcd]/"))
+        assertFalse(UrlUtils.isLocalNetworkAddress("http://[2001:4860:4860::8888]/"))
+        assertFalse(UrlUtils.isLocalNetworkAddress("http://[::1]/"))
+    }
 }
