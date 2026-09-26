@@ -167,6 +167,13 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      * Android 17（API 37）起，`targetSdk ≥ 37` 的应用访问局域网必须有它，否则连接会被
      * 内核直接拦掉（TCP 超时 / UDP 报 EPERM）—— 表现就是浏览器打不开路由器 / NAS /
      * 打印机的管理页，而且没有任何提示。授权成功后自动续跑那次被暂缓的导航。
+     *
+     * ⚠️ 本 launcher 在**属性初始化**（构造期）就注册了，早于 `onCreate` —— 于是审查会问
+     *    「待决结果会不会在注册瞬间同步派发、抢在 onCreate 恢复 `pendingLocalNetworkUrl` 之前」。
+     *    实测不会（本机 sources jar：androidx.activity 1.8.0 Java / 1.13.0 Kotlin 均为同一形态）：
+     *    待决结果是在 `Lifecycle.Event.ON_START` 的观察者里投递的，而 ON_START 必然晚于 onCreate
+     *    ⇒ onCreate 内恢复即已足够，**无需**把恢复提到 `super.onCreate()` 之后（那样也挡不住
+     *    "注册瞬间派发"，因为注册发生在构造期）。
      */
     private val requestLocalNetworkAccess =
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
@@ -512,6 +519,19 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         //    无条件重放会让 VIEW 深链整页重载、SEND 分享凭空多开一个标签
         //    （重放的深链页面本就已随会话快照恢复，跳过不丢内容）。
         //    进程存活期的后续入口由 onNewIntent 覆盖。
+        //
+        // 🔍 这里**不会**漏掉「实例已被系统回收、随后又有新请求」那种情况（外部审查提过三次，
+        //    在此留痕以免重复排查）：记录被复用时，新 intent 不靠 onCreate 重放，而是由框架
+        //    排队后**在 onResume 之前以 onNewIntent 投递** ——
+        //    `ActivityStarter.complyActivityFlags`(CLEAR_TOP) → `deliverNewIntent`
+        //    → `ActivityRecord.deliverNewIntentLocked`（非 RESUMED/PAUSED 时入 `newIntents`，
+        //    该字段的注释原文即 "any pending new intents for single-top mode"）
+        //    → `ActivityTaskSupervisor.realStartActivityLocked` 把它与 `r.getSavedState()`
+        //    **一起**塞进 `LaunchActivityItem` → `ActivityThread.performResumeActivity` 里
+        //    `deliverNewIntents` → `onNewIntent`（本类 :529 即 setIntent + handleIntent）。
+        //    记录若已从任务中移除，则是**新记录**（`mIcicle` 只由 `activityStopped` 写入）
+        //    ⇒ `savedInstanceState == null` ⇒ handleIntent 照跑。两条路都会处理入口，
+        //    不存在「既复用记录、又把新 intent 丢掉」的第三种，故这里的判据够用。
         //
         // 跨重建恢复：等待局域网授权时被暂缓的导航目标（见 onSaveInstanceState）。
         // ⚠️ 顺序是硬要求 —— 必须在 handleIntent **之前**恢复，且只在真的存过该键时赋值：
