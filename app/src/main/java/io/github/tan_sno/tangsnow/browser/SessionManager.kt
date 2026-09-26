@@ -890,6 +890,27 @@ class BrowserSessionManager private constructor(
 
     // --------------------------------------------------------- 网页弹窗（A2）
 
+    /**
+     * 弹窗归属的**执行瞬间复查** —— 守卫不能只查投递瞬间。
+     *
+     * 为什么必须复查：入口那次判定发生在内核回调的时刻，而对话框是 `post{}` 真正执行时
+     * 才创建的；两者之间（主线程消息队列里可能还排着用户的操作）用户完全可能切走、关掉
+     * 这个标签，甚至让 Activity 进入销毁。只查投递瞬间的话，弹窗照样弹、应答还给已经关闭
+     * 的会话 —— 注释里宣称的「不抢用户焦点」只成立一半。
+     *
+     * @return true 表示此刻已不该弹，并且**已经**按「后台/已关标签」的同一口径应答完成
+     *         （调用方直接 `return@post` 即可，不要再应答一次）
+     */
+    private fun promptStale(
+        tab: Tab,
+        result: GeckoResult<GeckoSession.PromptDelegate.PromptResponse>,
+        prompt: GeckoSession.PromptDelegate.BasePrompt,
+    ): Boolean {
+        if (isAlive(tab) && tab === active) return false
+        result.complete(prompt.dismiss())
+        return true
+    }
+
     private fun attachPromptDelegate(tab: Tab) {
         tab.session.promptDelegate = object : GeckoSession.PromptDelegate {
             override fun onAlertPrompt(
@@ -897,12 +918,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.AlertPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onAlert(prompt.title, prompt.message) {
@@ -918,12 +941,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.ButtonPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onConfirm(prompt.title, prompt.message) { ok ->
@@ -941,12 +966,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.TextPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onTextPrompt(prompt.title, prompt.message, prompt.defaultValue.orEmpty()) { text ->
@@ -961,7 +988,8 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.ChoicePrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
@@ -969,6 +997,7 @@ class BrowserSessionManager private constructor(
                 val choices = prompt.choices
                 val multiple = prompt.type == GeckoSession.PromptDelegate.ChoicePrompt.Type.MULTIPLE
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onChoice(
@@ -993,13 +1022,15 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.FilePrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 val multiple = prompt.type != GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onFilePrompt(prompt.mimeTypes ?: emptyArray(), multiple) { uris ->
@@ -1023,12 +1054,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.AuthPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onAuthPrompt(prompt.title, prompt.message) { cred ->
@@ -1046,12 +1079,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.confirm(AllowOrDeny.DENY))
                     else h.onBeforeUnload(prompt.title) { leave ->
@@ -1068,12 +1103,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.ColorPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onColorPrompt(prompt.defaultValue.orEmpty()) { value ->
@@ -1089,7 +1126,8 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.DateTimePrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
@@ -1097,6 +1135,7 @@ class BrowserSessionManager private constructor(
                 // type 是 int 常量，提前取出避免 lambda 内二次引用 prompt
                 val type = prompt.type
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onDateTimePrompt(type, prompt.defaultValue.orEmpty()) { value ->
@@ -1112,12 +1151,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.PopupPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onPopupPrompt(prompt.targetUri.orEmpty()) { allow ->
@@ -1139,12 +1180,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.RepostConfirmPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onRepostConfirmPrompt { ok ->
@@ -1160,12 +1203,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.RedirectPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onRedirectPrompt(prompt.targetUri.orEmpty()) { ok ->
@@ -1180,12 +1225,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.SharePrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onSharePrompt(prompt.text.orEmpty(), prompt.uri.orEmpty()) {
@@ -1203,12 +1250,14 @@ class BrowserSessionManager private constructor(
                 prompt: GeckoSession.PromptDelegate.FolderUploadPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
                 // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
+                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
+                    if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) result.complete(prompt.dismiss())
                     else h.onFolderUploadPrompt { picked ->
