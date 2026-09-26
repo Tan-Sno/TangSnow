@@ -247,6 +247,42 @@ object DownloadRepo {
         return afterScheme.substring(pathStart + 1).substringAfterLast('/')
     }
 
+    /**
+     * 复核某条媒体记录的「占位是否已清零」。
+     *
+     * @return true = 该行还在且已转正；false = **确定无可保留**（行已消失，或仍停在
+     *         `IS_PENDING`）；**null = 查不出来**（provider 抛异常 / 返回 null）——
+     *         调用方对 null 必须「什么都不做」，理由见 [writeToDownloads] 的调用点注释。
+     *
+     * 为什么要这三态：`update` 的返回值在个别实现上可能不表示受影响行数，只凭它决定删文件
+     * 有**误删已写好文件**的风险；查一次事实比信返回值可靠，而"事实也查不到"时不能猜。
+     */
+    private fun pendingClearedOrNull(
+        resolver: android.content.ContentResolver,
+        uri: android.net.Uri,
+    ): Boolean? = runCatching {
+        resolver.query(
+            uri,
+            arrayOf(android.provider.MediaStore.MediaColumns.IS_PENDING),
+            null, null, null,
+        )?.use { c ->
+            if (!c.moveToFirst()) false // 行没了：本就没有可保留的东西
+            else !c.isNull(0) && c.getInt(0) == 0
+        }
+    }.getOrNull()
+
+    /**
+     * 交给系统下载器（`DownloadManager`）下载。
+     *
+     * ⚠️ **唯一允许的入口是 [SaveOutcome.NO_BODY]**（内核响应没有 body，手上本就没有内容，
+     * 这是唯一一次"回退不会把错内容给用户"的场合）。除此之外**不要**调用它：它是另一次
+     * 独立的 GET，只带 UA/Referer，**拿不到**本次响应的 Cookie / 登录态 —— 登录态附件
+     * （NAS / 私有云）会被下成登录页 HTML，而 `DownloadManager` 还会把它报成「下载成功」。
+     * 本仓库为此撤销过「按体积路由大文件」与「写盘失败即回退」两条设计
+     * （见 `MainActivity.startDownload` 的注释）；**别再加第三个调用点**。
+     *
+     * @return DownloadManager 的任务 id；入队失败（URL scheme 不受支持等）返回 -1
+     */
     suspend fun launch(
         context: Context,
         url: String,
@@ -348,28 +384,25 @@ object DownloadRepo {
                 values.clear()
                 values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
                 // 行数为 0 = 那一行没被改到（并发删除等）：IS_PENDING 仍为 1 的行对其他应用
-                // 不可见，报成功等于报了一个用户拿不到的文件，故同样按失败处理并清占位。
-                written = resolver.update(uri, values, null, null) > 0
-                if (!written) {
-                    // 但**不能只凭返回值下结论**：个别实现可能不返回受影响行数。删文件之前先查
-                    // 一次事实（该行的 IS_PENDING 是否真的清掉了）—— 免得把一次其实已经写成功的
-                    // 文件删掉，那比留下幽灵行更糟（用户的下载凭空消失）。
-                    written = runCatching {
-                        resolver.query(
-                            uri,
-                            arrayOf(android.provider.MediaStore.MediaColumns.IS_PENDING),
-                            null, null, null,
-                        )?.use { c -> c.moveToFirst() && !c.isNull(0) && c.getInt(0) == 0 } == true
-                    }.getOrDefault(false)
+                // 不可见，报成功等于报了一个用户拿不到的文件；但**也不能只凭返回值就删文件**
+                // （个别实现可能不返回受影响行数），故先查一次事实，查不出来就保持 null。
+                good = if (resolver.update(uri, values, null, null) > 0) {
+                    true
+                } else {
+                    pendingClearedOrNull(resolver, uri)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 runCatching { resolver.delete(uri, null, null) }
                 throw e
             } catch (_: Exception) {
-                written = false
+                good = false // 写流 / 清零自身抛异常：占位行里没有可用内容
             }
-            if (!written) {
-                runCatching { resolver.delete(uri, null, null) }
+            if (good != true) {
+                // 只有「确认无可保留」才清占位。复核失败（null）时**什么都不做**：
+                // 删除会连带删掉底层文件，而「丢掉一次其实已经写成功的内容」比
+                // 「留下一个 IS_PENDING=1 的不可见行」更不可接受（本批的价值排序：
+                // 宁可不完成，也不给错内容 / 不丢已有内容）。
+                if (good == false) runCatching { resolver.delete(uri, null, null) }
                 return@withContext null
             }
             Placement(filePath = queryDataPath(resolver, uri), fallbackUri = uri.toString())
