@@ -64,8 +64,19 @@ object LegalDocs {
      *  站点权限询问弹窗勾选「记住我的选择」后，对应站点的授权决定（允许/拒绝）经内核
      *  StorageController 持久化在本机；可经「清除浏览数据 → Cookie 与站点数据」一并
      *  清除，未勾选时不保存，无痕会话一律不提供该勾选。政策 §1 数据枚举与摘要同步补句。
+     *
+     *  20 → 21（2026-09-26，披露事实纠错，全部经制品取证）：
+     *  ① §4 名单主机更正 —— 解包 omni.ja 实测：shavar.services.mozilla.com 只出现在
+     *     safebrowsing gethash（本应用已禁），跟踪保护名单实际经 Remote Settings
+     *     （firefox.settings.services.mozilla.com，bucket main，带签名校验）本机更新；
+     *     原披露的主机不产生流量、真实主机未披露。
+     *  ② 摘要移除「请勿跟踪（DNT）」—— javap 证实 GeckoView 155 无 DNT API，
+     *     omni.ja 无 browser.dnt pref；该承诺无法兑现，如实移除（GPC 保留）。
+     *  ③ §4 与摘要中 AMO 的网络用途去掉「图标」—— 扩展/引擎图标全部内嵌于 APK，
+     *     不构成网络访问。
+     *  ④ 用户协议正文补更新日期（docs/TERMS.md 头部「见正文」指针由此落到实处）。
      */
-    const val POLICY_VERSION = 20
+    const val POLICY_VERSION = 21
 
     // 注意：以下资源引用保持「非 const」，避免 Kotlin IR 在编译期常量折叠时
     // 因 R 常量跨模块求值触发 InterpreterMethodNotFoundError 内部错误。
