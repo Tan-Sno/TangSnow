@@ -62,6 +62,13 @@
             </intent-filter>
         </activity>
 
+        <!-- 首次启动的「语言初选」：仅当设备语言既非中文也非英文、且用户从未选过语言时
+             才会被 ConsentActivity 打开，不需要对外暴露 -->
+        <activity
+            android:name=".LanguageSetupActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TangSnow" />
+
         <activity
             android:name=".SettingsActivity"
             android:exported="false"

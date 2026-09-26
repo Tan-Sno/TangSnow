@@ -47,6 +47,18 @@ class PreferenceStore(context: Context) {
             prefs.edit().putString(KEY_APP_LOCALE, value).apply()
         }
 
+    /**
+     * 是否已经在首次启动时展示过「语言初选」页（见 [LocaleManager.shouldOfferInitialChoice]）。
+     *
+     * 为什么不拿 [appLocale] 是否为空来判断：空值是「跟随系统」的**正常取值**，
+     * 用户选了「跟随系统」之后仍应视为已完成选择 —— 否则每次冷启动都会再弹一次。
+     */
+    var languageChoiceOffered: Boolean
+        get() = prefs.getBoolean(KEY_LANGUAGE_CHOICE_OFFERED, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_LANGUAGE_CHOICE_OFFERED, value).apply()
+        }
+
     var theme: Theme
         get() = Theme.fromKey(prefs.getString(KEY_THEME, Theme.DEFAULT.key))
         set(value) {
@@ -424,6 +436,7 @@ class PreferenceStore(context: Context) {
         private const val KEY_HOME_STYLE = "home_style"
         private const val KEY_HOME_SHORTCUTS = "home_shortcuts"
         private const val KEY_HOME_IMAGE_URI = "home_image_uri"
+        private const val KEY_LANGUAGE_CHOICE_OFFERED = "language_choice_offered"
         private const val KEY_CUSTOM_ENGINES = "custom_engines"
         const val KEY_APP_LOCALE = "app_locale"
         private const val MAX_CUSTOM_ENGINES = 8
