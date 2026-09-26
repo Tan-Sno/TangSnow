@@ -248,28 +248,49 @@ object DownloadRepo {
     }
 
     /**
-     * 复核某条媒体记录的「占位是否已清零」。
+     * 一条媒体记录此刻的占位状态。
      *
-     * @return true = 该行还在且已转正；false = **确定无可保留**（行已消失，或仍停在
-     *         `IS_PENDING`）；**null = 查不出来**（provider 抛异常 / 返回 null）——
-     *         调用方对 null 必须「什么都不做」，理由见 [writeToDownloads] 的调用点注释。
-     *
-     * 为什么要这三态：`update` 的返回值在个别实现上可能不表示受影响行数，只凭它决定删文件
-     * 有**误删已写好文件**的风险；查一次事实比信返回值可靠，而"事实也查不到"时不能猜。
+     * 为什么必须是四态而不是布尔：调用方要据此分别回答两个**判据不同**的问题 ——
+     * 「算不算成功」与「能不能删内容」。把「行已消失」与「行还在、内容已写完整、只是没转正」
+     * 压成一个 `false`（本函数的前一版就是这么写的），就会在第二种情形下删掉已经写好的内容；
+     * 那正是 [SaveOutcome] 注释里批评过的"把两件性质完全不同的事混成一件"——
+     * 同一条原则只能有一套写法。
      */
-    private fun pendingClearedOrNull(
+    private enum class PendingState {
+        /** 行还在，且 `IS_PENDING` 已为 0（对其它应用已可见） */
+        CLEARED,
+
+        /** 行还在，但仍是占位：**内容已完整落盘，只是对外不可见** */
+        STILL_PENDING,
+
+        /** 该行已不存在（并发删除等）：没有可删的东西，也算不上成功 */
+        GONE,
+
+        /** 查不出来（provider 抛异常 / 返回 null）：不猜、不动手 */
+        UNKNOWN,
+    }
+
+    /**
+     * 查一次事实：`update` 的返回值在个别实现上可能不表示受影响行数，只凭它决定删文件
+     * 有**误删已写好内容**的风险，故这里直接读该行的 `IS_PENDING`；查不出来时返回
+     * [PendingState.UNKNOWN]，由调用方保持"不动手"。
+     */
+    private fun pendingState(
         resolver: android.content.ContentResolver,
         uri: android.net.Uri,
-    ): Boolean? = runCatching {
+    ): PendingState = runCatching {
         resolver.query(
             uri,
             arrayOf(android.provider.MediaStore.MediaColumns.IS_PENDING),
             null, null, null,
         )?.use { c ->
-            if (!c.moveToFirst()) false // 行没了：本就没有可保留的东西
-            else !c.isNull(0) && c.getInt(0) == 0
-        }
-    }.getOrNull()
+            when {
+                !c.moveToFirst() -> PendingState.GONE
+                !c.isNull(0) && c.getInt(0) == 0 -> PendingState.CLEARED
+                else -> PendingState.STILL_PENDING
+            }
+        } ?: PendingState.UNKNOWN
+    }.getOrDefault(PendingState.UNKNOWN)
 
     /**
      * 交给系统下载器（`DownloadManager`）下载。
@@ -332,7 +353,11 @@ object DownloadRepo {
         /** 内核响应没有 body：无内容可写，调用方可退回系统下载器 */
         NO_BODY,
 
-        /** 有内容但没能落盘（打不开流 / 写入中途失败 / 占位行清零没改到行） */
+        /**
+         * 有内容但没能交付给用户：打不开流 / 写入中途失败（占位行已清）；或**内容已完整落盘
+         * 但未能转正**（占位行被保留，约 7 天后由系统回收，见 [writeToDownloads] 的第 ② 段）。
+         * 两种情形对调用方是同一件事：这次没有可用文件，且**不要**退回系统下载器。
+         */
         FAILED,
     }
 
@@ -347,8 +372,15 @@ object DownloadRepo {
      * 另一处把 IS_PENDING 清零的 `update` 留在 try 外 ⇒ 它抛异常就留下 IS_PENDING=1 的幽灵行）。
      * 同构副本的漂移不会自己停，只有单一实现守得住。
      *
-     * 成功判据（三条缺一不可）：流能打开 ∧ 写入无异常 ∧ IS_PENDING 清零的 update 至少改到 1 行。
-     * 任一不成立都会清掉占位行 / 占位文件并返回 null —— 绝不留下「用户看不见又删不掉」的残骸。
+     * 处置分两段，**判据不同、动作也不同**（核心约定，改前先读）：
+     *  ① **写流阶段**（能打开流 ∧ 写入无异常）：失败 ⇒ 内容不完整 ⇒ 清掉占位行 / 占位文件，
+     *     不留残骸。**这是唯一会删内容的路径。**
+     *  ② **转正阶段**（把 `IS_PENDING` 清零）：失败 ⇒ 内容**已经完整落盘**、只是对外不可见
+     *     ⇒ **保留**它并返回 null（如实报失败），绝不再删。平台语义支持这么做：`IS_PENDING=1`
+     *     期间只有本应用能打开该文件（内容没丢），而 `DATE_EXPIRES` 规定 pending 项默认约
+     *     7 天后过期、由系统在 idle 时自动删除（也不会长期堆垃圾）。
+     *     代价：这一行不进自管列表，应用内「下载」页看不到、也删不到 —— 刻意的取舍，
+     *     与「错误内容比中断更糟」同一套排序（宁可留一个不可见的行，也不删掉可能已写完整的内容）。
      *
      * 线程：内部切到 [Dispatchers.IO]，调用方不必再自己包一层。
      *
@@ -374,36 +406,57 @@ object DownloadRepo {
             val uri = resolver.insert(
                 android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
             ) ?: return@withContext null
-            // 写入段的结果：true = 确认写好；false = 确认没有可保留的东西；**null = 复核失败**
-            var good: Boolean? = false
+            // 两段分开处置（本函数的核心约定，见上方 KDoc）：
+            //  · 写流阶段失败 ⇒ 内容不完整 ⇒ 清占位（**唯一**会删内容的路径）
+            //  · 转正阶段失败 ⇒ 内容已完整落盘、只是对外不可见 ⇒ **保留**，如实报失败
             try {
                 // ⚠️ 判空不能丢：openOutputStream 返回 null 时**不抛异常**。只看异常会把
                 //    「打不开流」当成写入成功，于是 0 字节的占位行被清零转正成可见文件，
                 //    界面还报「下载完成 / 已导出 N 条」—— 比留下幽灵行更糟（用户以为拿到了东西）。
                 val stream = resolver.openOutputStream(uri) ?: error("no output stream for $uri")
                 stream.use(write)
-                values.clear()
-                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
-                // 行数为 0 = 那一行没被改到（并发删除等）：IS_PENDING 仍为 1 的行对其他应用
-                // 不可见，报成功等于报了一个用户拿不到的文件；但**也不能只凭返回值就删文件**
-                // （个别实现可能不返回受影响行数），故先查一次事实，查不出来就保持 null。
-                good = if (resolver.update(uri, values, null, null) > 0) {
-                    true
-                } else {
-                    pendingClearedOrNull(resolver, uri)
-                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 runCatching { resolver.delete(uri, null, null) }
                 throw e
             } catch (_: Exception) {
-                good = false // 写流 / 清零自身抛异常：占位行里没有可用内容
+                // 写入没跑完：文件是半截的，占位行里没有可用内容 ⇒ 清掉，不让它成为幽灵
+                runCatching { resolver.delete(uri, null, null) }
+                return@withContext null
             }
-            if (good != true) {
-                // 只有「确认无可保留」才清占位。复核失败（null）时**什么都不做**：
-                // 删除会连带删掉底层文件，而「丢掉一次其实已经写成功的内容」比
-                // 「留下一个 IS_PENDING=1 的不可见行」更不可接受（本批的价值排序：
-                // 宁可不完成，也不给错内容 / 不丢已有内容）。
-                if (good == false) runCatching { resolver.delete(uri, null, null) }
+            // —— 到这里内容已完整落盘：此后无论转正是否成功，都**不再删**它 ——
+            values.clear()
+            values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+            val promoted = try {
+                if (resolver.update(uri, values, null, null) > 0) {
+                    true
+                } else {
+                    // 行数为 0 有两种可能：那行真没被改到，或个别实现不返回受影响行数。
+                    // 不能只凭返回值下结论（更不能就此删文件）⇒ 查一次事实再定。
+                    when (pendingState(resolver, uri)) {
+                        PendingState.CLEARED -> true
+                        // 行还在、只是没转正：内容已完整，**再试一次**清零（幂等、代价极小，
+                        // 成功就直接把它从「看不见」救成可见文件）
+                        PendingState.STILL_PENDING ->
+                            resolver.update(uri, values, null, null) > 0 ||
+                                pendingState(resolver, uri) == PendingState.CLEARED
+                        // 行已消失 / 查不出来：没有可删的东西，也不再猜
+                        PendingState.GONE, PendingState.UNKNOWN -> false
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // 取消：内容已完整，保留（系统按 DATE_EXPIRES 回收）
+            } catch (_: Exception) {
+                false
+            }
+            if (!promoted) {
+                // 内容完整但没能转正 ⇒ 返回失败，但**保留**那一行与文件。依据（SDK 源码
+                // `android-37.2/android/provider/MediaStore.java` 的列文档）：
+                //  · IS_PENDING=1 期间**只有本应用能打开**该文件 ⇒ 内容没丢；
+                //  · pending 项默认约 **7 天**后过期，由系统在 idle 时自动删除（DATE_EXPIRES）
+                //    ⇒ 也不会长期堆垃圾。
+                // 代价：该行不进自管列表，应用内「下载」页看不到、也删不到 —— 刻意取舍，
+                // 与本仓库「错误内容比中断更糟」同一套排序：宁可留下一个不可见的行，
+                // 也不删掉可能已经写完整的内容。
                 return@withContext null
             }
             Placement(filePath = queryDataPath(resolver, uri), fallbackUri = uri.toString())
