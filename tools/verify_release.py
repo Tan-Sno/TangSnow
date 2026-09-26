@@ -212,9 +212,10 @@ def read_gradle_expectations(root):
         return m.group(1)
 
     return {
-        "versionName": grab(r'versionName\s*=\s*"([^"]+)"', "versionName"),
-        # 行锚定（^\s*）：re.search 取的是全文首个匹配 —— 不锚定的话，将来谁在
-        # 注释里写一句 `// versionCode = 37`，这里就会静默取错值。
+        # 两者都做行锚定（^\s*）：re.search 取的是全文首个匹配 —— 不锚定的话，将来谁在
+        # 注释里写一句 `// versionCode = 37`（该文件的版本历史注释正是这种风格），
+        # 这里就会静默取错值。只锚一个等于留一半隐患。
+        "versionName": grab(r'^\s*versionName\s*=\s*"([^"]+)"', "versionName", re.M),
         "versionCode": int(grab(r"^\s*versionCode\s*=\s*(\d+)", "versionCode", re.M)),
     }
 
@@ -254,11 +255,18 @@ def apk_info(aapt2, env, apk):
     m = re.search(r"native-code: '([^']*)'", out)
     info["abi"] = m.group(1) if m else ""
     # minSdk / targetSdk：此前没有任何检查项盯着它们 —— 误改 targetSdk 会一路绿灯。
-    # 字段名 minSdkVersion（大写 S，aapt2 实测）；旧版 build-tools 的 badging 用
-    # sdkVersion，兜底再认一次。两个都没有 = None → 调用方判失败（fail-closed）
-    m = re.search(r"minSdkVersion:'([^']+)'", out) or re.search(r"sdkVersion:'([^']+)'", out)
+    # 字段名 minSdkVersion（大写 S，aapt2 36.0.0 实测，整行位于行首）；旧版 build-tools
+    # 的 badging 用 sdkVersion 表示 minSdk，兜底再认一次。两个都没有 = None → 调用方
+    # 判失败（fail-closed）。
+    # 三者都做行锚定（^，re.M）：badging 是「一行一个字段」的产物，锚定后只认字段行
+    # 行首，不会在别处误取。（此处曾有过一句「不锚定会咬到 targetSdkVersion」的说法，
+    # **实测为误**：字段名里的 S 是大写，而本正则大小写敏感 —— 顺便留作提醒：
+    # 结论要跑出来，别由形态推断。）
+    m = re.search(r"^minSdkVersion:'([^']+)'", out, re.M)
+    if not m:
+        m = re.search(r"^sdkVersion:'([^']+)'", out, re.M)
     info["minSdk"] = int(m.group(1)) if m else None
-    m = re.search(r"targetSdkVersion:'([^']+)'", out)
+    m = re.search(r"^targetSdkVersion:'([^']+)'", out, re.M)
     info["targetSdk"] = int(m.group(1)) if m else None
     return info
 
