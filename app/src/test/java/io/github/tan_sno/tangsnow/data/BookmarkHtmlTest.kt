@@ -106,6 +106,25 @@ class BookmarkHtmlTest {
     }
 
     @Test(timeout = 15_000)
+    fun `有效锚极多时仍在时限内完成——计数版本不得拖慢解析`() {
+        // 覆盖「有效锚极多」这一形态：旧实现撞到 RAW_PARSE_ENTRY_CAP 就 break，而计数版本
+        // 必须扫完才能如实回报被丢弃的条数（否则界面数字又不对）—— 本用例证明这不是新的性能洞。
+        // 规模取到**逼近体积上限**（≈5MB）：任何超线性退化都会在 15 秒内超时失败。
+        val perAnchor = "<a href=\"https://p.cn/\">t</a>".length
+        val n = BookmarkHtml.MAX_IMPORT_CHARS / perAnchor
+        val html = "<a href=\"https://p.cn/\">t</a>".repeat(n)
+        assertTrue("输入必须落在体积上限内：${html.length}", html.length <= BookmarkHtml.MAX_IMPORT_CHARS)
+
+        val t0 = System.nanoTime()
+        val (entries, dropped) = BookmarkHtml.parseImportCounted(html)
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        println("perf: anchors=$n len=${html.length} entries=${entries.size} dropped=$dropped ms=$ms")
+
+        assertEquals(BookmarkHtml.RAW_PARSE_ENTRY_CAP, entries.size)
+        assertEquals(n - BookmarkHtml.RAW_PARSE_ENTRY_CAP, dropped)
+    }
+
+    @Test(timeout = 15_000)
     fun `对抗性输入线性完成——复杂度回归哨兵`() {
         // 四种形态都曾在旧实现上退化，规模取到「旧实现需数十秒~小时级」的量级：
         // 任何一处退化成「每轮重新扫尾」，本用例都会在 15 秒内超时失败。
