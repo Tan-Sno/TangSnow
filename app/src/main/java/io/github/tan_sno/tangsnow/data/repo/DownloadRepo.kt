@@ -374,7 +374,8 @@ object DownloadRepo {
             val uri = resolver.insert(
                 android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
             ) ?: return@withContext null
-            var written = false
+            // 写入段的结果：true = 确认写好；false = 确认没有可保留的东西；**null = 复核失败**
+            var good: Boolean? = false
             try {
                 // ⚠️ 判空不能丢：openOutputStream 返回 null 时**不抛异常**。只看异常会把
                 //    「打不开流」当成写入成功，于是 0 字节的占位行被清零转正成可见文件，
@@ -455,6 +456,9 @@ object DownloadRepo {
         response: org.mozilla.geckoview.WebResponse,
         fileName: String,
     ): SaveOutcome = withContext(Dispatchers.IO) {
+        // 外层这次 IO 切换只为「解析 response.headers + 清洗文件名」这一段；
+        // 真正落盘的线程由 [writeToDownloads] 自己保证（它内部也切 IO）。
+        // 两处都切是刻意的：出口不假设调用方已经站在 IO 线程上。
         val input = response.body ?: return@withContext SaveOutcome.NO_BODY
         val safeName = sanitizeFileName(fileName)
         // HTTP 头名大小写不敏感，统一查找 Content-Type
