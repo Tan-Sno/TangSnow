@@ -316,7 +316,7 @@
     <string name="pref_clear_data_title">Clear browsing data</string>
     <string name="pref_clear_data_summary">Clear cookies, cache and site data</string>
     <string name="pref_exit_clear_title">Clear browsing data on exit</string>
-    <string name="pref_exit_clear_summary">When exiting TangSnow, automatically clear cookies and site data, cache, history and the tab snapshot; bookmarks and downloads are kept. \"Restore last tabs\" stops taking effect</string>
+    <string name="pref_exit_clear_summary">When you exit within the app (More → Exit browser, or pressing back twice on Home), cookies and site data, cache, history and the tab snapshot are cleared automatically; bookmarks and downloads are kept. \"Restore last tabs\" stops taking effect</string>
 
     <string name="pref_version_title">Version</string>
     <string name="pref_about_title">About TangSnow</string>
@@ -520,6 +520,7 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
         <item quantity="other">Imported %1$d bookmarks, skipped %2$d (duplicates or invalid)</item>
     </plurals>
     <string name="bookmark_import_failed">Import failed: the file cannot be read or is not a bookmarks file</string>
+    <string name="download_start_failed">Download could not be started, please retry</string>
     <!-- "Remember my choice" on the site-permission dialog: normal sessions only (never persisted for private) -->
     <string name="perm_remember">Remember my choice</string>
     <string name="arrow_open">▾</string>

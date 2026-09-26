@@ -82,6 +82,24 @@ class BrowserDb private constructor(context: Context) :
         }
     }
 
+    /**
+     * 批量插入书签（书签导入路径）：整批包在一个写事务里。此前导入逐条调
+     * [insertBookmark]，每条各自落盘 —— 一次 ≤1000 条的导入就是 ≤1000 次独立
+     * 事务（每次都带 fsync 语义），事务化后一次提交。
+     * 复用 [insertBookmark] 的「已存在只刷新标题」upsert 语义，导入天然幂等。
+     */
+    fun insertBookmarks(items: List<Pair<String, String>>) {
+        if (items.isEmpty()) return
+        val db = db()
+        db.beginTransaction()
+        try {
+            for ((url, title) in items) insertBookmark(url, title)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun deleteBookmark(url: String) {
         db().delete("bookmarks", "url = ?", arrayOf(url))
     }

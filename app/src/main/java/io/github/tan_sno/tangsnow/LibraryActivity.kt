@@ -378,7 +378,7 @@ class LibraryActivity : AppCompatActivity() {
                 val raw = BookmarkHtml.parseImport(text)
                 val existing = BookmarkRepo.list().mapTo(HashSet()) { it.url }
                 val (entries, skipped) = BookmarkHtml.sanitize(raw, existing)
-                entries.forEach { BookmarkRepo.add(it.url, it.title) }
+                BookmarkRepo.addAll(entries.map { it.url to it.title })
                 entries.size to skipped
             }
             if (isFinishing || isDestroyed) return@launch

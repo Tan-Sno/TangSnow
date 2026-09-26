@@ -321,7 +321,7 @@
     <string name="pref_clear_data_title">清除浏览数据</string>
     <string name="pref_clear_data_summary">清除 Cookie、缓存与站点数据</string>
     <string name="pref_exit_clear_title">退出时自动清除浏览数据</string>
-    <string name="pref_exit_clear_summary">退出棠雪时自动清除 Cookie 与站点数据、缓存、历史与标签页快照，书签与下载不受影响；开启后「恢复上次的标签页」不再生效</string>
+    <string name="pref_exit_clear_summary">在应用内退出（「更多 → 退出浏览器」或首页连按两次返回）时，自动清除 Cookie 与站点数据、缓存、历史与标签页快照；书签与下载不受影响，开启后「恢复上次的标签页」不再生效</string>
 
     <string name="pref_version_title">版本</string>
     <string name="pref_about_title">关于棠雪</string>
@@ -449,6 +449,7 @@
         <item quantity="other">已导入 %1$d 条书签，跳过 %2$d 条（重复或无效）</item>
     </plurals>
     <string name="bookmark_import_failed">导入失败：文件无法读取或不是书签文件</string>
+    <string name="download_start_failed">下载启动失败，请重试</string>
     <!-- 站点权限弹窗的「记住我的选择」：仅普通会话展示（无痕不持久化授权决定） -->
     <string name="perm_remember">记住我的选择</string>
     <string name="arrow_open">▾</string>
