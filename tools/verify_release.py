@@ -254,7 +254,8 @@ def apk_info(aapt2, env, apk):
     m = re.search(r"native-code: '([^']*)'", out)
     info["abi"] = m.group(1) if m else ""
     # minSdk / targetSdk：此前没有任何检查项盯着它们 —— 误改 targetSdk 会一路绿灯
-    m = re.search(r"sdkVersion:'([^']+)'", out)
+    # （aapt2 badging 的字段名是 minSdkVersion / targetSdkVersion，注意大写 S）
+    m = re.search(r"minSdkVersion:'([^']+)'", out)
     info["minSdk"] = int(m.group(1)) if m else None
     m = re.search(r"targetSdkVersion:'([^']+)'", out)
     info["targetSdk"] = int(m.group(1)) if m else None
