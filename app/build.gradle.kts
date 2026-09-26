@@ -100,11 +100,14 @@ if (!keystorePropsFile.exists()) {
         if (!name.matches(Regex("^(package|bundle|install).*Release$"))) return@configureEach
         doFirst {
             // 注意：这里用导入的简名 Properties，不能写全限定 java.util.Properties ——
-            // Kotlin DSL 里 `java` 会先解析到插件访问器，全限定形式反而编译不过
-            val current = Properties().apply {
-                keystorePropsFile.reader(Charsets.UTF_8).use { load(it) }
-            }
-            val invalid = invalidCredentialKeys(current)
+            // Kotlin DSL 里 `java` 会先解析到插件访问器，全限定形式反而编译不过。
+            // 文件若在配置与执行之间被删除，按「全部凭据不可用」给友好提示而非裸 IO 堆栈。
+            val current = runCatching {
+                Properties().apply {
+                    keystorePropsFile.reader(Charsets.UTF_8).use { load(it) }
+                }
+            }.getOrNull()
+            val invalid = if (current == null) credKeys else invalidCredentialKeys(current)
             if (invalid.isNotEmpty()) {
                 throw GradleException(
                     "release 签名凭据不可用(${invalid.joinToString(" / ")})——本次打包签名必定失败。\n" +
