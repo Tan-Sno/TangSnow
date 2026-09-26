@@ -64,14 +64,101 @@ class BookmarkHtmlTest {
         assertEquals(0, BookmarkHtml.parseImport(big).size)
     }
 
+    @Test(timeout = 15_000)
+    fun `对抗性输入线性完成——复杂度回归哨兵`() {
+        // 四种形态都曾在旧实现上退化，规模取到「旧实现需数十秒~小时级」的量级：
+        // 任何一处退化成「每轮重新扫尾」，本用例都会在 15 秒内超时失败。
+        // （旧版哨兵用 `"<a ".repeat(50_000)` 且不设超时，实测本身就要 7.1 秒 ⇒ 拦不住回归。）
+        //   ① 整篇 `<a `（有空白、无 '>'）    ⇒ 旧 ANCHOR_TAG 的 [^>]* 回溯到文末
+        //   ② 整篇 `<a`（连空白都没有）        ⇒ 无匹配，最便宜的一条，作对照
+        //   ③ 整篇 `<a >`（有 '>'、无 '</a>'）⇒ 旧实现每轮重查 </a> 各扫一次文末
+        //   ④ 收尾前缀反复出现却都不成立       ⇒ 收尾查找的推进与终止是否正确
+        val cases = listOf(
+            "<a ".repeat(200_000),
+            "<a".repeat(300_000),
+            "<a >".repeat(150_000),
+            "<a >".repeat(30_000) + "</abbr>".repeat(60_000),
+        )
+        for (t in cases) {
+            assertEquals("形态长度 ${t.length}", 0, BookmarkHtml.parseImport(t).size)
+        }
+    }
+
     @Test
-    fun `无收尾的对抗性输入瞬时完成且不误报`() {
-        // 整篇 `<a `（无 `>`、无 href）：旧的整篇大正则在此类输入上每个起点都把
-        // 惰性量词扫到文件尾（O(n²)，分钟级卡顿）；两段式解析应瞬时完成。
-        // 本用例同时是复杂度回归哨兵 —— 若有人改回嵌套量词形态，这里会先超时。
-        val adversarial = "<a ".repeat(50_000)
-        assertEquals(0, BookmarkHtml.parseImport(adversarial).size)
-        assertEquals(0, BookmarkHtml.parseImport("<a".repeat(100_000)).size)
+    fun `收尾标签前缀相似但不成立的输入按原语义处理`() {
+        // `</abbr>` 里有 `</a` 前缀但不是收尾标签：标题应继续延伸到真正的 `</a>`
+        val e = BookmarkHtml.parseImport("<a href=\"https://a.cn/\">标题</abbr>继续</a>")
+        assertEquals(1, e.size)
+        assertEquals("https://a.cn/", e[0].url)
+        assertEquals("标题</abbr>继续", e[0].title)
+    }
+
+    // ------------------------------------------------- 与改造前的差分（行为等价性）
+
+    @Test
+    fun `与改造前的两段式实现逐条等价——边界语料`() {
+        val corpus = listOf(
+            "", "<a ", "<a", "<a>", "</a>", "<a >",
+            "<a href=\"u\">t</a>",
+            "<A HREF=\"https://e.cn/\">标题</A>",
+            "<a href=\"u\">t</a><a href=\"v\">w</a>",
+            // 缺收尾标签：按空标题收（href 仍保留）
+            "<a href=\"u\">没有收尾",
+            "<a href=\"u\">一<a href=\"v\">二</a>",
+            // 一个 </a> 只被消费一次
+            "<a href=\"u\">x<a href=\"v\">y</a><a href=\"w\">z</a>",
+            // data-href / hreflang 不抢匹配
+            "<a data-href=\"evil\" href=\"good\">t</a>",
+            "<a data-href=\"evil\">t</a>",
+            "<a hreflang=\"zh\" href=\"good\">t</a>",
+            // 引号风格与空格
+            "<a href='s'>t</a>",
+            "<a href=bare>t</a>",
+            "<a HREF = \"spaced\" >t</a>",
+            // 无 href / 空 href
+            "<a >无链接</a>",
+            "<a href=\"\">空</a>",
+            "<a href=\"   \">空白</a>",
+            // 跨行标题与实体
+            "<a href=\"u\">第一行\n第二行</a>",
+            "<a href=\"u?a=1&amp;b=2\">A&amp;B</a>",
+            // 全角空格不是 ASCII 空白（旧口径同样不认）
+            "<a\u3000href=\"u\">t</a>",
+            "<a href=\"u\">t</a\u3000>",
+            // 标签内含 '<'，以及标签内嵌一个 `<a ` 形态
+            "<a title=\"a<b\" href=\"u\">t</a>",
+            "<a title=\"<a  href=inner\" href=\"u\">t</a>",
+        )
+        for (html in corpus) {
+            assertEquals(
+                "与改造前不等价：$html",
+                parseBeforeLinearization(html),
+                BookmarkHtml.parseImport(html).map { it.url to it.title },
+            )
+        }
+    }
+
+    @Test
+    fun `与改造前的两段式实现逐条等价——随机语料`() {
+        // 固定种子：失败可复现。token 集合刻意覆盖「标签/收尾/属性/空白/引号」的交叉，
+        // 也包括 `</abbr>`、`\u3000`、内嵌 `<a` 这些只在组合下才暴露的边角。
+        val tokens = listOf(
+            "<a ", "<a>", "<a", "</a>", "</A>", "</a >", "</abbr>", ">", "<",
+            "href=", " href=", "href = ", "HREF=", " data-href=", " hreflang=",
+            "\"", "'", "https://e.cn/", " ", "\n", "\t", "标题", "&amp;", "&#39;",
+            "<DT>", "x", "=", "a", "\u3000",
+        )
+        val rnd = java.util.Random(20260926L)
+        repeat(500) { case ->
+            val sb = StringBuilder()
+            repeat(rnd.nextInt(45)) { sb.append(tokens[rnd.nextInt(tokens.size)]) }
+            val html = sb.toString()
+            assertEquals(
+                "随机语料第 $case 例与改造前不等价：$html",
+                parseBeforeLinearization(html),
+                BookmarkHtml.parseImport(html).map { it.url to it.title },
+            )
+        }
     }
 
     // ------------------------------------------------------------- sanitize
@@ -149,5 +236,43 @@ class BookmarkHtmlTest {
         assertTrue(BookmarkHtml.isHttpUrl("http://a.cn/"))
         assertFalse(BookmarkHtml.isHttpUrl("a.cn/"))
         assertFalse(BookmarkHtml.isHttpUrl("moz-extension://abc/x"))
+    }
+
+    // ------------------------------------------- 差分基准（仅测试用，非生产代码）
+
+    /**
+     * **改造前**（两段式）的实现原文，只服务于差分用例。
+     *
+     * 留着它是为了把「线性化没有改变任何可观察行为」变成机器可验证的事实：
+     * `<a >`、`</abbr>`、标签内嵌 `<a`、`data-href`、全角空格这些交叉情形，
+     * 靠人读代码是覆盖不全的。
+     *
+     * ⚠️ 它本身是 O(n²)，**只允许喂小规模语料**（差分用例的语料都 < 1KB）。
+     */
+    private fun parseBeforeLinearization(text: String): List<Pair<String, String>> {
+        if (text.length > BookmarkHtml.MAX_IMPORT_CHARS) return emptyList()
+        val out = ArrayList<Pair<String, String>>()
+        var from = 0
+        while (true) {
+            val tag = REF_ANCHOR_TAG.find(text, from) ?: break
+            val bodyStart = tag.range.last + 1
+            val close = REF_CLOSE_TAG.find(text, bodyStart)
+            val title = if (close != null) text.substring(bodyStart, close.range.first) else ""
+            from = if (close != null) close.range.last + 1 else bodyStart
+            val href = REF_HREF_ATTR.find(tag.value)?.let { m ->
+                (m.groupValues[2].ifEmpty { m.groupValues[3] }).ifEmpty { m.groupValues[4] }
+            } ?: continue
+            if (href.isBlank()) continue
+            out += BookmarkHtml.decodeEntities(href).trim() to
+                BookmarkHtml.decodeEntities(title).trim()
+        }
+        return out
+    }
+
+    private companion object {
+        val REF_ANCHOR_TAG = Regex("""<a\s[^>]*>""", RegexOption.IGNORE_CASE)
+        val REF_CLOSE_TAG = Regex("""</a\s*>""", RegexOption.IGNORE_CASE)
+        val REF_HREF_ATTR =
+            Regex("""(?<![\w-])href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
     }
 }
