@@ -116,7 +116,8 @@
             下载文件对外「打开 / 分享」的唯一出口。
             Android 7.0 起直接传 file:// 给外部应用会抛 FileUriExposedException，
             故统一以 content:// + 按次读取授权交付；authority 跟随 applicationId，
-            避免多环境安装冲突。不申请任何存储权限，守住「仅 INTERNET + CAMERA」的承诺。
+            避免多环境安装冲突。不申请任何存储权限 —— 与「只申请极少量权限」的定位一致
+            （完整清单见 README 的「权限」一节与隐私政策第 2 条）。
         -->
         <provider
             android:name="androidx.core.content.FileProvider"

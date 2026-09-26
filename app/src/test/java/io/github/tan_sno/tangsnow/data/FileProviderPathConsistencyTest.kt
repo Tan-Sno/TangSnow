@@ -9,7 +9,7 @@ import java.io.File
  *
  * ## 为什么需要它
  *
- * 本应用对外承诺「仅 INTERNET + CAMERA 两项权限」，因此把下载文件交给外部应用只能走
+ * 本应用只申请极少量权限（其中**不含任何存储权限**），因此把下载文件交给外部应用只能走
  * `content://` 按次授权，而授权范围完全来自 `res/xml/file_paths.xml`。
  * 若代码把文件写到白名单**之外**的目录，`FileProvider.getUriForFile` 会抛
  * `IllegalArgumentException` —— 这一路既不崩溃、也不弹错，最终表现为

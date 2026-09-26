@@ -1375,7 +1375,7 @@ class BrowserSessionManager private constructor(
         //   browser.safebrowsing.downloads.remote.url     = "https://sb-ssl.google.com/safebrowsing/clientreport/download?key=…"
         // 即：名单需从 Mozilla 服务端更新、命中判断走远程 gethash、下载还上报 Google。
         // 这与本应用对外承诺的「数据不出设备、不存在向第三方共享或跨境传输」直接冲突，
-        // 也与「仅 INTERNET + CAMERA、无追踪 SDK」的产品定位不一致。
+        // 也与「权限极简、无追踪 SDK」的产品定位不一致。
         // 取舍：放弃钓鱼/恶意软件防护，换取承诺为真（替代防线是只从官方源装扩展 + 用户自辨）。
         builder.safeBrowsing(ContentBlocking.SafeBrowsing.NONE)
         // 弹跳跟踪保护（Bounce Tracking）与 AntiTracking 名单同属「跟踪保护」范畴，
