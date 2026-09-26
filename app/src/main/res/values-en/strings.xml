@@ -533,11 +533,13 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
     </plurals>
     <string name="bookmark_import_failed">Import failed: the file cannot be read or is not a bookmarks file</string>
     <string name="download_start_failed">Download could not be started, please retry</string>
-    <!-- Writing the file failed (content was in hand but could not be stored): a different fact
-         from "could not be started", hence its own string. It says we did **not** fall back to
-         the system downloader on purpose: that would be a second GET without this response's
-         cookies, and a sign-in-gated attachment would be saved as the sign-in page. -->
-    <string name="download_save_failed">Save failed: the content could not be stored (not retried with the system downloader, which would save the sign-in page as your file)</string>
+    <!-- Writing the file failed: a different fact from "could not be started", hence its own string.
+         The wording is deliberately non-committal ("could not confirm") because one of the cases is
+         "the content was fully written but could not be promoted" (invisible to other apps) —
+         saying "could not be stored" would overstate it. The rationale for not falling back to the
+         system downloader is maintainer information (see MainActivity.startDownload) and does not
+         apply to public, cookie-less downloads anyway. -->
+    <string name="download_save_failed">Save failed: could not confirm the file was stored</string>
     <!-- "Remember my choice" on the site-permission dialog: normal sessions only (never persisted for private) -->
     <string name="perm_remember">Remember my choice</string>
     <string name="arrow_open">▾</string>
