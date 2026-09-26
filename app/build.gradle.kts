@@ -201,8 +201,26 @@ android {
         //     冷启动读会话快照若预读未完成，改为有界等待，不再在主线程重复读盘 + 解析；
         //  ⑥ lint 开启 `checkAllWarnings`（此前默认口径下不可见的 225 条 warning 已逐条处置，
         //     全警告口径下仍为 `No issues found`）。
-        versionCode = 36
-        versionName = "2.1.3"
+        // 2.1.4：**披露准确性 + 发布链路加固**。政策升至 21 —— §4 的名单主机此前写的
+        //   是一个本应用已禁用、并不产生流量的地址（真实主机是 Mozilla Remote Settings）；
+        //   「请勿跟踪（DNT）」在 GeckoView 155 无 API 可用、属无法兑现的承诺，已移除；
+        //   AMO 的「图标」用途不成立（图标全部内嵌 APK）。全量用户下次启动会重新同意，
+        //   这是预期的。无新增对外端点与权限。
+        //  ① 发布链路：`gradlew` 补可执行位（非 Windows 环境 `./gradlew` 会 Permission denied）；
+        //     签名守卫补**执行期安全网**，堵住 `build` / `assemble` 绕过配置期检查仍去打包
+        //     签名的盲区；未登记 ABI 改配置期硬失败；`verify_release.py` 补 minSdk/targetSdk
+        //     断言、versionCode 解析行锚定、v2 签名判定改用 schemes 解析、冒烟修正 aapt2
+        //     字段名大小写（`sdkVersion` → `minSdkVersion`，此前 minSdk 恒为 None 全误报）；
+        //  ② 如实反馈：大文件路由后系统下载器拒绝 URL 时不再静默（此前「开始下载」成了
+        //     空头支票）；「退出时自动清除」的设置摘要改为枚举实际触发面；
+        //  ③ 性能与正确性：书签导入由逐条事务收敛为**整批一个写事务**；地址栏联想补**真防抖**
+        //     （此前注释写着「防抖」、实现里只有序号比对，每键两次 DB 查询）；
+        //  ④ 可访问性：新增文字专用色 `accent_text`（原 `accent` 在多种浅背景上低于 4.5:1），
+        //     20 处文字切换、图标仍用 `accent`；方向性图标补 `autoMirrored`；
+        //  ⑤ 仓库卫生：`.gitignore` 兜底 apk/aab/hprof，新增 `.editorconfig`，备份规则补
+        //     设备保护存储四域，`file_paths.xml` 按实际交付落点最小化收紧。
+        versionCode = 37
+        versionName = "2.1.4"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
         // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
         // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。
