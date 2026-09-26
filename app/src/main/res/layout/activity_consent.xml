@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 居中卡片：宽度上限 560dp，四边留白并压暗背景，
-     避免在手机/平板/折叠屏上“整屏过宽”，适配不同屏幕。 -->
+     避免在手机/平板/折叠屏上“整屏过宽”，适配不同屏幕。
+     fitsSystemWindows：targetSdk ≥ 35 起系统强制 edge-to-edge，卡片会顶到状态栏/导航栏
+     下面。本页与本仓库其余 8 个布局保持一致 —— 交由根布局消费 insets；背景色仍铺满整屏，
+     只有内容避开系统栏。 -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
     android:background="@color/scrim_strong">
 
     <LinearLayout
