@@ -66,6 +66,11 @@ EXPECTED_PERMISSIONS = {
     "io.github.tan_sno.tangsnow.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
 }
 
+# SDK 级别：与 app/build.gradle.kts 的 defaultConfig 一致。
+# 此前没有任何检查项校验它们 —— 误改 targetSdk 会一路绿灯发布出去。
+EXPECTED_MIN_SDK = 26
+EXPECTED_TARGET_SDK = 37
+
 
 class Fail(Exception):
     """校验失败。只带一句人话，不打印堆栈 —— 使用者要的是「哪里不对、怎么办」。"""
@@ -124,8 +129,10 @@ def find_java(sdk=None):
     jh = os.environ.get("JAVA_HOME")
     if _is_jdk(jh):
         return jh
-    if jh and os.path.isdir(jh):
-        return jh
+    # ⚠️ 这里**没有**「JAVA_HOME 是目录就接受」的分支：指向一个存在但没有
+    # bin/java 的目录（卸载残留）时，必须继续走下方兜底链（Studio JBR / SDK 兄弟
+    # 目录 / PATH），否则会在 apksigner 处以难以定位的方式失败。
+    # _is_jdk 已覆盖 JRE / JDK 两种布局，不存在第三种合法形态。
 
     candidates = list(_studio_jbr_candidates())
     if sdk:
@@ -198,15 +205,17 @@ def read_gradle_expectations(root):
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
 
-    def grab(pattern, what):
-        m = re.search(pattern, text)
+    def grab(pattern, what, flags=0):
+        m = re.search(pattern, text, flags)
         if not m:
             raise Fail("无法从 app/build.gradle.kts 解析出%s。" % what)
         return m.group(1)
 
     return {
         "versionName": grab(r'versionName\s*=\s*"([^"]+)"', "versionName"),
-        "versionCode": int(grab(r'versionCode\s*=\s*(\d+)', "versionCode")),
+        # 行锚定（^\s*）：re.search 取的是全文首个匹配 —— 不锚定的话，将来谁在
+        # 注释里写一句 `// versionCode = 37`，这里就会静默取错值。
+        "versionCode": int(grab(r"^\s*versionCode\s*=\s*(\d+)", "versionCode", re.M)),
     }
 
 
@@ -216,7 +225,9 @@ def read_gradle_expectations(root):
 
 def check_git_clean(root):
     """① 工作区干净 —— 这一条是「产物能对应到提交」的前提，最重要。"""
-    r = run(["git", "status", "--porcelain"], cwd=root)
+    # --no-optional-locks：git status 会刷新 .git/index（后台可选锁）——
+    # 本脚本自称「全部只读」，这里必须做到字面意义上的只读。
+    r = run(["git", "--no-optional-locks", "status", "--porcelain"], cwd=root)
     if r.returncode != 0:
         raise Fail("git status 执行失败：%s" % (r.stderr or "").strip())
     dirty = [l for l in r.stdout.splitlines() if l.strip()]
@@ -242,6 +253,11 @@ def apk_info(aapt2, env, apk):
     info["package"], info["versionCode"], info["versionName"] = m.group(1), int(m.group(2)), m.group(3)
     m = re.search(r"native-code: '([^']*)'", out)
     info["abi"] = m.group(1) if m else ""
+    # minSdk / targetSdk：此前没有任何检查项盯着它们 —— 误改 targetSdk 会一路绿灯
+    m = re.search(r"sdkVersion:'([^']+)'", out)
+    info["minSdk"] = int(m.group(1)) if m else None
+    m = re.search(r"targetSdkVersion:'([^']+)'", out)
+    info["targetSdk"] = int(m.group(1)) if m else None
     return info
 
 
@@ -264,11 +280,13 @@ def apk_signature(apksigner, env, apk):
         raise Fail("apksigner 未能运行（缺 Java），且它的退出码不可信：\n      %s" % out.strip()[:200])
     if "DOES NOT VERIFY" in out or "ERROR" in out:
         raise Fail("签名校验未通过：\n      %s" % out.strip()[:300])
-    if "Verified using v2 scheme (APK Signature Scheme v2): true" not in out:
-        raise Fail("输出里没有出现「v2 签名方案为真」的结论行，不能判定通过：\n      %s"
-                   % out.strip()[:300])
+    # 不依赖 apksigner 输出的整句措辞（build-tools 版本更替可能微调）——用宽松正则
+    # 解析出的 schemes 字典判定；没有「v2 为真」= 无法判定，仍然 fail-closed。
     schemes = {m.group(1): m.group(2) == "true"
                for m in re.finditer(r"Verified using ([^:]+): (true|false)", out)}
+    if not any(enabled and key.startswith("v2") for key, enabled in schemes.items()):
+        raise Fail("输出里没有「v2 签名方案为真」的结论，不能判定通过：\n      %s"
+                   % out.strip()[:300])
     m = re.search(r"Signer #1 certificate SHA-256 digest: ([0-9a-fA-F]+)", out)
     if not m:
         raise Fail("无法从 apksigner 输出中取到证书指纹。")
@@ -280,14 +298,24 @@ def check_apk_freshness(root, apks):
 
     工作区干净只保证「此刻没有未提交改动」，**不能**保证「APK 是从 HEAD 构建的」：
     完全可以先签名、再提交若干改动，于是要发布的包其实落后于 HEAD。
-    这里取 APK 文件时间之后触及 `app/src` / `app/build.gradle.kts` / `gradle/`
-    的提交 —— 有就提示。**返回的是清单，不是错误**：只改文档/注释并不影响产物，
-    不该拦住发布，交给人判断更合适。
+    这里取 APK 文件时间之后触及产物相关路径的提交 —— 有就提示。
+
+    路径清单必须覆盖**一切会影响产物的输入**：源码、应用构建脚本、R8 规则、
+    根构建脚本与设置、仓库级构建属性、wrapper/目录。漏掉 proguard-rules.pro
+    这类文件时，改一行 keep 规则 100% 改变产物却不会被提示。
+
+    ⚠️ 时序说明：本仓库的发布流程是「构建 → 签名 → 提交」，因此**本次发布的
+    提交本身**必然晚于 APK 文件时间，下面的列表总会列到它 —— 这是预期现象，
+    不是告警。真正要人工确认的是列表里是否出现了**超出本次发布内容**的文件
+    （那才说明 APK 落后于 HEAD）。**返回的是清单，不是错误**：升级为拦截会把
+    既定发布流程卡死，交给人判断更合适。
     """
     newest = max(os.path.getmtime(p) for p in apks)
     r = run(
         ["git", "log", "--since=%d" % int(newest), "--name-only",
-         "--pretty=format:", "--", "app/src", "app/build.gradle.kts", "gradle/"],
+         "--pretty=format:", "--",
+         "app/src", "app/build.gradle.kts", "app/proguard-rules.pro",
+         "build.gradle.kts", "settings.gradle.kts", "gradle.properties", "gradle/"],
         cwd=root,
     )
     return sorted({l.strip() for l in (r.stdout or "").splitlines() if l.strip()})
@@ -316,14 +344,23 @@ def main():
     say = (lambda *a: None) if args.quiet else print
 
     try:
-        print("棠雪 · 发布前校验（本地，不上传）")
-        print("  仓库：%s" % root)
-        print("  APK ：%s" % apk_dir)
-        print()
+        say("棠雪 · 发布前校验（本地，不上传）")
+        say("  仓库：%s" % root)
+        say("  APK ：%s" % apk_dir)
+        say("")
 
         # ① 工作区
         check_git_clean(root)
         say("  ✅ ① 工作区干净 —— 产物可对应到确切提交")
+
+        # 可追溯性（只打印，不拦截）：本仓库流程是「提交 → 构建 → verify → push →
+        # 打 tag」，verify 时刻 HEAD 本来就领先远端 —— 检查「是否已推送」只会误伤
+        # 流程。这里把 SHA 与领先数打印出来供发布说明记录，事后可追溯性同样达到。
+        head = run(["git", "rev-parse", "--short", "HEAD"], cwd=root)
+        branch = run(["git", "--no-optional-locks", "status", "-b", "--porcelain"], cwd=root)
+        m = re.search(r"\[ahead (\d+)\]", branch.stdout or "")
+        say("      HEAD: %s（领先 upstream %s 个提交 —— push 后归零）"
+            % ((head.stdout or "").strip(), m.group(1) if m else "?"))
 
         exp = read_gradle_expectations(root)
         say("  ✅ ② 构建脚本声明：%s (versionCode %d)" % (exp["versionName"], exp["versionCode"]))
@@ -360,6 +397,12 @@ def main():
                                 % (name, info["versionCode"], want_code))
             if info["abi"] != abi:
                 problems.append("%s：native-code 是 %s，期望 %s" % (name, info["abi"], abi))
+            if info["minSdk"] != EXPECTED_MIN_SDK:
+                problems.append("%s：minSdk 是 %s，期望 %s"
+                                % (name, info["minSdk"], EXPECTED_MIN_SDK))
+            if info["targetSdk"] != EXPECTED_TARGET_SDK:
+                problems.append("%s：targetSdk 是 %s，期望 %s"
+                                % (name, info["targetSdk"], EXPECTED_TARGET_SDK))
 
             perms = apk_permissions(aapt2, env, apk)
             extra, lack = perms - EXPECTED_PERMISSIONS, EXPECTED_PERMISSIONS - perms
@@ -401,8 +444,9 @@ def main():
             if len(stale) > 8:
                 print("      …另有 %d 个" % (len(stale) - 8))
             print()
-            print("    当前 APK 因此**落后于 HEAD**。若这些改动影响产物（代码 / 资源 / 构建脚本），")
-            print("    请重新构建并签名后再发布；若只是文档或注释，可忽略本提示。")
+            print("    注：本仓库流程是「构建 → 签名 → 提交」，本次发布的提交自身必然出现在上表。")
+            print("    需要人工确认的是列表里是否出现了**超出本次发布内容**的文件 ——")
+            print("    有则说明 APK 落后于 HEAD，请重新构建并签名后再发布。")
             print()
 
         print("✅ 校验通过，可以发布。校验和（可直接贴进发布说明）：")

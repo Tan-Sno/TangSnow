@@ -24,14 +24,24 @@ if (!keystorePropsFile.exists()) {
             "该产物不可分发、不可上架。"
     )
 } else {
-    // 占位符检测必须在**配置期**硬失败，不能只警告：
-    // 若放行，错误会推迟到几分钟后的 packageRelease 深处才炸，
-    // 报错还会被包成难以定位的 "keystore password was incorrect"（密码错、别名错、
-    // 占位符未替换三者在 keytool 层长得一模一样）。此处直接失败可把反馈压到几秒。
-    //
+    // 凭据可用性（配置期求值一次，供下方两道闸门共用）。
+    // 键缺失（getProperty 返回 null）与占位符「<<…>>」同样视为不可用：此前 storeFile
+    // 缺键会让 file() 在配置期抛出与「占位符未替换」毫无关系的空检查错误，路径写错
+    // 则落到打包深处、与「密码错/别名错」混成三义性 —— 正是这些闸门要消灭的东西。
+    val credKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    fun invalidCredentials(): List<String> {
+        val missing = credKeys.filter { keystoreProps.getProperty(it)?.contains("<<") ?: true }
+        if ("storeFile" in missing) return missing
+        // storeFile 本身可用时才查文件存在性；相对路径按 app/ 模块目录解析（与下方 file() 一致）
+        return missing + listOfNotNull(
+            "storeFile".takeIf { !file(keystoreProps.getProperty("storeFile")).isFile }
+        )
+    }
+    val invalidCredentialsAtConfig = invalidCredentials()
+
     // 但下列两种情况下**绝不能失败**，否则会把本来能成功的构建挡死：
     //
-    // ① 本次请求的不是 release 任务 —— debug 构建不需要任何签名凭据，
+    // ① 本次请求的不是 release 打包任务 —— debug 构建不需要任何签名凭据，
     //    若一并挡住，贡献者 clone 下来连 assembleDebug 都跑不了。
     //
     // ② Android Studio 的「Generate Signed Bundle / APK」签名向导在驱动本次构建 ——
@@ -51,14 +61,9 @@ if (!keystorePropsFile.exists()) {
         "android.injected.signing.key.password",
     ).all { !injectedSigning[it].isNullOrBlank() }
 
-    val pending = listOf("storePassword", "keyAlias", "keyPassword")
-        .filter { keystoreProps.getProperty(it)?.contains("<<") == true }
-    // 只有「会产出并签名 release 产物」的任务才真的需要凭据：package / assemble / bundle / install。
-    //
-    // ⚠️ 不能只看任务名里有没有 "Release" —— 那样会把 compileReleaseKotlin、lintRelease、
-    // testReleaseUnitTest、minifyReleaseWithR8 这类**完全不签名**的任务一并挡住，
-    // 报出「release 签名必定失败」这种与事实相反的错误，也会挡住「只想编译验证 release 变体」
-    // 这一正当用法。（实测踩到：`compileReleaseJavaWithJavac` 被拦。）
+    // 闸门一（配置期，任务名启发式）：对显式点名 release 打包的任务最快失败。
+    // ⚠️ 已知盲区：`./gradlew build` / `./gradlew assemble` 这类汇总任务名不含
+    // "Release" 却会带上 release 打包 —— 由下方闸门二在执行期兜底。
     val packagingVerbs = listOf("package", "assemble", "bundle", "install")
     val wantsRelease = gradle.startParameter.taskNames.any { raw ->
         val name = raw.substringAfterLast(':')
@@ -66,15 +71,35 @@ if (!keystorePropsFile.exists()) {
             !name.contains("Debug", ignoreCase = true) &&
             packagingVerbs.any { name.startsWith(it, ignoreCase = true) }
     }
-    if (pending.isNotEmpty() && wantsRelease && !wizardDriven) {
+    if (invalidCredentialsAtConfig.isNotEmpty() && wantsRelease && !wizardDriven) {
         throw GradleException(
-            "keystore.properties 中 ${pending.joinToString(" / ")} 仍为占位符，命令行 release 签名必定失败。\n" +
+            "release 签名凭据不可用(${invalidCredentialsAtConfig.joinToString(" / ")})。\n" +
                 "二选一即可：\n" +
                 "  1) 填入真实值。别名可用 " +
                 "keytool -list -v -keystore <storeFile 路径> -storepass <store 密码> 查询；\n" +
                 "  2) 改用 Android Studio 的「Build → Generate Signed Bundle / APK」向导，" +
                 "它自带凭据输入、不读本文件，因此无需修改这里。"
         )
+    }
+
+    // 闸门二（执行期安全网）：覆盖闸门一的盲区 —— `build`/`assemble` 汇总任务带出的
+    // release 打包。凡 package/bundle/install *Release（不含 uninstall）都要求凭据可用；
+    // 取值已在配置期完成，doFirst 只读捕获值 ⇒ 配置缓存友好；向导驱动时整体跳过。
+    // 错误不在这里的配置期抛、而挪到 doFirst：那会把「只想跑 build 里的 debug 部分」
+    // 的调用一并挡死，只拦真正要签名的那一步才对。
+    tasks.configureEach {
+        if (wizardDriven) return@configureEach
+        if (!name.matches(Regex("^(package|bundle|install).*Release$"))) return@configureEach
+        val invalid = invalidCredentialsAtConfig
+        if (invalid.isNotEmpty()) {
+            doFirst {
+                throw GradleException(
+                    "release 签名凭据不可用(${invalid.joinToString(" / ")})——本次打包签名必定失败。\n" +
+                        "二选一：1) 在 keystore.properties 填入真实值；2) 用 Android Studio 的\n" +
+                        "「Build → Generate Signed Bundle / APK」向导（它不读本文件，自带凭据）。"
+                )
+            }
+        }
     }
 }
 
@@ -189,11 +214,16 @@ android {
     signingConfigs {
         if (keystorePropsFile.exists()) {
             create("release") {
-                // 用 getProperty（Kotlin 侧可解析）；缺键时 requireNotNull 会给出明确报错
-                storeFile = file(keystoreProps.getProperty("storeFile"))
-                storePassword = keystoreProps.getProperty("storePassword")
-                keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
+                // 键缺失时显式报错而非空检查 NPE（此前注释声称 requireNotNull 却未落实）。
+                // 占位符场景仍放行创建 —— 由上方两道闸门在 release 打包时拦截，
+                // 保证贡献者只跑 assembleDebug 时完全不受影响。
+                fun cred(key: String): String =
+                    keystoreProps.getProperty(key)
+                        ?: throw GradleException("keystore.properties 缺少 $key。")
+                storeFile = file(cred("storeFile"))
+                storePassword = cred("storePassword")
+                keyAlias = cred("keyAlias")
+                keyPassword = cred("keyPassword")
             }
         }
     }
@@ -251,10 +281,16 @@ androidComponents {
             val abi = output.filters.firstOrNull {
                 it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI
             }?.identifier
+            // 未登记的 ABI（含 universal 未拆分）必须配置期硬失败：静默跳过会让该包
+            // 拿到未加偏移的基准 versionCode，比同批带偏移的包更低 —— 同机换 ABI
+            // 安装会被系统判为「降级」而拒绝，且无任何提示。
             val offset = abiCodes[abi]
-            if (offset != null) {
-                output.versionCode.set(output.versionCode.get() * 10 + offset)
-            }
+                ?: error(
+                    "ABI「${abi ?: "universal（未拆分）"}」未登记 versionCode 偏移。"
+                        + "请同步本表与 tools/verify_release.py 的 ABI_SPLITS，"
+                        + "或恢复 isUniversalApk = false。"
+                )
+            output.versionCode.set(output.versionCode.get() * 10 + offset)
         }
     }
 }
