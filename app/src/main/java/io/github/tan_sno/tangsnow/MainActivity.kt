@@ -506,6 +506,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         clipboardPermissionDialog?.dismiss()
         clipboardPermissionDialog = null
         if (::findBarController.isInitialized) findBarController.cancelPending()
+        if (::suggestionsController.isInitialized) suggestionsController.cancelPending()
         // 只有真正退出应用才销毁会话；主题切换等重建场景下标签页得以保留
         if (isFinishing && ::sessionManager.isInitialized) {
             detachActiveSession()
@@ -2035,8 +2036,16 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 }
                 val uri = contentResolver
                     .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@withContext false
-                val written = input.use { ins ->
-                    contentResolver.openOutputStream(uri)?.use { out -> ins.copyTo(out) } != null
+                // 写入段失败（含中途异常）都清掉 IS_PENDING 占位行，避免幽灵行
+                val written = try {
+                    input.use { ins ->
+                        contentResolver.openOutputStream(uri)?.use { out -> ins.copyTo(out) }
+                    } != null
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    runCatching { contentResolver.delete(uri, null, null) }
+                    throw e
+                } catch (_: Exception) {
+                    false
                 }
                 if (!written) {
                     // 失败时清掉占位行，避免下载目录留下 0 字节幽灵文件
@@ -2154,6 +2163,13 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         if (exiting) return
         exiting = true
         if (!prefs.exitClearBrowsingData) {
+            // 先落盘当前会话再关停，顺序不可颠倒：shutdown 清空 tabs 后，紧随
+            // finishAffinity 而来的 onPause → saveState 会走「无普通标签 → 清空
+            // 快照」分支，把刚存的快照删掉（表现：开着「恢复上次的标签页」，
+            // 一次正常退出就丢掉全部标签）。markPurged 压制 onPause 那一笔，
+            // 冷启动后的新浏览活动会自然复位该标志。
+            sessionManager.saveState()
+            SessionStore.markPurged()
             detachActiveSession()
             sessionManager.shutdown()
             finishAffinity()

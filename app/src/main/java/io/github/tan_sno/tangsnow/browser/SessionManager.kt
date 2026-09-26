@@ -623,6 +623,13 @@ class BrowserSessionManager private constructor(
             // window.open / target=_blank：返回 null 拒绝内核的新窗口请求，同时让
             // 当前标签页跳转到目标 URL（移动端惯例）。这样桌面 UA 下点视频/外链
             // 不会「新开标签 + 回主页」，而是在当前页直接打开。
+            //
+            // ⚠️ 归属判定：只让**当前活动标签**的 window.open 接管本标签导航。
+            // 此前不区分来源 —— 后台标签的弹窗会把用户正在浏览的活动标签整个
+            // 劫走（地址栏与页面全被换掉），已关闭标签的迟到请求同样会驱动跳转
+            // （同文件其它事件都有 isAlive 守卫，唯独这条链漏了）。后台标签的
+            // window.open 按弹窗拦截处理：直接忽略（多数移动浏览器的同款行为）。
+            if (!isAlive(tab) || tab !== active) return null
             post { events?.onOpenInCurrentTab(uri) }
             return null
         }
@@ -751,6 +758,10 @@ class BrowserSessionManager private constructor(
             session: GeckoSession,
             historyList: GeckoSession.HistoryDelegate.HistoryList,
         ) {
+            // 已脱离 tabs 的旧标签（关闭/重建后的延迟收尾期）迟到的历史事件：
+            // 不写 stateCache —— 否则已删条目被复活，且此后没有任何路径再清理它，
+            // 每关一个标签就泄漏一份会话状态 JSON（长历史栈可达几十 KB）。
+            if (!isAlive(tab)) return
             // 这里**当场**取 JSON 字符串（值拷贝），不是留引用。
             //
             // 依据（javap 实测 geckoview 155 的 classes.jar，非推测）：

@@ -178,10 +178,14 @@ class SuggestionsController(private val activity: MainActivity) {
     }
 
     fun hide() {
-        // 收起时撤掉在途的防抖任务：否则 250ms 后它仍会查库并重新弹出面板
+        cancelPending()
+        panel?.isVisible = false
+    }
+
+    /** 撤掉在途的防抖任务：hide 时与 Activity 销毁时都要调（否则 250ms 后仍会查库并弹面板） */
+    fun cancelPending() {
         pendingTask?.let { handler.removeCallbacks(it) }
         pendingTask = null
-        panel?.isVisible = false
     }
 
     private companion object {
