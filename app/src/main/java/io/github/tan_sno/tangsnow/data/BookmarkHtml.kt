@@ -22,8 +22,8 @@ object BookmarkHtml {
     /** 条目的收尾标签（标题即开始标签与它之间的文本） */
     private val CLOSE_TAG = Regex("""</a\s*>""", RegexOption.IGNORE_CASE)
 
-    /** 标签内的 href 属性（单/双引号或无引号） */
-    private val HREF_ATTR = Regex("""href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
+    /** 标签内的 href 属性（单/双引号或无引号）；lookbehind 防止 `data-href=` 里的 href= 被抢匹配 */
+    private val HREF_ATTR = Regex("""(?<![\w-])href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
 
     /** 导入清洗时单条标题的上限（超出截断，不拒收） */
     internal const val MAX_TITLE_LENGTH = 200
