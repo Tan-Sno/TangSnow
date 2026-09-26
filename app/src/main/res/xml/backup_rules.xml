@@ -6,4 +6,10 @@
     <exclude domain="database" path="." />
     <exclude domain="sharedpref" path="." />
     <exclude domain="external" path="." />
+    <!-- 设备保护存储（Direct Boot）：应用未使用（createDeviceProtectedStorageContext
+         全仓 0 命中），列出来是零成本保险 —— 将来若有代码误用该存储，数据也不会进备份 -->
+    <exclude domain="device_root" path="." />
+    <exclude domain="device_file" path="." />
+    <exclude domain="device_database" path="." />
+    <exclude domain="device_sharedpref" path="." />
 </full-backup-content>

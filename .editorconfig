@@ -1,0 +1,31 @@
+# 编辑器与格式化工具的统一基线，与已入库的 .idea/codeStyles 配合，
+# 避免「各自格式化」造成的 diff 噪声。仓库行尾由 .gitattributes 统一为 LF
+# （批处理除外），此处声明与之保持一致。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{kt,kts}]
+indent_size = 4
+
+[*.{xml,html}]
+indent_size = 4
+
+[*.{py,yml,yaml,gradle,kts}]
+indent_size = 4
+
+[*.{js,ts,json}]
+indent_size = 2
+
+# Markdown 用行尾双空格表示换行，不裁剪行尾空白
+[*.md]
+trim_trailing_whitespace = false
+
+# Windows 批处理必须 CRLF（与 .gitattributes 的 eol=crlf 一致），不统一改行尾
+[*.{bat,cmd}]
+end_of_line = crlf

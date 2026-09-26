@@ -9,23 +9,13 @@
     不能靠申请存储权限绕过，故走 content:// 按次授权。
 -->
 <paths>
-    <!-- API 26-28 的下载落点：getExternalFilesDir(DIRECTORY_DOWNLOADS) -->
+    <!-- API 26-28 的下载落点：getExternalFilesDir(DIRECTORY_DOWNLOADS)。
+         全仓唯一的 getUriForFile 调用点是 DownloadRepo.externalizableUri
+         （把自管下载的 file:// 记录转成 content:// 交付外部应用）——
+         2026-09-26 前这里还整目录放开过 external-files/files/cache 三个根，
+         经核实均无调用点，已按「实际会交付的落点」最小化收紧；
+         将来新增共享落点时必须同步补条目并注明用途。 -->
     <external-files-path
         name="ext_downloads"
         path="Download/" />
-
-    <!-- 应用外部私有目录整体（当前未直接使用，避免将来新增落点时遗漏） -->
-    <external-files-path
-        name="ext_files"
-        path="." />
-
-    <!-- 内部 filesDir -->
-    <files-path
-        name="internal_files"
-        path="." />
-
-    <!-- 缓存目录（扩展导入的临时 .xpi 等） -->
-    <cache-path
-        name="cache"
-        path="." />
 </paths>
