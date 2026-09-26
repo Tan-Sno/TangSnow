@@ -325,57 +325,16 @@ class LibraryActivity : AppCompatActivity() {
     }
 
     /** 写盘；文件名带时间戳避免覆盖既有导出。@return 是否成功 */
-    private fun writeBookmarksHtml(html: String): Boolean {
+    private suspend fun writeBookmarksHtml(html: String): Boolean {
         val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
             .format(java.util.Date())
         val name = "tangsnow_bookmarks_$stamp.html"
-        return try {
-            if (android.os.Build.VERSION.SDK_INT >= 29) {
-                val resolver = contentResolver
-                val values = android.content.ContentValues().apply {
-                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
-                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/html")
-                    put(
-                        android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
-                        android.os.Environment.DIRECTORY_DOWNLOADS
-                    )
-                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
-                }
-                val uri = resolver.insert(
-                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
-                ) ?: return false
-                // 写流与「IS_PENDING 清零 update」整体入 try：update 抛异常也清占位行
-                val written = try {
-                    resolver.openOutputStream(uri)?.use { out ->
-                        out.write(html.toByteArray(Charsets.UTF_8))
-                    }
-                    values.clear()
-                    values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
-                    resolver.update(uri, values, null, null)
-                    true
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    runCatching { resolver.delete(uri, null, null) }
-                    throw e
-                } catch (_: Exception) {
-                    false
-                }
-                if (!written) {
-                    runCatching { resolver.delete(uri, null, null) }
-                    return false
-                }
-                true
-            } else {
-                // API 26-28：无存储权限，写应用专属下载目录（文件管理器仍可见）
-                val dir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
-                    ?: return false
-                java.io.File(dir, name).writeText(html, Charsets.UTF_8)
-                true
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            false
-        }
+        // 落盘走统一出口（与内核流下载、存为 PDF 共用；判空 / 清占位 / update 行数判定都在那里）。
+        // 此前这段 MediaStore 代码在本页、MainActivity 与 DownloadRepo 各有一份，三份已漂成
+        // 三种语义 —— 其中本处与 DownloadRepo 都把「openOutputStream 返回 null」当成了成功。
+        return DownloadRepo.writeToDownloads(this, name, "text/html") { out ->
+            out.write(html.toByteArray(Charsets.UTF_8))
+        } != null
     }
 
     /** 导入：Netscape HTML → 解析 → 清洗（scheme 白名单/去重/上限）→ 逐条入库 */

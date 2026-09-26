@@ -283,6 +283,125 @@ object DownloadRepo {
         }
 
     /**
+     * 内核响应流落盘的结果。
+     *
+     * 为什么不是 Boolean：`false` 把两件性质完全不同的事混成一件 ——「内核没给响应体」
+     * （手上本就没有内容，此时退回系统下载器是唯一出路）与「写盘失败」（内容在手上但没落
+     * 下去，退回系统下载器等于另一次**不带 Cookie** 的 GET）。调用方必须能分辨，故用三态。
+     */
+    enum class SaveOutcome {
+        /** 已落盘并登记 */
+        SAVED,
+
+        /** 内核响应没有 body：无内容可写，调用方可退回系统下载器 */
+        NO_BODY,
+
+        /** 有内容但没能落盘（打不开流 / 写入中途失败 / 占位行清零没改到行） */
+        FAILED,
+    }
+
+    /** 落盘落点：成功时的路径与可回退的 uri（供登记进下载列表） */
+    internal data class Placement(val filePath: String?, val fallbackUri: String)
+
+    /**
+     * 把内容写进公共「下载」目录 —— 下载文件 / 书签导出 / 存为 PDF 三类产物**共用**本函数。
+     *
+     * 为什么必须收敛成一处：这段 MediaStore 代码此前在三个地方各写了一份，且已漂成三种语义
+     * （两处把「`openOutputStream` 返回 null」判成了成功 ⇒ 0 字节占位行被清零转正成可见文件；
+     * 另一处把 IS_PENDING 清零的 `update` 留在 try 外 ⇒ 它抛异常就留下 IS_PENDING=1 的幽灵行）。
+     * 同构副本的漂移不会自己停，只有单一实现守得住。
+     *
+     * 成功判据（三条缺一不可）：流能打开 ∧ 写入无异常 ∧ IS_PENDING 清零的 update 至少改到 1 行。
+     * 任一不成立都会清掉占位行 / 占位文件并返回 null —— 绝不留下「用户看不见又删不掉」的残骸。
+     *
+     * 线程：内部切到 [Dispatchers.IO]，调用方不必再自己包一层。
+     *
+     * @return 成功返回落点；失败返回 null
+     */
+    internal suspend fun writeToDownloads(
+        context: Context,
+        fileName: String,
+        mime: String,
+        write: (java.io.OutputStream) -> Unit,
+    ): Placement? = withContext(Dispatchers.IO) {
+        val resolver = context.contentResolver
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val values = ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                put(
+                    android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+                    android.os.Environment.DIRECTORY_DOWNLOADS
+                )
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(
+                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+            ) ?: return@withContext null
+            var written = false
+            try {
+                // ⚠️ 判空不能丢：openOutputStream 返回 null 时**不抛异常**。只看异常会把
+                //    「打不开流」当成写入成功，于是 0 字节的占位行被清零转正成可见文件，
+                //    界面还报「下载完成 / 已导出 N 条」—— 比留下幽灵行更糟（用户以为拿到了东西）。
+                val stream = resolver.openOutputStream(uri) ?: error("no output stream for $uri")
+                stream.use(write)
+                values.clear()
+                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                // 行数为 0 = 那一行没被改到（并发删除等）：IS_PENDING 仍为 1 的行对其他应用
+                // 不可见，报成功等于报了一个用户拿不到的文件，故同样按失败处理并清占位。
+                written = resolver.update(uri, values, null, null) > 0
+                if (!written) {
+                    // 但**不能只凭返回值下结论**：个别实现可能不返回受影响行数。删文件之前先查
+                    // 一次事实（该行的 IS_PENDING 是否真的清掉了）—— 免得把一次其实已经写成功的
+                    // 文件删掉，那比留下幽灵行更糟（用户的下载凭空消失）。
+                    written = runCatching {
+                        resolver.query(
+                            uri,
+                            arrayOf(android.provider.MediaStore.MediaColumns.IS_PENDING),
+                            null, null, null,
+                        )?.use { c -> c.moveToFirst() && !c.isNull(0) && c.getInt(0) == 0 } == true
+                    }.getOrDefault(false)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                runCatching { resolver.delete(uri, null, null) }
+                throw e
+            } catch (_: Exception) {
+                written = false
+            }
+            if (!written) {
+                runCatching { resolver.delete(uri, null, null) }
+                return@withContext null
+            }
+            Placement(filePath = queryDataPath(resolver, uri), fallbackUri = uri.toString())
+        } else {
+            // API 26-28：未声明存储权限，写应用专属「下载」目录
+            val dir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+                ?: return@withContext null
+            // uniqueFile 用 createNewFile 原子占位；写失败必须把占位文件删掉，否则 Downloads
+            // 目录里留下 0 字节 / 半截文件，而且从未登记 ⇒ 应用内「下载」页看不到、也删不掉。
+            val out = uniqueFile(dir, fileName)
+            try {
+                out.outputStream().use(write)
+            } catch (e: Throwable) {
+                runCatching { out.delete() }
+                throw e
+            }
+            // 记录里存 **file://**，而不是 FileProvider 的 content://。
+            //
+            // 对外交付（打开/分享）由 externalizableUri 统一把 file:// 转成
+            // content://（规避 FileUriExposedException），所以存 file:// 不影响使用；
+            // 但**删除**必须存 file://：FileProvider 未实现 delete，对它调
+            // resolver.delete 会抛 UnsupportedOperationException 并被 runCatching 吞掉，
+            // 结果是「记录删了、文件还在」。存 file:// 后 remove 走文件删除分支，真能删掉。
+            // （存量 content:// 记录仍能正常打开/分享，只是删除仍受此限制，不做数据迁移。）
+            Placement(
+                filePath = out.absolutePath,
+                fallbackUri = android.net.Uri.fromFile(out).toString(),
+            )
+        }
+    }
+
+    /**
      * 直接消费 GeckoView 的内核响应流存盘：
      * Cookie/Referer/登录态都已包含在这次响应里，是登录态附件的唯一可靠路径。
      *
@@ -291,15 +410,19 @@ object DownloadRepo {
      * DATA 路径、addCompletedDownload 失败等），则降级为本应用自管记录，
      * 保证应用内「下载」页仍然可见、可打开、可删除，绝不静默丢失。
      *
-     * @return false = 无响应体或写入失败（调用方应退回系统下载器）
+     * 落盘本身走 [writeToDownloads]（与书签导出、存为 PDF 同一出口，判据完全一致）。
+     *
+     * @return [SaveOutcome]；调用方**只应**在 [SaveOutcome.NO_BODY] 时退回系统下载器
+     *         （理由见该枚举的说明：其余失败若也退回，等于用一次不带 Cookie 的 GET
+     *         去换一个可能完全错误的内容）
      */
     @Suppress("DEPRECATION") // addCompletedDownload 暂无替代 API，仍是登记自有下载的官方途径
     suspend fun saveFromStream(
         context: Context,
         response: org.mozilla.geckoview.WebResponse,
         fileName: String,
-    ): Boolean = withContext(Dispatchers.IO) {
-        val input = response.body ?: return@withContext false
+    ): SaveOutcome = withContext(Dispatchers.IO) {
+        val input = response.body ?: return@withContext SaveOutcome.NO_BODY
         val safeName = sanitizeFileName(fileName)
         // HTTP 头名大小写不敏感，统一查找 Content-Type
         val mime = response.headers.entries
@@ -308,78 +431,25 @@ object DownloadRepo {
                 .getMimeTypeFromExtension(safeName.substringAfterLast('.', ""))
             ?: "application/octet-stream"
         try {
-            input.use { ins ->
-                if (android.os.Build.VERSION.SDK_INT >= 29) {
-                    val resolver = context.contentResolver
-                    val values = ContentValues().apply {
-                        put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, safeName)
-                        put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
-                        put(
-                            android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
-                            android.os.Environment.DIRECTORY_DOWNLOADS
-                        )
-                        put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
-                    }
-                    val uri = resolver.insert(
-                        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
-                    ) ?: return@withContext false
-                    // 写入段整体失败（打不开流 / 中途断网）都要清掉 IS_PENDING 占位行，
-                    // 否则半截行会挂到系统回收前 —— 「pending 幽灵行」。
-                    // 写流与「IS_PENDING 清零 update」整体入 try：update 自身抛异常
-                    // 也必须清掉占位行，否则留下 IS_PENDING=1 的幽灵行
-                    val written = try {
-                        resolver.openOutputStream(uri)?.use { out ->
-                            ins.copyTo(out)
-                        }
-                        values.clear()
-                        values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
-                        resolver.update(uri, values, null, null)
-                        true
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        runCatching { resolver.delete(uri, null, null) }
-                        throw e
-                    } catch (_: Exception) {
-                        false
-                    }
-                    if (!written) {
-                        runCatching { resolver.delete(uri, null, null) }
-                        return@withContext false
-                    }
-                    registerSavedFile(
-                        context, safeName, mime,
-                        filePath = queryDataPath(resolver, uri),
-                        fallbackUri = uri.toString(),
-                    )
-                    true
-                } else {
-                    // API 26-28：未声明存储权限，写应用专属「下载」目录
-                    val dir = context.getExternalFilesDir(
-                        android.os.Environment.DIRECTORY_DOWNLOADS
-                    ) ?: return@withContext false
-                    val out = uniqueFile(dir, safeName)
-                    out.outputStream().use { ins.copyTo(it) }
-                    registerSavedFile(
-                        context, safeName, mime,
-                        filePath = out.absolutePath,
-                        // 记录里存 **file://**，而不是 FileProvider 的 content://。
-                        //
-                        // 对外交付（打开/分享）由 externalizableUri 统一把 file:// 转成
-                        // content://（规避 FileUriExposedException），所以存 file:// 不影响使用；
-                        // 但**删除**必须存 file://：FileProvider 未实现 delete，对它调
-                        // resolver.delete 会抛 UnsupportedOperationException 并被 runCatching 吞掉，
-                        // 结果是「记录删了、文件还在」。存 file:// 后 remove 走文件删除分支，真能删掉。
-                        // （存量 content:// 记录仍能正常打开/分享，只是删除仍受此限制，不做数据迁移。）
-                        fallbackUri = android.net.Uri.fromFile(out).toString(),
-                    )
-                    true
-                }
+            // input.use 保证内核给的响应体在任何早退路径上都会被关闭
+            // （insert 失败时压根走不到 write 里，那里没有机会关它）。
+            input.use { body ->
+                val placement = writeToDownloads(context, safeName, mime) { out ->
+                    body.copyTo(out)
+                } ?: return@withContext SaveOutcome.FAILED
+                registerSavedFile(
+                    context, safeName, mime,
+                    filePath = placement.filePath,
+                    fallbackUri = placement.fallbackUri,
+                )
+                SaveOutcome.SAVED
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
-            // 同 launch()：取消要原样传播。此处若吞成 false，调用方 startDownload 会在
-            // 已取消的协程里接着退回系统下载器，用户看到「开始下载」却什么也没发生。
+            // 同 launch()：取消要原样传播。此处若吞成 FAILED，调用方 startDownload 会在
+            // 已取消的协程里接着弹「下载失败」，把「用户自己退出」说成「下载出错」。
             throw e
-        } catch (e: Exception) {
-            false
+        } catch (_: Exception) {
+            SaveOutcome.FAILED
         }
     }
 
