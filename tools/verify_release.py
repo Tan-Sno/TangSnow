@@ -17,7 +17,8 @@
    就是「验证通过」。本脚本因此不只看退出码，还要求输出里出现签名方案为真的行。
 
 ## 检查项
-1. git 工作区干净 —— 保证产物能对应到确切提交
+1. git 工作区干净 —— 保证**此刻没有未提交改动**（它**不**等于「产物是从 HEAD 构建的」，
+   与 HEAD 的对应关系另见第 6 项）
 2. 包名、versionName、versionCode、ABI 与 `app/build.gradle.kts` 一致
 3. 签名证书 SHA-256 == 期望指纹；且至少使用 v2 签名方案
 4. 权限集合 == 已披露基准（新增权限必须同时更新本文件与文档）
@@ -37,14 +38,20 @@ import shutil
 import subprocess
 import sys
 
-# Windows 控制台默认 GBK/CP936 时，✅/❌/⚠️ 等字符会抛 UnicodeEncodeError，
-# 让发布校验本身在打印第一行时就崩掉（部分机器实测）。统一把输出流重配为
-# UTF-8（无法解码的字符用 replace 兜底）；极老 Python 无 reconfigure 时静默降级。
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, OSError):
-        pass
+def _use_utf8_output():
+    """把 stdout / stderr 重配为 UTF-8（无法解码的字符用 replace 兜底）。
+
+    Windows 控制台默认 GBK/CP936 时，本脚本要打的 ✅/❌/⚠️ 会抛 UnicodeEncodeError，
+    让发布校验在打印第一行时就崩掉（部分机器实测）；极老 Python 无 reconfigure 时静默降级。
+
+    ⚠️ 刻意**不**做模块级调用：模块级副作用意味着「谁 import 本模块，谁的 stdout 就被改掉」
+    （被别的脚本 import 取值时会波及对方）。放进 main() 后，只有真正跑校验时才动输出流。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
 
 # ---------------------------------------------------------------------------
 # 期望值 —— 这些是本项目「对外已披露」的事实，改动必须是有意的
@@ -355,6 +362,7 @@ def sha256_of(path):
 # ---------------------------------------------------------------------------
 
 def main():
+    _use_utf8_output()
     ap = argparse.ArgumentParser(description="发布前校验（纯本地，只读）")
     ap.add_argument("--apk-dir", default=None, help="APK 所在目录，默认 app/release")
     ap.add_argument("--quiet", action="store_true", help="只输出结论与校验和")
