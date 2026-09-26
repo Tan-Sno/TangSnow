@@ -64,6 +64,16 @@ class BookmarkHtmlTest {
         assertEquals(0, BookmarkHtml.parseImport(big).size)
     }
 
+    @Test
+    fun `无收尾的对抗性输入瞬时完成且不误报`() {
+        // 整篇 `<a `（无 `>`、无 href）：旧的整篇大正则在此类输入上每个起点都把
+        // 惰性量词扫到文件尾（O(n²)，分钟级卡顿）；两段式解析应瞬时完成。
+        // 本用例同时是复杂度回归哨兵 —— 若有人改回嵌套量词形态，这里会先超时。
+        val adversarial = "<a ".repeat(50_000)
+        assertEquals(0, BookmarkHtml.parseImport(adversarial).size)
+        assertEquals(0, BookmarkHtml.parseImport("<a".repeat(100_000)).size)
+    }
+
     // ------------------------------------------------------------- sanitize
 
     @Test

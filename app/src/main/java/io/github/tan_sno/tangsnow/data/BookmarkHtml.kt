@@ -16,14 +16,14 @@ object BookmarkHtml {
     /** 待插入的书签条目 */
     data class Entry(val url: String, val title: String)
 
-    /**
-     * 匹配一条 `<A HREF="...">标题</A>`（忽略大小写与属性顺序）。
-     * href 值允许单/双引号或无引号；标题允许跨到行尾标签前（不贪婪）。
-     */
-    private val ANCHOR = Regex(
-        """<a\s+[^>]*?href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)</a>""",
-        RegexOption.IGNORE_CASE,
-    )
+    /** 开始标签（`[^>]*` 无嵌套量词 —— 全程线性，见 [parseImport] 的复杂度说明） */
+    private val ANCHOR_TAG = Regex("""<a\s[^>]*>""", RegexOption.IGNORE_CASE)
+
+    /** 条目的收尾标签（标题即开始标签与它之间的文本） */
+    private val CLOSE_TAG = Regex("""</a\s*>""", RegexOption.IGNORE_CASE)
+
+    /** 标签内的 href 属性（单/双引号或无引号） */
+    private val HREF_ATTR = Regex("""href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
 
     /** 导入清洗时单条标题的上限（超出截断，不拒收） */
     internal const val MAX_TITLE_LENGTH = 200
@@ -38,16 +38,35 @@ object BookmarkHtml {
      * 从书签 HTML 文本中解析全部条目（不做清洗，见 [sanitize]）。
      * 解析失败的条目（无 href / 空标题且空 URL）直接跳过，不让单个坏行中断整体。
      */
+    /**
+     * 从书签 HTML 文本中解析全部条目（不做清洗，见 [sanitize]）。
+     * 解析失败的条目（无 href / 空 URL）直接跳过，不让单个坏行中断整体。
+     *
+     * 为什么是「找开始标签 → 段内二次提取」的两段式，而不是一条大正则扫全文：
+     * `<a\s+[^>]*?href...` 形态在**没有 `>` 收尾**的对抗性输入（如整篇 `<a ` 重复，
+     * 5MB 上限内合法）上，每个起点都会把惰性量词扫到文件尾 —— O(n²)，分钟级卡住
+     * 导入线程且无法取消。两段式的每一环都无嵌套量词，全文 O(n)。
+     * 标题允许跨行（比逐行正则更宽容）；`</a>` 缺失时按空标题收该条目。
+     */
     fun parseImport(text: String): List<Entry> {
         if (text.length > MAX_IMPORT_CHARS) return emptyList()
-        return ANCHOR.findAll(text).mapNotNull { m ->
-            val href = (m.groupValues[2].ifEmpty { m.groupValues[3] })
-                .ifEmpty { m.groupValues[4] }
-            if (href.isBlank()) return@mapNotNull null
+        val out = ArrayList<Entry>()
+        var from = 0
+        while (true) {
+            val tag = ANCHOR_TAG.find(text, from) ?: break
+            val bodyStart = tag.range.last + 1
+            val close = CLOSE_TAG.find(text, bodyStart)
+            val title = if (close != null) text.substring(bodyStart, close.range.first) else ""
+            from = if (close != null) close.range.last + 1 else bodyStart
+            val href = HREF_ATTR.find(tag.value)?.let { m ->
+                (m.groupValues[2].ifEmpty { m.groupValues[3] }).ifEmpty { m.groupValues[4] }
+            } ?: continue
+            if (href.isBlank()) continue
             // href 同样要解码：主流浏览器导出时会把 URL 里的 & 写成 &amp;，
             // 不解码则导入的带查询参数链接全部失效
-            Entry(decodeEntities(href).trim(), decodeEntities(m.groupValues[5]).trim())
-        }.toList()
+            out += Entry(decodeEntities(href).trim(), decodeEntities(title).trim())
+        }
+        return out
     }
 
     /**

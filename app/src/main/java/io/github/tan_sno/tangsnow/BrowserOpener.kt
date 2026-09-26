@@ -49,7 +49,9 @@ object BrowserOpener {
     fun consumePending(): Pair<String, Boolean>? = synchronized(lock) {
         val url = pendingUrl ?: return null
         val newTab = pendingNewTab
-        val fresh = System.currentTimeMillis() - pendingAt <= PENDING_TTL_MS
+        // 单调时钟：TTL 用墙钟的话，用户改系统时间（回拨/前跳）会让自家跳转
+        // 被误判过期或陈旧值复活 —— elapsedRealtime 不受墙钟影响
+        val fresh = android.os.SystemClock.elapsedRealtime() - pendingAt <= PENDING_TTL_MS
         // 无论是否新鲜都要清空：过期值更不能留着劫持后续启动
         pendingUrl = null
         pendingNewTab = false
@@ -59,7 +61,7 @@ object BrowserOpener {
     private fun setPending(url: String, newTab: Boolean) = synchronized(lock) {
         pendingUrl = url
         pendingNewTab = newTab
-        pendingAt = System.currentTimeMillis()
+        pendingAt = android.os.SystemClock.elapsedRealtime()
     }
 
     /** 在当前（或新建）标签页里打开 URL：清掉顶上的页面，把结果送还给 MainActivity */

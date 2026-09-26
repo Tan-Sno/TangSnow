@@ -24,13 +24,19 @@ if (!keystorePropsFile.exists()) {
             "该产物不可分发、不可上架。"
     )
 } else {
-    // 凭据可用性（配置期求值一次，供下方两道闸门共用）。
-    // 键缺失（getProperty 返回 null）与占位符「<<…>>」同样视为不可用：此前 storeFile
-    // 缺键会让 file() 在配置期抛出与「占位符未替换」毫无关系的空检查错误，路径写错
-    // 则落到打包深处、与「密码错/别名错」混成三义性 —— 正是这些闸门要消灭的东西。
+    // 凭据键不可用判定（文件级函数，供下方配置期闸门与执行期安全网共用）。
+    // 三种形态都视为不可用：键缺失（null）、**空值**（此前漏网 —— `keyPassword=`
+    // 会被当成有效凭据放行，深处炸出三义性错误）、占位符「<<…>>」。
     val credKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    fun invalidCredentialKeys(props: java.util.Properties): List<String> =
+        credKeys.filter { val v = props.getProperty(it); v.isNullOrBlank() || v.contains("<<") }
+
+    // 凭据可用性（配置期求值一次，供闸门一快速反馈）。
+    // storeFile 缺键/占位符会让 file() 在配置期抛出与「占位符未替换」毫无关系的
+    // 空检查错误，路径写错则落到打包深处、与「密码错/别名错」混成三义性 ——
+    // 正是这些闸门要消灭的东西。
     fun invalidCredentials(): List<String> {
-        val missing = credKeys.filter { keystoreProps.getProperty(it)?.contains("<<") ?: true }
+        val missing = invalidCredentialKeys(keystoreProps)
         if ("storeFile" in missing) return missing
         // storeFile 本身可用时才查文件存在性；相对路径按 app/ 模块目录解析（与下方 file() 一致）
         return missing + listOfNotNull(
@@ -83,16 +89,23 @@ if (!keystorePropsFile.exists()) {
     }
 
     // 闸门二（执行期安全网）：覆盖闸门一的盲区 —— `build`/`assemble` 汇总任务带出的
-    // release 打包。凡 package/bundle/install *Release（不含 uninstall）都要求凭据可用；
-    // 取值已在配置期完成，doFirst 只读捕获值 ⇒ 配置缓存友好；向导驱动时整体跳过。
-    // 错误不在这里的配置期抛、而挪到 doFirst：那会把「只想跑 build 里的 debug 部分」
-    // 的调用一并挡死，只拦真正要签名的那一步才对。
+    // release 打包。凡 package/bundle/install *Release（不含 uninstall）一律挂检查。
+    // ⚠️ 必须**执行期重读** keystore.properties：配置缓存不追踪构建逻辑直接读的
+    // 文件 —— 配置期快照被缓存后，「填好真实凭据再原样重跑」会被陈旧 doFirst 误拦
+    // （提示让用户填，而用户已填），反向「凭据改坏」时又全哑。以执行期磁盘内容为准
+    // 双向正确；读取都在 doFirst 内、不触碰 Project API ⇒ 配置缓存友好。
+    // 向导驱动时整体跳过（android.injected.* 是 -P 属性，属缓存输入，键变化触发重配置）。
     tasks.configureEach {
         if (wizardDriven) return@configureEach
         if (!name.matches(Regex("^(package|bundle|install).*Release$"))) return@configureEach
-        val invalid = invalidCredentialsAtConfig
-        if (invalid.isNotEmpty()) {
-            doFirst {
+        doFirst {
+            // 注意：这里用导入的简名 Properties，不能写全限定 java.util.Properties ——
+            // Kotlin DSL 里 `java` 会先解析到插件访问器，全限定形式反而编译不过
+            val current = Properties().apply {
+                keystorePropsFile.reader(Charsets.UTF_8).use { load(it) }
+            }
+            val invalid = invalidCredentialKeys(current)
+            if (invalid.isNotEmpty()) {
                 throw GradleException(
                     "release 签名凭据不可用(${invalid.joinToString(" / ")})——本次打包签名必定失败。\n" +
                         "二选一：1) 在 keystore.properties 填入真实值；2) 用 Android Studio 的\n" +

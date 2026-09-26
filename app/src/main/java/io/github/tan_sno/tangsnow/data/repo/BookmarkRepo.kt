@@ -23,14 +23,9 @@ object BookmarkRepo {
     }
 
     /**
-     * 直接新增书签（导入路径用）：insertBookmark 自带「已存在只刷新标题」的 upsert 语义，
-     * 与并发导入的幂等性由库层保证。与 [toggle] 的区别是不做删除分支。
+     * 批量新增（书签导入路径）：insertBookmark 自带「已存在只刷新标题」的 upsert 语义，
+     * 与并发导入的幂等性由库层保证。整批一个写事务（见 [BrowserDb.insertBookmarks]）。
      */
-    suspend fun add(url: String, title: String): Unit = withContext(Dispatchers.IO) {
-        BrowserDb.get(ApplicationScope.context).insertBookmark(url, title)
-    }
-
-    /** 批量新增（书签导入）：整批一个写事务，语义见 [BrowserDb.insertBookmarks] */
     suspend fun addAll(items: List<Pair<String, String>>): Unit = withContext(Dispatchers.IO) {
         BrowserDb.get(ApplicationScope.context).insertBookmarks(items)
     }
