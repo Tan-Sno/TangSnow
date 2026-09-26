@@ -55,6 +55,15 @@
     <string name="toast_file_download_failed">这次下载没有成功，没有可打开的文件</string>
     <string name="toast_file_missing">文件已不存在，可能已被删除或清理</string>
     <string name="toast_local_network_denied">访问局域网地址需要「附近设备」权限，可在系统设置中开启</string>
+    <!-- 语言初选页：页面本身以**双语并排**呈现 —— 走到这里的用户设备语言既不是中文也不是
+         英文，任何单语版本都可能看不懂。因此中英两份资源里这五条的取值刻意相同。 -->
+    <string name="language_setup_title">选择语言 / Choose your language</string>
+    <string name="language_setup_message">棠雪目前提供简体中文与英文两种界面语言。\nTangSnow is currently available in Simplified Chinese and English.</string>
+    <string name="language_setup_zh">简体中文</string>
+    <string name="language_setup_en">English</string>
+    <string name="language_setup_continue">继续 / Continue</string>
+    <string name="about_project_title">项目主页</string>
+    <string name="about_project_sub">在 GitHub 上查看源码、提交 Issue 或反馈问题</string>
     <string name="toast_start_download">开始下载</string>
     <string name="download_confirm_title">开始下载</string>
     <string name="download_confirm_message">文件名：%1$s\n\n是否下载该文件？</string>
@@ -276,7 +285,7 @@
     <string name="prefs_cat_about">关于</string>
 
     <string name="pref_language_title">语言</string>
-    <string name="pref_language_summary">中文 / English</string>
+    <string name="pref_language_summary">简体中文 / English</string>
     <string name="pref_default_browser_title">设为默认浏览器</string>
     <string name="pref_default_browser_summary">用棠雪打开外部链接</string>
 

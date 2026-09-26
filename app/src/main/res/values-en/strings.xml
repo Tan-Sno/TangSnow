@@ -55,6 +55,16 @@
     <string name="toast_file_download_failed">This download didn\'t succeed, so there\'s no file to open</string>
     <string name="toast_file_missing">The file no longer exists — it may have been deleted or cleaned up</string>
     <string name="toast_local_network_denied">Opening a local network address needs the “Nearby devices” permission; you can turn it on in system settings</string>
+    <!-- Language setup screen: shown bilingually side by side, because the users who reach it
+         have a device language that is neither Chinese nor English. The Chinese and English
+         resources therefore hold deliberately identical values for these five strings. -->
+    <string name="language_setup_title">选择语言 / Choose your language</string>
+    <string name="language_setup_message">棠雪目前提供简体中文与英文两种界面语言。\nTangSnow is currently available in Simplified Chinese and English.</string>
+    <string name="language_setup_zh">简体中文</string>
+    <string name="language_setup_en">English</string>
+    <string name="language_setup_continue">继续 / Continue</string>
+    <string name="about_project_title">Project home</string>
+    <string name="about_project_sub">View the source, open an issue or send feedback on GitHub</string>
     <string name="toast_start_download">Download started</string>
     <string name="download_confirm_title">Download file</string>
     <string name="download_confirm_message">File: %1$s\n\nDo you want to download it?</string>
@@ -273,7 +283,7 @@
     <string name="prefs_cat_about">About</string>
 
     <string name="pref_language_title">Language</string>
-    <string name="pref_language_summary">中文 / English</string>
+    <string name="pref_language_summary">简体中文 / English</string>
     <string name="pref_default_browser_title">Set as default browser</string>
     <string name="pref_default_browser_summary">Open links with TangSnow</string>
 

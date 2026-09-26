@@ -6,6 +6,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import io.github.tan_sno.tangsnow.data.ConsentGate
+import io.github.tan_sno.tangsnow.data.LocaleManager
 import io.github.tan_sno.tangsnow.data.PreferenceStore
 import io.github.tan_sno.tangsnow.data.SessionStore
 import io.github.tan_sno.tangsnow.data.ThemeController
@@ -39,6 +40,19 @@ class ConsentActivity : AppCompatActivity() {
         // 已同意且政策未更新：直接放行（冷启动被系统再次带到本页的普通情况）
         if (!ConsentGate.needsConsent(prefs)) {
             openMainAndFinish()
+            return
+        }
+
+        // 语言初选：设备语言既非中文也非英文、且用户从未做过选择时，才插一页问一次
+        // （理由见 LanguageSetupActivity 的类注释）。必须**早于** setContentView ——
+        // 否则同意页会先用错误语言闪一下。
+        //
+        // 放在 needsConsent 判断**之后**是刻意的：已经在用本应用的老用户（政策未更新）
+        // 不该被突然拦一页；语言初选只服务于「全新的一次同意流程」。
+        if (LocaleManager.shouldOfferInitialChoice(this, prefs)) {
+            // 原 intent 原样转交 —— 外部 ACTION_VIEW 调起的深链不能被中间这页吃掉
+            startActivity(Intent(intent).setClass(this, LanguageSetupActivity::class.java))
+            finish()
             return
         }
 

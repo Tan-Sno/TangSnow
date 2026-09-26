@@ -48,6 +48,12 @@ class AboutActivity : AppCompatActivity() {
 
         // 崩溃报告：仅本地留存；可查看 / 分享 / 删除
         binding.rowCrashes.setOnClickListener { showCrashReports() }
+        // 项目主页：隐私政策与用户协议都写着「可通过本项目 GitHub 仓库提交 Issue」，
+        // 此前应用内没有任何落点。交给 BrowserOpener 打开（它会送进主界面的标签页），
+        // 与浏览器自身的习惯一致。
+        binding.rowProject.setOnClickListener {
+            BrowserOpener.open(this, "https://github.com/Tan-Sno/TangSnow")
+        }
         refreshCrashSummary()
     }
 
