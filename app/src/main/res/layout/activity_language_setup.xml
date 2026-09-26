@@ -11,8 +11,12 @@
     android:fitsSystemWindows="true"
     android:background="@color/scrim_strong">
 
-    <!-- 内滚容器：横屏小屏 + 大字号下内容超出可用高度时，「继续」键仍可滚动触达；
-         内容不超限时 wrap_content + 上下居中约束，观感与同意页卡片一致 -->
+    <!-- 内滚容器：横屏小屏 + 大字号下内容超出可用高度时，「继续」键仍可滚动触达。
+         ⚠️ `layout_constrainedHeight` 不能省：wrap_content 的控件在 ConstraintLayout 下
+         **默认不受上下约束限制**（可以长到约束之外），那样滚动容器的高度会跟着内容一起长 ——
+         内滚永远不触发、底部内容反而被父布局裁掉（「继续」键点不到）。加上它，高度才被钳在
+         可用空间之内；`height_max` 与同意页保持同一上限意图，内容不超限时仍是 wrap_content
+         并居中显示（观感不变）。 -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -21,7 +25,9 @@
         android:elevation="10dp"
         android:fillViewport="true"
         android:overScrollMode="never"
+        app:layout_constrainedHeight="true"
         app:layout_constraintWidth_max="440dp"
+        app:layout_constraintHeight_max="720dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
