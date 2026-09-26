@@ -1742,9 +1742,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                     }
                 }
 
-                // 有内容但没落下去：如实报失败。绝不退回系统下载器二次 GET ——
-                // 那会拿登录页 HTML 冒充用户要的文件，且系统下载器还会报"成功"。
-                DownloadRepo.SaveOutcome.FAILED -> toast(R.string.download_start_failed)
+                // 有内容但没落下去：如实报失败，且**用另一条文案** —— 「启动失败」与
+                // 「内容没写下去」是两件事；后者还要传达我们**刻意没**退回系统下载器
+                // （那条路是另一次不带 Cookie 的 GET，会把登录页 HTML 冒充成用户要的文件，
+                // 且系统下载器还会报「成功」）。
+                DownloadRepo.SaveOutcome.FAILED -> toast(R.string.download_save_failed)
             }
         }
     }
