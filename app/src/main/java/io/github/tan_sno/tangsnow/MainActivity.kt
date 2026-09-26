@@ -2164,9 +2164,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 此前这里自己抄了一份 MediaStore 代码，与书签导出、内核流下载并成三份同构副本，
         // 且已漂成三种语义（本处把 update 留在 try 外 ⇒ 它抛异常就留 IS_PENDING=1 的幽灵行）。
         // 副本越少，越不会被改漏。
-        return DownloadRepo.writeToDownloads(this, name, "application/pdf") { out ->
-            input.use { it.copyTo(out) }
-        } != null
+        //
+        // ⚠️ `input.use` 放在**最外层**：writeToDownloads 在 `insert` 返回 null、或协程被取消时
+        // 根本不会调用 write 回调，那时只有这里能关掉内核给的 PDF 管道流（放进去就漏一个 fd，
+        // 要等 GC 的 Cleaner 兜）。
+        return input.use { body ->
+            DownloadRepo.writeToDownloads(this, name, "application/pdf") { out ->
+                body.copyTo(out)
+            } != null
+        }
     }
 
     private fun showMoreSheet() {
