@@ -1,10 +1,10 @@
 blank_issues_enabled: false
 
 contact_links:
-  - name: 报告安全漏洞
+  - name: Report a security vulnerability
     url: https://github.com/Tan-Sno/TangSnow/security/advisories/new
-    about: 请不要用公开 Issue 报告安全漏洞。这里是只对维护者可见的私密上报入口。
+    about: Please do not report security vulnerabilities in a public issue. This private form is visible to the maintainer only.
 
-  - name: 查阅贡献指南
+  - name: Read the contributing guide
     url: https://github.com/Tan-Sno/TangSnow/blob/main/CONTRIBUTING.md
-    about: 提交 Issue 或 Pull Request 之前，请先阅读贡献指南。
+    about: Please read the contributing guide before opening an issue or a pull request.
