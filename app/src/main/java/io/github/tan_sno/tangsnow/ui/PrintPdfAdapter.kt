@@ -45,7 +45,11 @@ internal class PrintPdfAdapter(
             .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
             .setPageCount(PrintDocumentInfo.PAGE_COUNT_UNKNOWN)
             .build()
-        callback.onLayoutFinished(info, true)
+        // ⚠️ 第二个参数是「布局是否发生变化」，**只在真的变了时**才报 true。
+        // 此前恒传 true：那等于每次都告诉框架「布局变了、请重新布局」，会让框架
+        // 反复重排、并可能取消正在进行的写入 —— 表现为打印界面出现「已取消」而
+        // 用户并没有取消。
+        callback.onLayoutFinished(info, oldAttributes != newAttributes)
     }
 
     override fun onWrite(
@@ -54,15 +58,24 @@ internal class PrintPdfAdapter(
         cancellationSignal: CancellationSignal?,
         callback: WriteResultCallback,
     ) {
-        if (cancellationSignal?.isCanceled == true || destination == null) {
+        // 只有框架**真的**取消了这次写入，才报「已取消」。
+        if (cancellationSignal?.isCanceled == true) {
             callback.onWriteCancelled()
+            return
+        }
+        val dest = destination
+        if (dest == null) {
+            // ⚠️ 框架未提供输出流属于**失败**，不是用户取消。
+            // 此前与取消合并处理、报 onWriteCancelled()，会让系统打印界面显示
+            // 「已取消」—— 而用户并没有取消（本次修复的正是这个误报）。
+            callback.onWriteFailed("打印框架未提供输出流")
             return
         }
         try {
             FileInputStream(pdf).use { input ->
                 // 用 AutoCloseOutputStream 而不是 FileOutputStream(fd)：
                 // 后者会让 fd 的关闭责任变得含糊，前者与 use{} 配合能确保写完后正确释放。
-                ParcelFileDescriptor.AutoCloseOutputStream(destination).use { output ->
+                ParcelFileDescriptor.AutoCloseOutputStream(dest).use { output ->
                     input.copyTo(output)
                 }
             }
