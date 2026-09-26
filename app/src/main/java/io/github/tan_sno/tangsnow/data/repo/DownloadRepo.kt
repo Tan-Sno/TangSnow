@@ -113,10 +113,18 @@ object DownloadRepo {
      *
      * 存量记录存的是 `file://`（API 26-28 的应用专属下载目录），Android 7.0 起
      * 直接外传会抛 FileUriExposedException，故此处统一转成 FileProvider 的
-     * `content://`；MediaStore 记录本就是 `content://`，原样返回。
-     * 转换失败（文件不在白名单内等）返回 **null**：绝不把 file:// 兜底交给外部
-     * 应用 —— 那会抛 FileUriExposedException 并被 runCatching 吞成 NO_APP，
-     * 让「文件在但无法安全交付」被谎报成「没有应用能打开」；上层按 MISSING 提示。
+     * `content://`；MediaStore 与存量的 `content://` 记录原样返回。
+     *
+     * 返回 **null** 表示「**文件在、但本应用无法为它签发授权**」—— 与「文件已不存在」
+     * 是两回事。这里绝不退回 file:// 兜底：那会让 FileUriExposedException 被调用方的
+     * `runCatching` 吞成 NO_APP，把「交不出去」谎报成「没有应用能打开它」。
+     *
+     * ⚠️ 该 null 分支**当前不可达**：唯一产生 `file://` 记录的落点是
+     * `getExternalFilesDir(DIRECTORY_DOWNLOADS)`（即 `Download/`），已被
+     * `file_paths.xml` 的 `ext_downloads` 覆盖。将来若新增共享落点，必须同步白名单 ——
+     * `FileProviderPathConsistencyTest` 守着这条不变式。
+     * 调用方目前把 null 一并归为 `Result.MISSING`（文件已不存在）；因不可达，
+     * 二者尚未区分，若哪天真放开了落点，需先把这一档单独拆出来。
      */
     private fun externalizableUri(context: Context, raw: String): android.net.Uri? {
         val uri = runCatching { android.net.Uri.parse(raw) }.getOrNull() ?: return null
