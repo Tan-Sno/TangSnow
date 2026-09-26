@@ -253,9 +253,10 @@ def apk_info(aapt2, env, apk):
     info["package"], info["versionCode"], info["versionName"] = m.group(1), int(m.group(2)), m.group(3)
     m = re.search(r"native-code: '([^']*)'", out)
     info["abi"] = m.group(1) if m else ""
-    # minSdk / targetSdk：此前没有任何检查项盯着它们 —— 误改 targetSdk 会一路绿灯
-    # （aapt2 badging 的字段名是 minSdkVersion / targetSdkVersion，注意大写 S）
-    m = re.search(r"minSdkVersion:'([^']+)'", out)
+    # minSdk / targetSdk：此前没有任何检查项盯着它们 —— 误改 targetSdk 会一路绿灯。
+    # 字段名 minSdkVersion（大写 S，aapt2 实测）；旧版 build-tools 的 badging 用
+    # sdkVersion，兜底再认一次。两个都没有 = None → 调用方判失败（fail-closed）
+    m = re.search(r"minSdkVersion:'([^']+)'", out) or re.search(r"sdkVersion:'([^']+)'", out)
     info["minSdk"] = int(m.group(1)) if m else None
     m = re.search(r"targetSdkVersion:'([^']+)'", out)
     info["targetSdk"] = int(m.group(1)) if m else None
@@ -450,16 +451,16 @@ def main():
 
         print()
         if stale:
-            print("⚠️  签名之后，这些「会影响产物」的文件又有改动：")
+            say("⚠️  签名之后，这些「会影响产物」的文件又有改动：")
             for f in stale[:8]:
-                print("      %s" % f)
+                say("      %s" % f)
             if len(stale) > 8:
-                print("      …另有 %d 个" % (len(stale) - 8))
-            print()
-            print("    注：本仓库流程是「构建 → 签名 → 提交」，本次发布的提交自身必然出现在上表。")
-            print("    需要人工确认的是列表里是否出现了**超出本次发布内容**的文件 ——")
-            print("    有则说明 APK 落后于 HEAD，请重新构建并签名后再发布。")
-            print()
+                say("      …另有 %d 个" % (len(stale) - 8))
+            say("")
+            say("    注：本仓库流程是「构建 → 签名 → 提交」，本次发布的提交自身必然出现在上表。")
+            say("    需要人工确认的是列表里是否出现了**超出本次发布内容**的文件 ——")
+            say("    有则说明 APK 落后于 HEAD，请重新构建并签名后再发布。")
+            say("")
 
         print("✅ 校验通过，可以发布。校验和（可直接贴进发布说明）：")
         print()
