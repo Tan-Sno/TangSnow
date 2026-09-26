@@ -190,17 +190,10 @@ object DownloadRepo {
 
     private const val DEFAULT_FILE_NAME = "download"
 
-    /**
-     * 大文件路由阈值：Content-Length 明确超过它时，下载直接交系统 DownloadManager。
-     *
-     * 为什么路由：进程内消费 [saveFromStream] 的响应流发生在本进程 —— 应用退后台被
-     * 系统回收时下载即中断，且应用侧给不了进度通知（自行发通知需要申请
-     * POST_NOTIFICATIONS，与「权限极简、不额外索取权限」的承诺冲突）。系统下载器
-     * 自带进度通知与暂停/续传语义，又不占应用权限，是大文件的更优归宿。
-     * 未给出 Content-Length 的响应（常见于登录态附件）不做此路由 —— 那类下载依赖
-     * 本次响应里的 Cookie/Referer 上下文，只有进程内流式才拿得到。
-     */
-    internal const val BIG_FILE_ROUTE_BYTES = 64L * 1024 * 1024
+    // 注：曾在此处的「大文件路由系统下载器」阈值（BIG_FILE_ROUTE_BYTES）已于
+    // 2026-09-26 审查撤销 —— CL 已知的登录态大附件交系统下载器二次 GET 时没有
+    // Cookie，会把登录页 HTML 存成目标文件名还报成功（错误内容比中断更糟）。
+    // 两全方案（GeckoWebExecutor 带 Cookie 流式）留待 javap/真机验证后另行实施。
 
     /** RFC 5987：filename*=UTF-8''%E4%B8%AD.pdf（charset 部分允许任意大小写与引号） */
     private val RFC5987_FILENAME =
@@ -332,10 +325,16 @@ object DownloadRepo {
                     ) ?: return@withContext false
                     // 写入段整体失败（打不开流 / 中途断网）都要清掉 IS_PENDING 占位行，
                     // 否则半截行会挂到系统回收前 —— 「pending 幽灵行」。
+                    // 写流与「IS_PENDING 清零 update」整体入 try：update 自身抛异常
+                    // 也必须清掉占位行，否则留下 IS_PENDING=1 的幽灵行
                     val written = try {
                         resolver.openOutputStream(uri)?.use { out ->
                             ins.copyTo(out)
-                        } != null
+                        }
+                        values.clear()
+                        values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                        resolver.update(uri, values, null, null)
+                        true
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         runCatching { resolver.delete(uri, null, null) }
                         throw e
@@ -346,9 +345,6 @@ object DownloadRepo {
                         runCatching { resolver.delete(uri, null, null) }
                         return@withContext false
                     }
-                    values.clear()
-                    values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
-                    resolver.update(uri, values, null, null)
                     registerSavedFile(
                         context, safeName, mime,
                         filePath = queryDataPath(resolver, uri),

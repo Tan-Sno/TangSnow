@@ -37,6 +37,13 @@ object BookmarkHtml {
     internal const val MAX_IMPORT_CHARS = 5_000_000
 
     /**
+     * 解析阶段的**原始**条目收集上限（入库上限 [MAX_IMPORT_COUNT] 的 20 倍）：
+     * `parseImport` 先于 `sanitize` 运行，不设上限的话 5MB 的微型锚会把
+     * Entry 列表撑到数十 MB。真实书签文件远达不到。
+     */
+    internal const val RAW_PARSE_ENTRY_CAP = 20_000
+
+    /**
      * 从书签 HTML 文本中解析全部条目（不做清洗，见 [sanitize]）。
      * 解析失败的条目（无 href / href 为空）直接跳过，不让单个坏行中断整体。
      *
@@ -75,6 +82,10 @@ object BookmarkHtml {
         var closeFrom = 0
         var closeExhausted = false
         while (true) {
+            // 原始条目收集上限：parseImport 先于 sanitize 运行，不设上限的话
+            // 5MB 的微型锚（`<a href=x></a>` 重复 25 万次）会把 Entry 列表撑到
+            // 数十 MB —— 内存有界化；入库数仍由 sanitize 裁到 MAX_IMPORT_COUNT。
+            if (out.size >= RAW_PARSE_ENTRY_CAP) break
             val lt = text.indexOf('<', i)
             if (lt < 0) break
             if (!isAnchorStart(text, lt)) {
@@ -179,15 +190,27 @@ object BookmarkHtml {
         return scheme == "http" || scheme == "https"
     }
 
-    /** 基本实体解码（书签导出文件里最常见的几个）；未知实体原样保留 */
-    internal fun decodeEntities(s: String): String = s
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&apos;", "'")
-        .replace("&nbsp;", " ")
+    /**
+     * 基本实体解码（书签导出文件里最常见的几个）；未知实体原样保留。
+     *
+     * **单趟**正则替换 —— `&amp;` 与其它实体同趟互斥处理：此前按链式
+     * `replace("&amp;","&").replace("&lt;","<")` 先后替换，`&amp;lt;` 会被
+     * 二次解码成 `<`，标题含实体样文字（如「Use &lt;div&gt;」类站点）经
+     * 导出→导入即被改写，往返性破损。单趟下 `&amp;lt;` 只解成字面量 `&lt;`。
+     */
+    private val ENTITY = Regex("&(amp|lt|gt|quot|#39|apos|nbsp);")
+
+    internal fun decodeEntities(s: String): String = ENTITY.replace(s) { m ->
+        when (m.groupValues[1]) {
+            "amp" -> "&"
+            "lt" -> "<"
+            "gt" -> ">"
+            "quot" -> "\""
+            "#39", "apos" -> "'"
+            "nbsp" -> " "
+            else -> m.value
+        }
+    }
 
     /**
      * 导出：把全部书签序列化为 Netscape 书签 HTML。

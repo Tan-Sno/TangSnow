@@ -152,7 +152,13 @@ object UrlUtils {
         if (parts.size != 4) return false
         val o = IntArray(4)
         for (i in 0..3) {
-            val v = parts[i].toIntOrNull() ?: return false
+            // 严格点分十进制：拒绝空段 / 带符号（"+10"）/ 前导零（"010"）——
+            // 内核不认这类字面量，按它们弹权限框只会误扰（审查 L4）。
+            // 注意前导零判定必须独立于长度："010" 恰好 3 位，只挡长度挡不住
+            val part = parts[i]
+            if (part.isEmpty() || part.length > 3 || part.any { it !in '0'..'9' }) return false
+            if (part.length > 1 && part[0] == '0') return false
+            val v = part.toInt()
             if (v !in 0..255) return false
             o[i] = v
         }
