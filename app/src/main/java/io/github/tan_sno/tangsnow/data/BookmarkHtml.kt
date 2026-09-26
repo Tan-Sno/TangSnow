@@ -38,8 +38,11 @@ object BookmarkHtml {
 
     /**
      * 解析阶段的**原始**条目收集上限（入库上限 [MAX_IMPORT_COUNT] 的 20 倍）：
-     * `parseImport` 先于 `sanitize` 运行，不设上限的话 5MB 的微型锚会把
+     * [parseImportCounted] 先于 `sanitize` 运行，不设上限的话 5MB 的微型锚会把
      * Entry 列表撑到数十 MB。真实书签文件远达不到。
+     *
+     * ⚠️ 超出上限的条目**不再静默丢弃**：它们会被计数并由调用方如实并入「跳过」，
+     * 见 [parseImportCounted]。
      */
     internal const val RAW_PARSE_ENTRY_CAP = 20_000
 
@@ -73,19 +76,28 @@ object BookmarkHtml {
      * （允许跨行）；`</a>` 缺失时按空标题收该条目；无 href / href 为空则跳过该条；
      * 一个 `</a>` 只被消费一次。
      */
-    fun parseImport(text: String): List<Entry> {
-        if (text.length > MAX_IMPORT_CHARS) return emptyList()
+    fun parseImport(text: String): List<Entry> = parseImportCounted(text).first
+
+    /**
+     * [parseImport] 的可计数版本：除条目外，还回报「因 [RAW_PARSE_ENTRY_CAP] 未收集的条数」。
+     *
+     * 为什么必须回报：截断此前是**静默**的 —— 2.5 万条的导出文件只解析前 2 万条，余下连
+     * 「跳过」都不计，界面上的「已导入 n / 跳过 m」与文件真实内容不符（用户会以为文件里
+     * 就只有那么些条目）。导入链把该数值并进「跳过」，口径才如实。
+     *
+     * 计数与收集共用**同一趟**扫描（不额外扫文本）：达到上限后不再构造 Entry（内存仍有界），
+     * 只累加被丢弃的条数，解码也一并省掉（这些条目不会被使用）。
+     */
+    internal fun parseImportCounted(text: String): Pair<List<Entry>, Int> {
+        if (text.length > MAX_IMPORT_CHARS) return emptyList<Entry>() to 0
         val out = ArrayList<Entry>()
+        var dropped = 0
         val n = text.length
         var i = 0
         // 收尾标签的查找游标，与「已确认此后无收尾标签」标志：二者共同消除重复扫尾
         var closeFrom = 0
         var closeExhausted = false
         while (true) {
-            // 原始条目收集上限：parseImport 先于 sanitize 运行，不设上限的话
-            // 5MB 的微型锚（`<a href=x></a>` 重复 25 万次）会把 Entry 列表撑到
-            // 数十 MB —— 内存有界化；入库数仍由 sanitize 裁到 MAX_IMPORT_COUNT。
-            if (out.size >= RAW_PARSE_ENTRY_CAP) break
             val lt = text.indexOf('<', i)
             if (lt < 0) break
             if (!isAnchorStart(text, lt)) {
@@ -129,9 +141,18 @@ object BookmarkHtml {
             if (href.isBlank()) continue
             // href 同样要解码：主流浏览器导出时会把 URL 里的 & 写成 &amp;，
             // 不解码则导入的带查询参数链接全部失效
-            out += Entry(decodeEntities(href).trim(), decodeEntities(title).trim())
+            //
+            // 原始条目收集上限在这里生效：达到上限后不再构造 Entry（5MB 的微型锚
+            // `<a href=x></a>` 重复 25 万次会把列表撑到数十 MB ⇒ 内存有界化；
+            // 入库数仍由 sanitize 裁到 MAX_IMPORT_COUNT），但**照样计数**，
+            // 由调用方并入「跳过」如实提示，不再静默丢弃。
+            if (out.size >= RAW_PARSE_ENTRY_CAP) {
+                dropped++
+            } else {
+                out += Entry(decodeEntities(href).trim(), decodeEntities(title).trim())
+            }
         }
-        return out
+        return out to dropped
     }
 
     /**

@@ -342,11 +342,13 @@ class LibraryActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 val text = readImportText(uri) ?: return@withContext null
-                val raw = BookmarkHtml.parseImport(text)
+                // 解析上限造成的截断同样要计入「跳过」：否则一个 2.5 万条的导出文件会显示
+                // 「已导入 1000 / 跳过 19000」，与实际内容不符（余下 5000 条连数都没数）。
+                val (raw, truncated) = BookmarkHtml.parseImportCounted(text)
                 val existing = BookmarkRepo.list().mapTo(HashSet()) { it.url }
                 val (entries, skipped) = BookmarkHtml.sanitize(raw, existing)
                 BookmarkRepo.addAll(entries.map { it.url to it.title })
-                entries.size to skipped
+                entries.size to (skipped + truncated)
             }
             if (isFinishing || isDestroyed) return@launch
             if (result == null) {

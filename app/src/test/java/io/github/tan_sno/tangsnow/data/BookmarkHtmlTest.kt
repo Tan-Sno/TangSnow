@@ -49,6 +49,25 @@ class BookmarkHtmlTest {
     }
 
     @Test
+    fun `实体只解一趟——已转义的实体样文本往返不被二次解码`() {
+        // 为什么必须有这条独立断言：差分基准（parseBeforeLinearization）调的是**当前**的
+        // decodeEntities，链式实现与单趟实现的差异会被同一个函数自我抵消 —— 全仓的差分用例
+        // 在旧的链式实现下同样全绿。只有直接对语义下断言才钉得住：`&amp;lt;` 只能解成字面量
+        // `&lt;`；若按链式先解 `&amp;` 再解 `&lt;`，它会一路变成 `<`，于是「Use &lt;div&gt;」
+        // 这类**标题里本就写着实体样文字**的站点，导出→导入一次就被永久改写。
+        assertEquals("&lt;div&gt;", BookmarkHtml.decodeEntities("&amp;lt;div&amp;gt;"))
+
+        // 与 export 的转义（先 & 再 < > "）互为逆运算：往返之后标题逐字不变
+        val original = "Use &lt;div&gt; & \"q\""
+        val html = BookmarkHtml.export(
+            listOf(Bookmark(1, "https://e.cn/", original, 0L))
+        )
+        val parsed = BookmarkHtml.parseImport(html)
+        assertEquals(1, parsed.size)
+        assertEquals(original, parsed[0].title)
+    }
+
+    @Test
     fun `无 href 的行被跳过`() {
         val html = "<DT><A>没有链接</A>\n<DT><A HREF=\"https://ok.cn/\">好的</A>"
         val entries = BookmarkHtml.parseImport(html)
@@ -62,6 +81,28 @@ class BookmarkHtmlTest {
         // 超过体积上限视为无效文件，整体拒绝
         val big = "x".repeat(BookmarkHtml.MAX_IMPORT_CHARS + 1)
         assertEquals(0, BookmarkHtml.parseImport(big).size)
+    }
+
+    @Test
+    fun `超过解析上限的条目被计数而不是静默丢弃`() {
+        // 上限本身是防御性的内存有界化，保留；但截断必须**如实回报** —— 否则一个 2.5 万条的
+        // 导出文件在界面上会显示成「已导入 1000 / 跳过 19000」，与实际内容不符
+        // （余下 5000 条连数都没数，用户会以为文件里就只有那么些条目）。
+        val over = 7
+        val html = "<a href=\"https://p.cn/\">t</a>"
+            .repeat(BookmarkHtml.RAW_PARSE_ENTRY_CAP + over)
+
+        val (entries, dropped) = BookmarkHtml.parseImportCounted(html)
+        assertEquals(BookmarkHtml.RAW_PARSE_ENTRY_CAP, entries.size)
+        assertEquals(over, dropped)
+
+        // 没触到上限时不得虚报
+        val (all, none) = BookmarkHtml.parseImportCounted("<a href=\"https://p.cn/\">t</a>".repeat(3))
+        assertEquals(3, all.size)
+        assertEquals(0, none)
+
+        // 解析入口（不计数的那个）行为不变：仍然只收前 RAW_PARSE_ENTRY_CAP 条
+        assertEquals(BookmarkHtml.RAW_PARSE_ENTRY_CAP, BookmarkHtml.parseImport(html).size)
     }
 
     @Test(timeout = 15_000)
