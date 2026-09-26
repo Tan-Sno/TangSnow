@@ -527,14 +527,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
         }
     }
 
-    /**
-     * 打开下载。
-     *
-     * 交给**系统**浏览器 / 下载器处理（`ACTION_VIEW`）：应用自身不下这份文件、
-     * 不碰安装流程，也就不需要存储或安装相关的任何权限。
-     * 若没有与本机 ABI 匹配的包（[UpdateChecker.Release.apkUrl] 为 null），
-     * 退回到打开发布页让用户自己选 —— 而不是给一个装不上的链接。
-     */
     /** 打开 GitHub 发布页（检查更新失败时的兜底出口）；线程/生命周期约定同 [openUpdate] */
     private fun openReleasesPage() {
         val ctx = context ?: return
@@ -545,6 +537,14 @@ class SettingsFragment : PreferenceFragmentCompat() {
         }
     }
 
+    /**
+     * 打开下载。
+     *
+     * 交给**系统**浏览器 / 下载器处理（`ACTION_VIEW`）：应用自身不下这份文件、
+     * 不碰安装流程，也就不需要存储或安装相关的任何权限。
+     * 若没有与本机 ABI 匹配的包（[UpdateChecker.Release.apkUrl] 为 null），
+     * 退回到打开发布页让用户自己选 —— 而不是给一个装不上的链接。
+     */
     private fun openUpdate(release: UpdateChecker.Release) {
         // 这里用可空的 `context` 而不是 `requireContext()`：本函数**已经在失败分支上**了
         // （没拿到匹配的包 / 用户点了下载），若此刻 Fragment 已 detach，

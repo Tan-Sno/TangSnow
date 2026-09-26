@@ -30,6 +30,11 @@ object BookmarkRepo {
         BrowserDb.get(ApplicationScope.context).insertBookmark(url, title)
     }
 
+    /** 批量新增（书签导入）：整批一个写事务，语义见 [BrowserDb.insertBookmarks] */
+    suspend fun addAll(items: List<Pair<String, String>>): Unit = withContext(Dispatchers.IO) {
+        BrowserDb.get(ApplicationScope.context).insertBookmarks(items)
+    }
+
     suspend fun list(): List<Bookmark> = withContext(Dispatchers.IO) {
         BrowserDb.get(ApplicationScope.context).allBookmarks()
     }

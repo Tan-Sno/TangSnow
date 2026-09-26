@@ -25,6 +25,8 @@ class SuggestionsController(private val activity: MainActivity) {
     private var panel: View? = null
     private var list: LinearLayout? = null
     private var seq = 0L
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingTask: Runnable? = null
 
     fun resolve() {
         panel = activity.binding.root.findViewById(R.id.suggestionPanel)
@@ -55,8 +57,20 @@ class SuggestionsController(private val activity: MainActivity) {
         return url.isNullOrBlank() || url.orEmpty().startsWith("about:")
     }
 
-    /** 防抖 + 序号比对，只渲染“最后一次输入”的结果 */
+    /**
+     * 防抖 + 序号比对，只渲染「最后一次输入」的结果。
+     * 此前注释写着「防抖」、实现里却只有 seq 比对 —— 每敲一个字符就发起两次
+     * DB 查询。现补上真防抖（250ms，与 FindBarController 同款）：停手才查，
+     * 连续输入只落最后一击。
+     */
     private fun schedule(text: String) {
+        pendingTask?.let { handler.removeCallbacks(it) }
+        val task = Runnable { loadAndRender(text) }
+        pendingTask = task
+        handler.postDelayed(task, DEBOUNCE_MS)
+    }
+
+    private fun loadAndRender(text: String) {
         val current = ++seq
         // ⚠️ 「是否无痕」必须在**主线程**读取后带进 IO：`sessionManager.activeTab` 是主线程状态，
         // 在 Dispatchers.IO 里读可能拿到过期值。一旦因此把无痕标签误判成普通标签，
@@ -164,6 +178,14 @@ class SuggestionsController(private val activity: MainActivity) {
     }
 
     fun hide() {
+        // 收起时撤掉在途的防抖任务：否则 250ms 后它仍会查库并重新弹出面板
+        pendingTask?.let { handler.removeCallbacks(it) }
+        pendingTask = null
         panel?.isVisible = false
+    }
+
+    private companion object {
+        /** 输入停手后到真正查库的等待时长（与 FindBarController 的 250ms 同款） */
+        const val DEBOUNCE_MS = 250L
     }
 }

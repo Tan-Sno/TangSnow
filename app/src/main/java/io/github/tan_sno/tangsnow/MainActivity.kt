@@ -1604,7 +1604,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 DownloadRepo.saveFromStream(this@MainActivity, response, fileName)
             if (!streamed) {
                 // 无响应体 / 大文件路由等场景交系统下载器（附 Referer/UA，尽力而为）
-                DownloadRepo.launch(this@MainActivity, url, fileName, referer = url)
+                val id = DownloadRepo.launch(this@MainActivity, url, fileName, referer = url)
+                if (id < 0) {
+                    // 系统下载器也拒绝（URL scheme 不受支持等）：如实提示失败，
+                    // 不让上面那句「开始下载」变成空头支票
+                    toast(R.string.download_start_failed)
+                }
             }
         }
     }
@@ -2137,6 +2142,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      *    退出，但绝不说「已清除」（本仓库禁假反馈）。markPurged 置位后，紧随其后的
      *    onPause → saveState 会跳过，刚清掉的快照不会被写回。
      * 退出动作不受清除结果影响：清除只负责如实报告，退出必然执行。
+     *
+     * 清除跑在本 Activity 的 lifecycleScope 是刻意的：内核清除必须在 runtime 存活
+     * 期间、先于 finishAffinity 完成；进程被系统杀掉的中途态换任何作用域都救不了，
+     * 不为此引入应用级作用域。触发面与设置文案一致（仅两个应用内退出路径，
+     * 文案已如实枚举）——系统最近任务划掉等外部退出不在此列。
      */
     private fun performExit() {
         if (exiting) return
