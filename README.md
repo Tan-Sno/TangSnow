@@ -1,127 +1,122 @@
-# 棠雪 / TangSnow
+**English** | [简体中文](README.zh-CN.md)
 
-一款以隐私为第一优先、数据纯本地的 Android 浏览器，基于 Mozilla GeckoView 渲染内核。
+# TangSnow
+
+A privacy-first Android browser that keeps your data on your device. Built on Mozilla's GeckoView engine.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Engine: GeckoView (MPL 2.0)](https://img.shields.io/badge/Engine-GeckoView%20%C2%B7%20MPL%202.0-orange.svg)](THIRD_PARTY_NOTICES.md)
 
-## 特性
+The app interface is available in English and Simplified Chinese.
 
-- **数据只保存在本机** —— 书签、历史、下载记录、主页定制、站点权限决定全部本地存储，不上传
-- **无账号、无统计、无广告、无追踪 SDK**
-- **隐私防护** —— 跟踪保护（标准 / 严格 / 自定义 / 关闭）、跨站 Cookie 隔离、弹跳跟踪保护、指纹保护、URL 跟踪参数剥离、GPC 信号、无痕浏览
-- **数据由你掌控** —— 站点权限弹窗可勾选「记住我的选择」（仅普通会话；无痕会话不持久化任何授权决定）；可开启「退出时自动清除浏览数据」，一次性清掉 Cookie 与站点数据、缓存、历史与标签页快照（书签与下载记录不受影响）
-- **权限极简** —— 只需「网络」与「相机（扫码时按需）」两项；Android 17 及以上另需「附近设备」（`ACCESS_LOCAL_NETWORK`，仅当您打开局域网地址时才申请，用于连接路由器 / NAS / 打印机等本网设备）
-- **Mozilla 内核** —— GeckoView 155，与 Firefox 同源的 Gecko 引擎
-- **扩展支持** —— 浏览 Mozilla 官方扩展目录（AMO），支持导入官方签名的 `.xpi`
-- **书签可带走** —— 按 Netscape 书签格式导入 / 导出，换浏览器不必从零开始
-- **日常功能** —— 多标签网格（无痕标签带角标）、画中画、页内查找、保存为 PDF、打印网页、扫码、自定义搜索引擎、中文 IDN 域名
-- **与系统接得上** —— 可设为系统默认浏览器，也接收其它应用「分享」过来的链接
-- **资料库** —— 历史 / 书签 / 下载三合一，可按标题与网址搜索过滤
-- **界面** —— 中文 / English，浅色 / 深色 / 跟随系统
+## Features
 
-## 截图
+- **Everything stays on your device** — bookmarks, history, download records, home-screen customization and remembered site-permission decisions are stored locally and never uploaded.
+- **No account, no analytics, no ads, no tracking SDKs.**
+- **Privacy protections** — tracking protection (Standard / Strict / Custom / Off), cross-site cookie isolation, bounce-tracking protection, fingerprinting protection, tracking-parameter stripping, Global Privacy Control (GPC), private browsing.
+- **You stay in control** — site-permission prompts offer a "remember my choice" checkbox (regular sessions only; private sessions never persist a permission decision). An optional "clear browsing data on exit" wipes cookies and site data, cache, history and the tab snapshot in one go; bookmarks and download records are unaffected.
+- **Minimal permissions** — only Network and Camera (requested on demand, when you scan a QR code). On Android 17 and later, Nearby devices (`ACCESS_LOCAL_NETWORK`) is also needed: it is requested only when you open a local network address, so you can reach devices such as your router, NAS or printer.
+- **Mozilla engine** — GeckoView 155, the same Gecko engine that powers Firefox.
+- **Extensions** — browse Mozilla's official add-on directory (AMO) and install officially signed `.xpi` packages.
+- **Bookmarks you can take with you** — import and export in the Netscape bookmark format, so switching browsers does not mean starting over.
+- **Everyday browsing** — tab grid (private tabs are badged), picture-in-picture, find in page, save as PDF, print, QR scanning, custom search engines, IDN domains.
+- **Fits into the system** — can be set as your default browser, and accepts links shared from other apps.
+- **Library** — history, bookmarks and downloads in one place, searchable by title and URL.
+- **Interface** — English and Simplified Chinese; light, dark or follow-system theme.
+
+## Screenshots
+
+<sub>Screenshots show the Simplified Chinese interface.</sub>
 
 <table>
   <tr>
     <td align="center" width="33%">
-      <img src="docs/screenshots/home.jpg" width="180" alt="主页：地址栏与搜索入口，底部为浏览工具栏，右侧为无痕模式开关"><br>
-      <sub>主页</sub>
+      <img src="docs/screenshots/home.jpg" width="180" alt="Home: address bar and search entry, with the browsing toolbar at the bottom and the private-mode switch on the right"><br>
+      <sub>Home</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/extensions.jpg" width="180" alt="扩展目录：列出可安装的 Mozilla 官方扩展及其隐私说明"><br>
-      <sub>扩展目录（Mozilla 官方源）</sub>
+      <img src="docs/screenshots/extensions.jpg" width="180" alt="Extension catalogue: installable official Mozilla extensions with their privacy notes"><br>
+      <sub>Extension catalogue (official Mozilla source)</sub>
     </td>
     <td align="center" width="33%">
-      <img src="docs/screenshots/settings-tracking-protection.jpg" width="180" alt="设置：跟踪保护自定义，可逐项开关跟踪内容、指纹、挖矿脚本等"><br>
-      <sub>跟踪保护</sub>
+      <img src="docs/screenshots/settings-tracking-protection.jpg" width="180" alt="Settings: custom tracking protection, with per-category switches for trackers, fingerprinting, cryptominers and more"><br>
+      <sub>Tracking protection</sub>
     </td>
   </tr>
 </table>
 
-## 下载
+## Download
 
-前往 **[Releases](https://github.com/Tan-Sno/TangSnow/releases/latest)** 下载 APK。
+Get the APK from **[Releases](https://github.com/Tan-Sno/TangSnow/releases/latest)**.
 
-| 文件 | 适用设备 |
+| File | Device |
 |---|---|
-| `app-arm64-v8a-release.apk` | 现代手机（绝大多数设备，**推荐**） |
-| `app-armeabi-v7a-release.apk` | 较老的 32 位设备 |
-| `app-x86_64-release.apk` | 模拟器 / 少数 x86 设备 |
+| `app-arm64-v8a-release.apk` | Modern phones — the vast majority of devices (**recommended**) |
+| `app-armeabi-v7a-release.apk` | Older 32-bit devices |
+| `app-x86_64-release.apk` | Emulators and the few x86 devices |
 
-三个文件内容相同，仅 CPU 架构不同；不确定选哪个就下载 `arm64-v8a`。
+The three files are identical apart from the CPU architecture. If you are unsure, take `arm64-v8a`.
 
-要求 Android 8.0（API 26）及以上。安装前请在系统设置中允许「安装未知来源应用」。
+Requires Android 8.0 (API 26) or later. Allow "install unknown apps" in your system settings before installing.
 
-### 从 2.0.x 升级？
+### Upgrading from 2.0.x?
 
-**2.1.0 起应用标识已变更**（`com.tangsnow.tangsnow` → `io.github.tan_sno.tangsnow`），
-因此新版**无法直接覆盖安装**在旧版之上 —— 系统会把它识别为一个新应用。
+**The application ID changed in 2.1.0** (`com.tangsnow.tangsnow` → `io.github.tan_sno.tangsnow`), so the new version **cannot be installed over** the old one — the system treats it as a different app.
 
-不必先卸载：两个版本可以**并存**。建议先装上新版、确认一切正常，再自行卸载旧版。
-需要注意的是，旧版的书签、历史记录与各项设置**不会自动迁移**，需要在新版中重新配置。
+You do not have to uninstall first: the two versions can **co-exist**. Install the new one, confirm everything works, then uninstall the old one whenever you like. Note that bookmarks, history and settings are **not migrated** and need to be set up again in the new version.
 
-每个版本的具体变更与安装要求，都写在对应的 Release 页面上。
+Each release page documents that version's changes and installation requirements.
 
-## 隐私
+## Privacy
 
-- 不需要账号，没有云端账户；卸载即完成数据删除
-- 除您主动访问的网站外，应用只访问以下三个外部服务，用途各自单一：
-  - `addons.mozilla.org`：扩展目录、元数据与扩展包（Mozilla 官方）
-  - Mozilla 官方远程设置服务（`firefox.settings.services.mozilla.com`）：跟踪保护名单在本机更新
-  - `api.github.com`：**仅当您点击「设置 → 检查更新」时**读取公开的版本信息（版本号与更新说明）。
-    该请求只读公开数据，不携带任何设备标识、账号或浏览记录，也**不会在后台自动发起**
-- 内核「安全浏览」（钓鱼 / 恶意软件）的**远程查询已关闭**，不会把访问的网址发送给第三方
-- 崩溃日志只写入本机，可在应用内查看或删除，不会上传
-- 权限：`INTERNET`、`CAMERA`（按需申请）、`ACCESS_LOCAL_NETWORK`（Android 17 及以上，
-  仅在您打开局域网地址时按需申请），加上渲染内核自身声明的三项普通权限
-  （网络状态 / 唤醒锁 / 音频设置）。安装后可在系统「应用信息 → 权限」中核对
-- 另有一项 `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`：由 AndroidX 自动生成的应用自签权限，
-  用于阻止外部应用调用本应用内部的动态广播接收器。它不涉及任何数据访问，也不会出现在
-  系统设置的可授权列表中。用 `aapt dump permissions` 之类的工具扫描时会看到它，特此说明
+- No account and no cloud account; uninstalling the app deletes your data.
+- Apart from the sites you visit, the app contacts only three external services, each for a single purpose:
+  - `addons.mozilla.org` — the extension catalogue, metadata and signed packages (official Mozilla source).
+  - Mozilla's official remote settings service (`firefox.settings.services.mozilla.com`) — updates the tracking-protection lists on your device.
+  - `api.github.com` — **only when you tap "Settings → Check for updates"** — reads public version information (version number and release notes). That request reads public data only, carries no device identifier, account or browsing record, and is **never issued automatically in the background**.
+- The engine's remote "Safe Browsing" lookups (phishing / malware) are **switched off**, so the sites you visit are never sent to a third party.
+- Crash logs are written on this device only, can be viewed or deleted inside the app, and are never uploaded.
+- Permissions: `INTERNET`, `CAMERA` (on demand) and `ACCESS_LOCAL_NETWORK` (Android 17 and later, requested only when you open a local network address), plus three ordinary permissions declared by the rendering engine (network state, wake lock, audio settings). You can verify them under "App info → Permissions" in system settings.
+- One further entry, `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, is an app-signed permission generated automatically by AndroidX. It stops other apps from invoking this app's internal dynamic broadcast receivers. It grants access to no data and does not appear in the system's grantable-permissions list. Tools such as `aapt dump permissions` will show it — noted here for completeness.
 
-完整说明见[隐私政策](docs/PRIVACY.md)与[用户协议](docs/TERMS.md)。
+The full text is in the [privacy policy](docs/PRIVACY.md) and the [user agreement](docs/TERMS.md); both carry the Chinese and English versions on one page.
 
-## 已知限制
+## Known limitations
 
-- 精选扩展目录只收录隐私保护与工具类扩展，不内置也不推荐任何广告拦截类扩展
+- The curated extension catalogue lists privacy and utility extensions only. No ad-blocking extension is bundled or recommended.
 
-## 从源码构建
+## Building from source
 
-要求：
+Requirements:
 
-- **JDK 25** —— Gradle 守护进程按 `gradle/gradle-daemon-jvm.properties` 固定使用该版本；
-  本机若未安装，Gradle 会自动下载。产物字节码目标为 Java 17。
-- Android SDK `platforms;android-37`（API 37，minor level 2）
+- **JDK 25** — the Gradle daemon pins this version through `gradle/gradle-daemon-jvm.properties` and downloads it automatically if it is missing. The produced bytecode targets Java 17.
+- Android SDK `platforms;android-37` (API 37, minor level 2)
 
 ```bash
-./gradlew :app:assembleDebug      # 构建 debug 包
-./gradlew :app:lintDebug          # 静态检查
-./gradlew :app:testDebugUnitTest  # 单元测试
+./gradlew :app:assembleDebug      # build the debug APK
+./gradlew :app:lintDebug          # static analysis
+./gradlew :app:testDebugUnitTest  # unit tests
 ```
 
-正式包请用 `:app:assembleRelease`。GeckoView 原生库（`libxul.so` 等 `.so`，未压缩存储）约占包体
-86%，因此按 ABI 独立分包（`arm64-v8a` / `armeabi-v7a` / `x86_64`），不产出 universal APK；各包的
-`versionCode` 互不相同，以便在同一设备上切换架构安装。签名凭据不放仓库，由本地未跟踪的
-`keystore.properties` 提供（缺少该文件时 release 会回退 debug 证书并打印警告，产物不可分发）。
+Use `:app:assembleRelease` for a release build. The GeckoView native libraries (`libxul.so` and friends, stored uncompressed) make up roughly 86% of the APK, so builds are split per ABI (`arm64-v8a` / `armeabi-v7a` / `x86_64`) and no universal APK is produced; each split gets a distinct `versionCode`, so you can switch architectures on the same device. Signing credentials are not kept in the repository — they come from a local, untracked `keystore.properties` (without that file, a release build falls back to the debug certificate and prints a warning; such artifacts must not be distributed).
 
-## 参与贡献
+## Contributing
 
-欢迎提交 Issue 与 Pull Request，请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Issues and pull requests are welcome — please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
-参与本项目即表示你同意遵守[社区行为准则](CODE_OF_CONDUCT.md)。
+By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## 安全
+## Security
 
-发现安全漏洞请**不要**通过公开 Issue 报告，改用
-[私密漏洞报告入口](https://github.com/Tan-Sno/TangSnow/security/advisories/new)。
-支持的版本范围与处理流程见 [SECURITY.md](SECURITY.md)。
+Please do **not** report vulnerabilities in a public issue. Use the
+[private vulnerability report form](https://github.com/Tan-Sno/TangSnow/security/advisories/new) instead.
+See [SECURITY.md](SECURITY.md) for the supported versions and the process.
 
-## 许可证
+## License
 
-应用自身代码采用 [Apache License 2.0](LICENSE)。
+The application's own code is licensed under the [Apache License 2.0](LICENSE).
 
-渲染内核 Mozilla GeckoView 采用 Mozilla Public License 2.0。第三方组件的清单、版本、版权与商标声明见
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)（其中包含 MPL 2.0 §3.2 要求的源码获取途径）。
+The rendering engine, Mozilla GeckoView, is licensed under the Mozilla Public License 2.0. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the full list of third-party components, versions, copyright and trademark notices — it also contains the source-availability route required by MPL 2.0 §3.2.
 
-棠雪为原创品牌，**并非 Mozilla 产品，与 Firefox 无隶属关系**。
+TangSnow is an original brand. It is **not a Mozilla product and is not affiliated with Firefox**.

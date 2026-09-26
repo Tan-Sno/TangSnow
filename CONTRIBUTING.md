@@ -1,81 +1,91 @@
-# 贡献指南
+**English** | [简体中文](CONTRIBUTING.zh-CN.md)
 
-感谢你有兴趣为棠雪做出贡献。
+# Contributing
 
-参与本项目即表示你同意遵守[社区行为准则](CODE_OF_CONDUCT.md)。
+Thanks for your interest in contributing to TangSnow.
 
-## 报告问题
+By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-请在 [Issues](https://github.com/Tan-Sno/TangSnow/issues) 中提交。仓库已配置好提交模板，
-新建 Issue 时按模板填写即可，模板要求的字段正对应下面的清单：
+## Reporting issues
 
-> **安全漏洞请勿使用公开 Issue。** 请改用
-> [私密漏洞报告入口](https://github.com/Tan-Sno/TangSnow/security/advisories/new)，
-> 详见 [SECURITY.md](SECURITY.md)。
+Please file them under [Issues](https://github.com/Tan-Sno/TangSnow/issues). The repository ships issue
+templates — just fill in the fields, which mirror the checklist below:
 
-提交时请尽量包含：
+> **Please do not report security vulnerabilities in a public issue.** Use the
+> [private vulnerability report form](https://github.com/Tan-Sno/TangSnow/security/advisories/new)
+> instead — see [SECURITY.md](SECURITY.md).
 
-- 棠雪版本号（设置 → 关于棠雪）
-- 设备型号与 Android 版本
-- 复现步骤，以及期望结果与实际结果
-- 如涉及网页渲染，请附上可复现的网址
-- 相关截图或录屏
+Please include as much of the following as you can:
 
-## 功能建议
+- TangSnow version (Settings → About TangSnow)
+- Device model and Android version
+- Reproduction steps, plus the expected and actual results
+- If rendering is involved, a URL that reproduces the problem
+- Screenshots or a screen recording
 
-同样通过 Issues 提出。请先说明使用场景与要解决的问题，而不只是功能本身。
-涉及新增权限、联网行为或第三方依赖的建议，需要额外说明其对隐私的影响。
+## Feature requests
 
-## 开发环境
+Also via Issues. Describe the scenario and the problem to be solved, not just the feature itself.
+Proposals that add a permission, a network call or a third-party dependency must additionally explain
+the privacy impact.
 
-- **JDK 25** —— Gradle 守护进程按 `gradle/gradle-daemon-jvm.properties` 固定使用该版本；
-  本机若未安装，Gradle 会自动下载。产物字节码目标为 Java 17。
-- Android SDK `platforms;android-37`（API 37，minor level 2）
-- Android Studio 2026.1 或更高版本（仅图形界面开发需要，命令行构建不需要）
+## Development environment
+
+- **JDK 25** — the Gradle daemon pins this version through `gradle/gradle-daemon-jvm.properties` and
+  downloads it automatically if it is missing. The produced bytecode targets Java 17.
+- Android SDK `platforms;android-37` (API 37, minor level 2)
+- Android Studio 2026.1 or later (only for GUI development; command-line builds do not need it)
 
 ```bash
-./gradlew :app:assembleDebug      # 构建
-./gradlew :app:lintDebug          # 静态检查
-./gradlew :app:testDebugUnitTest  # 单元测试
+./gradlew :app:assembleDebug      # build
+./gradlew :app:lintDebug          # static analysis
+./gradlew :app:testDebugUnitTest  # unit tests
 ```
 
-提交前请确保上述三条命令均通过，且 lint 保持**零问题**。
-注意本项目已开启 `checkAllWarnings`（`app/build.gradle.kts`），**warning 级问题同样会被报出** ——
-请勿为了消掉一条警告而关掉整类检查，有必要的话按现成写法逐条写明豁免理由。
+Make sure all three pass before submitting, and that lint stays at **zero issues**.
+Note that `checkAllWarnings` is enabled (`app/build.gradle.kts`), so **warnings are reported too** —
+please do not silence a whole category of checks to get rid of one warning; if a suppression is
+genuinely warranted, follow the existing style and state the reason for each one.
 
-## 代码约定
+## Code conventions
 
-- 语言与界面框架：Kotlin + Android View System（不使用 Compose）
-- **颜色**一律使用语义命名（`@color/…` 或 `?attr/colorXxx`），不要硬编码色值
-- **尺寸**（dp/sp）只在「同一语义在多处重复、或已出现取值漂移」时才抽入 `values/dimens.xml`；
-  单次使用的值留在布局原地。同一个数字在不同位置常代表不同含义（40dp 触控区 vs 40dp 外边距），
-  强行合并只会制造假耦合。抽取标准与已有取例见 `dimens.xml` 顶部注释
-- 用户可见文案必须同时维护中文（`values/`）与英文（`values-en/`）两份，且键集合保持一致
-- 新增网络请求须说明用途；本项目遵循「数据不出设备」原则，不接受遥测、统计或广告类依赖
-- `docs/PRIVACY.md` 与 `docs/TERMS.md` 由 `tools/export_legal_docs.py` 从 `strings.xml` 导出，
-  **请勿直接编辑这两份文件**；改动法律文本后需重新导出并在必要时提升 `POLICY_VERSION`
+- Language and UI framework: Kotlin + the Android View system (no Compose)
+- **Colours** always use semantic names (`@color/…` or `?attr/colorXxx`) — never hard-code a colour value
+- **Dimensions** (dp/sp) move into `values/dimens.xml` only when the same semantic value repeats in
+  several places or has already drifted; a value used once stays in its layout. The same number often
+  means different things in different places (a 40dp touch target versus a 40dp margin), and merging
+  them only creates false coupling. See the comment at the top of `dimens.xml` for the criteria and
+  existing examples
+- User-visible strings must be maintained in both Chinese (`values/`) and English (`values-en/`), with
+  matching key sets
+- New network requests must state their purpose; this project follows a "data never leaves the device"
+  principle and does not accept telemetry, analytics or advertising dependencies
+- `docs/PRIVACY.md` and `docs/TERMS.md` are exported from `strings.xml` by `tools/export_legal_docs.py`.
+  **Do not edit those two files directly**; after changing legal text, re-export them and bump
+  `POLICY_VERSION` if the change is substantive
 
-## 提交信息
+## Commit messages
 
-采用 [Conventional Commits](https://www.conventionalcommits.org/) 格式：
+Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
-<type>: <简短描述>
+<type>: <short description>
 
-[可选正文：说明为什么这样改]
+[optional body: why this change is needed]
 ```
 
-常用 `type`：`feat`、`fix`、`perf`、`refactor`、`docs`、`build`、`test`、`chore`。
+Common `type` values: `feat`, `fix`, `perf`, `refactor`, `docs`, `build`, `test`, `chore`.
 
-描述行使用祈使语气、保持简短；正文只写「为什么」，不逐条罗列改动（改动本身看 diff 即可）。
+Keep the description line short and in the imperative mood. The body explains *why* only — the diff
+already shows what changed.
 
-## 提交 Pull Request
+## Submitting a pull request
 
-1. 一个 PR 只解决一个问题，便于审查与回滚
-2. 说明改了什么、为什么这样改，以及如何验证
-3. 若涉及界面或交互改动，请附截图
-4. 若修复了某个 Issue，请在描述中关联该 Issue 编号
+1. One PR solves one problem, which makes review and rollback easier
+2. Explain what changed, why, and how you verified it
+3. Attach screenshots for any UI or interaction change
+4. If the PR fixes an issue, reference that issue number in the description
 
-## 许可证
+## License
 
-向本项目提交贡献即表示你同意以 [Apache License 2.0](LICENSE) 授权你的贡献。
+By contributing you agree to license your contribution under the [Apache License 2.0](LICENSE).
