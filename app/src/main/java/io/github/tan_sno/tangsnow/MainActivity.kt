@@ -168,6 +168,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             pendingLocalNetworkUrl = null
             if (granted && !pending.isNullOrBlank()) {
                 sessionManager.activeTab?.let { loadInTab(it, pending) }
+            } else if (!granted) {
+                // 用户 deny（或被系统直接回绝）时给一次说明 —— 不给的话表现就是
+                // 「点开局域网地址什么都不发生」，与本次改动的初衷（别静默失败）相悖。
+                // 每个 Activity 实例只提示一次：否则在局域网页面上反复操作会持续打扰。
+                if (!localNetworkDeniedNotified) {
+                    localNetworkDeniedNotified = true
+                    toast(R.string.toast_local_network_denied)
+                }
             }
         }
 
@@ -176,6 +184,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     /** 权限请求进行中：同一个 launcher 不能并发 launch（第二次会抛异常），据此去重 */
     private var localNetworkPromptInFlight = false
+
+    /** 本次界面生命周期内是否已就「无法访问局域网」提示过（避免反复打扰） */
+    private var localNetworkDeniedNotified = false
 
     private lateinit var webPrompts: io.github.tan_sno.tangsnow.ui.WebPrompts
 
@@ -272,7 +283,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             // 页面内跳转到的局域网地址（不是 loadInTab 发起的，那里拦不到）：同样按需申请权限。
             // 这里**既不挂起也不续跑**导航 —— 内核此刻已经在加载了，让用户授权后自行刷新即可，
             // 免得与进行中的加载抢标签。目的只是别让「连不上」变成毫无解释的静默失败。
-            if (!url.isNullOrBlank() && needsLocalNetworkGrant(url)) {
+            // 只对**当前活动标签**的导航请求：后台标签的跳转不该弹窗打断用户。
+            if (!url.isNullOrBlank() && sessionManager.activeTab === tab && needsLocalNetworkGrant(url)) {
                 requestLocalNetworkPromptIfIdle()
             }
             if (sessionManager.activeTab === tab && url != null) {
@@ -335,7 +347,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             if (uri.isBlank()) return
             val tab = sessionManager.activeTab ?: return
             binding.toolbar.addressBar.setText(uri)
-            tab.session.loadUri(uri)
+            // 走统一入口：让局域网地址也触发按需的权限申请。
+            // 此前直连 loadUri，若权限未授予会被内核拦掉、且很可能不产生
+            // onLocationChanged（弹窗兜底也落空），用户只会看到「点了没反应」。
+            loadInTab(tab, uri)
             showBrowser()
         }
 

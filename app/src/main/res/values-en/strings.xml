@@ -54,6 +54,7 @@
     <string name="toast_file_not_ready">This file hasn\'t finished downloading yet</string>
     <string name="toast_file_download_failed">This download didn\'t succeed, so there\'s no file to open</string>
     <string name="toast_file_missing">The file no longer exists — it may have been deleted or cleaned up</string>
+    <string name="toast_local_network_denied">Opening a local network address needs the “Nearby devices” permission; you can turn it on in system settings</string>
     <string name="toast_start_download">Download started</string>
     <string name="download_confirm_title">Download file</string>
     <string name="download_confirm_message">File: %1$s\n\nDo you want to download it?</string>
