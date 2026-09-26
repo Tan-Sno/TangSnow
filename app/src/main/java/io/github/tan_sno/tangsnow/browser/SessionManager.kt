@@ -558,7 +558,7 @@ class BrowserSessionManager private constructor(
         session.selectionActionDelegate = selectionActionDelegate(tab)
         session.progressDelegate = progressDelegate(tab)
         session.historyDelegate = historyDelegate(tab)
-        attachPromptDelegate(session)
+        attachPromptDelegate(tab)
         attachPermissionDelegate(session)
         session.mediaSessionDelegate = mediaSessionDelegate(tab)
     }
@@ -890,12 +890,17 @@ class BrowserSessionManager private constructor(
 
     // --------------------------------------------------------- 网页弹窗（A2）
 
-    private fun attachPromptDelegate(session: GeckoSession) {
-        session.promptDelegate = object : GeckoSession.PromptDelegate {
+    private fun attachPromptDelegate(tab: Tab) {
+        tab.session.promptDelegate = object : GeckoSession.PromptDelegate {
             override fun onAlertPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.AlertPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -912,6 +917,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.ButtonPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -930,6 +940,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.TextPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -945,6 +960,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.ChoicePrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 val choices = prompt.choices
                 val multiple = prompt.type == GeckoSession.PromptDelegate.ChoicePrompt.Type.MULTIPLE
@@ -972,6 +992,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.FilePrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 val multiple = prompt.type != GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE
                 post {
@@ -997,6 +1022,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.AuthPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -1015,6 +1045,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -1032,6 +1067,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.ColorPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -1048,6 +1088,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.DateTimePrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 // type 是 int 常量，提前取出避免 lambda 内二次引用 prompt
                 val type = prompt.type
@@ -1066,6 +1111,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.PopupPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -1088,6 +1138,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.RepostConfirmPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -1104,6 +1159,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.RedirectPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -1119,6 +1179,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.SharePrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler
@@ -1137,6 +1202,11 @@ class BrowserSessionManager private constructor(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.FolderUploadPrompt
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）
+                if (!isAlive(tab) || tab !== active) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     val h = promptHandler

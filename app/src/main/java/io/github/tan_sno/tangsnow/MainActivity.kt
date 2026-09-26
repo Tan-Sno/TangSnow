@@ -182,6 +182,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     /** 因等待本地网络权限而暂缓的导航目标（授权后自动续跑；只由 [loadInTab] 写入） */
     private var pendingLocalNetworkUrl: String? = null
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // 等待局域网授权的导航目标跨重建保留：授权回调发生在**重建后的新实例**上，
+        // 不存的话旋转/折叠后授权完成却丢失导航目标
+        pendingLocalNetworkUrl?.let {
+            outState.putString("pending_local_network_url", it)
+        }
+    }
+
     /** 权限请求进行中：同一个 launcher 不能并发 launch（第二次会抛异常），据此去重 */
     private var localNetworkPromptInFlight = false
 
@@ -421,6 +430,13 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             }
             // 外部链接（ACTION_VIEW）与应用内跳转（EXTRA_OPEN_URL）都要随门禁转发
             externalUrl(intent)?.let { go.putExtra(BrowserOpener.EXTRA_OPEN_URL, it) }
+            // SEND 分享同样不能在门禁处断链：提取文本里的 http(s) 链接随门禁转发
+            // （ ConsentActivity 会原样转交回主界面，同意后照常打开）
+            if (intent?.action == Intent.ACTION_SEND) {
+                intent.getStringExtra(Intent.EXTRA_TEXT)
+                    ?.let { UrlUtils.extractUrlFromText(it) }
+                    ?.let { go.putExtra(BrowserOpener.EXTRA_OPEN_URL, it) }
+            }
             if (intent?.getBooleanExtra(BrowserOpener.EXTRA_OPEN_NEW_TAB, false) == true) {
                 go.putExtra(BrowserOpener.EXTRA_OPEN_NEW_TAB, true)
             }
@@ -484,7 +500,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             binding.geckoView.setSession(active.session)
             syncViewWithTab(active)
         }
-        handleIntent(intent)
+        // ⚠️ 只在**首次创建**时处理入口 intent：重建（切主题/切语言/暗色切换等，
+        //    uiMode 不在 configChanges 里）会带着**同一个 intent** 走到这里 ——
+        //    无条件重放会让 VIEW 深链整页重载、SEND 分享凭空多开一个标签
+        //    （重放的深链页面本就已随会话快照恢复，跳过不丢内容）。
+        //    进程存活期的后续入口由 onNewIntent 覆盖。
+        if (savedInstanceState == null) handleIntent(intent)
+        // 跨重建恢复：等待局域网授权时被暂缓的导航目标（见 onSaveInstanceState）
+        pendingLocalNetworkUrl = savedInstanceState?.getString("pending_local_network_url")
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -1637,14 +1660,6 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 兜底取 URL 末段并自动剥离查询串 / 百分号解码 / 非法字符清洗
         val fileName = DownloadRepo.parseFileName(disposition, response.uri)
         val url = response.uri
-        // Content-Length 明确超过阈值的大文件：直接交系统下载器（阈值依据见
-        // DownloadRepo.BIG_FILE_ROUTE_BYTES）。长度未知的响应不在此列 —— 那类下载
-        // （登录态附件）依赖本次响应里的 Cookie 上下文，仍优先进程内流式。
-        val contentLength = response.headers.entries
-            .firstOrNull { it.key.equals("content-length", ignoreCase = true) }
-            ?.value?.trim()?.toLongOrNull()
-        val routeToDownloadManager =
-            contentLength != null && contentLength > DownloadRepo.BIG_FILE_ROUTE_BYTES
         // ⚠️ 可执行 / 安装类文件：**无条件**先确认，且刻意不提供「不再询问」选项。
         // 理由：这类文件运行后会改变设备状态（安装应用、执行脚本），一句永久开关
         // 不应把它的确认一并免掉；而普通文档仍尊重用户的「不再询问」偏好。
@@ -1654,14 +1669,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 .setMessage(getString(R.string.dl_executable_message, fileName))
                 .setNegativeButton(R.string.dlg_cancel, null)
                 .setPositiveButton(R.string.dl_executable_continue) { _, _ ->
-                    startDownload(response, url, fileName, routeToDownloadManager)
+                    startDownload(response, url, fileName)
                 }
                 .show()
             return
         }
         // 用户已关掉「下载前询问」：直接开始
         if (!prefs.askBeforeDownload) {
-            startDownload(response, url, fileName, routeToDownloadManager)
+            startDownload(response, url, fileName)
             return
         }
         // 下载先征询用户，避免“页面偷偷开始下载”的体验与合规风险；
@@ -1676,29 +1691,28 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.download_confirm_ok) { _, _ ->
                 if (noAsk[0]) prefs.askBeforeDownload = false
-                startDownload(response, url, fileName, routeToDownloadManager)
+                startDownload(response, url, fileName)
             }
             .show()
     }
 
     /**
-     * 真正执行下载：小文件优先消费内核响应流，失败退回系统下载器；
-     * [forceDownloadManager]（大文件路由，见 [DownloadRepo.BIG_FILE_ROUTE_BYTES]）时跳过流式。
+     * 真正执行下载：一律优先消费内核响应流，失败退回系统下载器。
+     *
+     * 为什么**不再**按体积路由到系统下载器（2026-09-26 审查撤销）：CL 已知的
+     * 登录态大附件（NAS / 私有云场景）交系统下载器二次 GET 时没有 Cookie，
+     * 会把登录页 HTML 存成目标文件名还报成功 —— 错误内容比中断更糟。
+     * 大文件退后台被杀的旧风险重新成立，两全方案（GeckoWebExecutor 带
+     * Cookie 流式 + 通知）留待 javap/真机验证后另行实施。
      */
-    private fun startDownload(
-        response: WebResponse,
-        url: String,
-        fileName: String,
-        forceDownloadManager: Boolean = false,
-    ) {
+    private fun startDownload(response: WebResponse, url: String, fileName: String) {
         lifecycleScope.launch {
             // 优先直接消费内核响应流：Cookie/Referer/登录态都在这次响应里，
             // 系统下载器二次 GET 拿不到这些上下文（登录态附件会下到登录页）。
             toast(R.string.toast_start_download)
-            val streamed = !forceDownloadManager &&
-                DownloadRepo.saveFromStream(this@MainActivity, response, fileName)
+            val streamed = DownloadRepo.saveFromStream(this@MainActivity, response, fileName)
             if (!streamed) {
-                // 无响应体 / 大文件路由等场景交系统下载器（附 Referer/UA，尽力而为）
+                // 无响应体等场景退回系统下载器（附 Referer/UA，尽力而为）
                 val id = DownloadRepo.launch(this@MainActivity, url, fileName, referer = url)
                 if (id < 0) {
                     // 系统下载器也拒绝（URL scheme 不受支持等）：如实提示失败，

@@ -66,9 +66,17 @@ class LanguageSetupActivity : AppCompatActivity() {
 
     private fun applyAndContinue() {
         binding.btnContinue.isEnabled = false
-        // 先落"已问过"标记：applyTag 会请求重建本页，重建后的 onCreate 检测到该标记
-        // 就走 goNext() —— 正好把流程推下去，不需要在这里直接跳转两处。
+        // ⚠️ 三件事缺一不可，顺序刻意：
+        //  ① markInitialChoiceOffered：先落「已问过」，applyTag 触发的本页重建会在
+        //     onCreate 里检测到它并直接 goNext，正好把流程推下去；
+        //  ② prefs.appLocale = chosen：**必须显式落盘** —— applyTag 只写 applied_tag
+        //     与内存内的 locales，从不写 app_locale；少了这一行，下次冷启动
+        //     LocaleManager.apply() 会发现 appLocale("")≠appliedTag("en")，主动把
+        //     locales 抹回系统语言 —— 用户在初选页选的语言**第二次冷启动即被撤销**
+        //     （设置页靠 ListPreference 框架落盘，故没有这个问题；此页必须自己写）；
+        //  ③ applyTag：真正把语言应用到界面。
         LocaleManager.markInitialChoiceOffered(prefs)
+        prefs.appLocale = chosen
         LocaleManager.applyTag(this, chosen)
         goNext()
     }
