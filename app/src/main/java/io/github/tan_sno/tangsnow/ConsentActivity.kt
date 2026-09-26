@@ -36,6 +36,10 @@ class ConsentActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PreferenceStore(this)
+        // ⚠️ 读 extras 必须放在**所有出口之前**：本页有三条出路（已同意直接放行、语言初选
+        //    转交、正常渲染后等用户点同意），只要有一条没读过，那条路上的 EXTRA_OPEN_URL /
+        //    EXTRA_LIBRARY_TAB 就会被静默丢掉。放在最前面 = 三种情况共用同一份状态。
+        adoptIntentExtras(intent)
         ThemeController.apply(prefs.theme)
 
         // 已同意且政策未更新：直接放行（冷启动被系统再次带到本页的普通情况）
@@ -61,9 +65,7 @@ class ConsentActivity : AppCompatActivity() {
         binding = ActivityConsentBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // 深链：同意后原样转交给主界面（读取口径见 adoptIntentExtras —— onCreate 与
-        // onNewIntent 两处共用同一实现，否则「本页已在栈上」那一路会丢链接）
-        adoptIntentExtras(intent)
+        // 深链已在上方（所有出口之前）统一读过，见 adoptIntentExtras 的说明
 
         binding.rowFullPrivacy.setOnClickListener { openDocOrInline(LegalActivity.DOC_PRIVACY) }
         binding.rowAgreement.setOnClickListener { openDocOrInline(LegalActivity.DOC_AGREEMENT) }
@@ -83,6 +85,12 @@ class ConsentActivity : AppCompatActivity() {
      * 读取口径与 MainActivity 的门禁转发一致：`EXTRA_OPEN_URL` 优先；若拿到的是 SEND 分享
      * （正常路径下 extras 已被上游归一化，这里作兜底），从文本里提取第一个 http(s) 链接。
      * 只在拿到非空值时覆盖既有值，避免「拿不到新目标」把先前那次也抹掉。
+     *
+     * ⚠️ 这里**刻意不做** http/https 白名单：本页不是 URL 的外部入口（Manifest 只声明了
+     * MAIN/LAUNCHER），随门禁转交的 extras 最终由主界面那个 exported 入口统一按 scheme
+     * 闸门（[MainActivity] 的 externalUrl）筛一遍 —— 校验留在**那一处**是有意的（单一事实
+     * 来源，避免两份规则漂移）。因此本函数**依赖**下游闸门存在：将来若有人改动或移走
+     * `externalUrl()` 的 scheme 校验，这里必须同步补上。
      */
     private fun adoptIntentExtras(intent: Intent?) {
         if (intent == null) return
