@@ -80,6 +80,14 @@ import org.mozilla.geckoview.GeckoView
 // （用行注释而非 KDoc：紧贴在类 KDoc 之后会形成「两个连续 KDoc」，落单的那个不进文档。）
 private const val PERM_ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
 
+/**
+ * [android.app.Activity.onSaveInstanceState] 里存放「等待局域网授权时被暂缓的导航目标」的键。
+ *
+ * 抽成常量而不是在存/取两处各写一遍字面量：键名写法一多，改一处漏一处就是**静默失效**
+ * ——存了读不到 ⇒ 授权回调那侧拿到 null，导航目标凭空消失，且不会有任何报错。
+ */
+private const val KEY_PENDING_LOCAL_NETWORK_URL = "pending_local_network_url"
+
 class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     internal lateinit var binding: ActivityMainBinding
@@ -187,7 +195,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 等待局域网授权的导航目标跨重建保留：授权回调发生在**重建后的新实例**上，
         // 不存的话旋转/折叠后授权完成却丢失导航目标
         pendingLocalNetworkUrl?.let {
-            outState.putString("pending_local_network_url", it)
+            outState.putString(KEY_PENDING_LOCAL_NETWORK_URL, it)
         }
     }
 
@@ -505,9 +513,18 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         //    无条件重放会让 VIEW 深链整页重载、SEND 分享凭空多开一个标签
         //    （重放的深链页面本就已随会话快照恢复，跳过不丢内容）。
         //    进程存活期的后续入口由 onNewIntent 覆盖。
+        //
+        // 跨重建恢复：等待局域网授权时被暂缓的导航目标（见 onSaveInstanceState）。
+        // ⚠️ 顺序是硬要求 —— 必须在 handleIntent **之前**恢复，且只在真的存过该键时赋值：
+        //    handleIntent → loadInTab 会把本次入口的局域网地址写进同一个字段，而冷启动时
+        //    savedInstanceState == null；若把恢复放在它之后并无条件赋值（`= savedInstanceState?.getString(...)`），
+        //    就会把刚写进去的目标**覆盖成 null** —— 表现是「从外部点开局域网地址 → 用户点
+        //    「允许」→ 什么都不加载」，正是本文件 requestLocalNetworkAccess 注释里要消灭的
+        //    那种静默失败（授权回调只读这个字段，它空了就什么也不做）。
+        savedInstanceState?.getString(KEY_PENDING_LOCAL_NETWORK_URL)?.let {
+            pendingLocalNetworkUrl = it
+        }
         if (savedInstanceState == null) handleIntent(intent)
-        // 跨重建恢复：等待局域网授权时被暂缓的导航目标（见 onSaveInstanceState）
-        pendingLocalNetworkUrl = savedInstanceState?.getString("pending_local_network_url")
     }
 
     override fun onNewIntent(intent: Intent) {
