@@ -2226,10 +2226,24 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private fun cachePrintPdf(input: java.io.InputStream): java.io.File? {
         val dir = java.io.File(cacheDir, "print")
         if (!dir.exists() && !dir.mkdirs()) return null
-        // 先清掉上次的残留：adapter 的 onFinish() 正常会删，但进程被杀时走不到那里。
-        // 删除不会影响「正在打印中的那一份」—— 它的文件描述符仍指向原 inode。
-        runCatching { dir.listFiles()?.forEach { it.delete() } }
-        val file = java.io.File(dir, "TangSnow_print.pdf")
+        // 一次打印一份**独立文件**，绝不复用固定名（N4）：
+        // 打印框架是**晚读** —— onWrite 时才按**路径**打开这份文件。若两次打印共用
+        // "TangSnow_print.pdf"，第二次的「写入」会改掉第一次还没读的内容 ⇒ 打出错的
+        // PDF，且两次都报成功。「fd 仍指向旧 inode」的论证救不了场：框架手里是**路径**、
+        // 不是 fd——那个论证成立的前提（框架已提前打开）在这里恰恰不成立。
+        val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+            .format(java.util.Date())
+        var file = java.io.File(dir, "TangSnow_print_$stamp.pdf")
+        var seq = 1
+        while (file.exists()) { // 同一秒内连发两次打印的兜底（几乎不可达，但成本为零）
+            file = java.io.File(dir, "TangSnow_print_${stamp}_$seq.pdf")
+            seq++
+        }
+        // 旧文件只清**陈旧**残包：adapter 的 onFinish() 正常会删自己那份，进程被杀才走不到；
+        // 1 小时阈值远大于任何打印会话，碰不到在途文件。
+        val staleBefore = System.currentTimeMillis() - 60 * 60 * 1000
+        dir.listFiles { f -> f.lastModified() < staleBefore }
+            ?.forEach { runCatching { it.delete() } }
         return try {
             input.use { ins -> java.io.FileOutputStream(file).use { out -> ins.copyTo(out) } }
             file
