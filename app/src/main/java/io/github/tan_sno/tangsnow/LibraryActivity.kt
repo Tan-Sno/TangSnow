@@ -355,7 +355,7 @@ class LibraryActivity : AppCompatActivity() {
         // 落盘走统一出口（与内核流下载、存为 PDF 共用；判空 / 清占位 / update 行数判定都在那里）。
         // 此前这段 MediaStore 代码在本页、MainActivity 与 DownloadRepo 各有一份，三份已漂成
         // 三种语义 —— 其中本处与 DownloadRepo 都把「openOutputStream 返回 null」当成了成功。
-        return DownloadRepo.writeToDownloads(this, name, "text/html") { out ->
+        return DownloadRepo.writeToDownloads(this, name, "text/html", register = true) { out ->
             out.write(html.toByteArray(Charsets.UTF_8))
         } != null
     }
