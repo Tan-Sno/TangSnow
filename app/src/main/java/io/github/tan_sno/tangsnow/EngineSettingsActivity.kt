@@ -15,6 +15,7 @@ import io.github.tan_sno.tangsnow.data.SearchEngine
 import io.github.tan_sno.tangsnow.data.SearchEngines
 import io.github.tan_sno.tangsnow.databinding.ActivityEngineSettingsBinding
 import io.github.tan_sno.tangsnow.databinding.ItemEngineBinding
+import io.github.tan_sno.tangsnow.util.dp
 
 /** 搜索引擎管理：选择默认引擎 + 添加 / 长按删除自定义引擎 */
 class EngineSettingsActivity : AppCompatActivity() {
@@ -75,7 +76,9 @@ class EngineSettingsActivity : AppCompatActivity() {
 
         val body = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(48, 8, 48, 8)
+            // 原先是原始像素（48/8），在不同密度屏上视觉差别极大；按 3x 屏的口径折算为 dp
+            // （48px@3x = 16dp、8px@3x ≈ 2.7dp → 3dp），与全项目统一的 dp() 写法对齐
+            setPadding(dp(16), dp(3), dp(16), dp(3))
             addView(nameInput)
             addView(urlInput)
         }

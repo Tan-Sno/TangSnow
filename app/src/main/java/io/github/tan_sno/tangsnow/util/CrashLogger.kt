@@ -99,7 +99,7 @@ object CrashLogger {
         // 写入之后再裁剪：保证磁盘上恰好保留最近 MAX_KEEP 条。
         // （旧实现"先判断再写"，实际会多留 1 条，与注释声明的保留条数不一致。）
         runCatching {
-            val files = dir.listFiles { f -> f.isFile && f.name.startsWith("crash-") }
+            val files = dir.listFiles { f -> f.isFile && f.name.startsWith("crash-") && f.name.endsWith(".txt") }
                 ?.toList().orEmpty()
             if (files.size > MAX_KEEP) {
                 files.sortedByDescending { it.lastModified() }

@@ -2173,7 +2173,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             toast(R.string.print_failed)
             return
         }
-        val adapter = io.github.tan_sno.tangsnow.ui.PrintPdfAdapter(file) {
+        val adapter = io.github.tan_sno.tangsnow.ui.PrintPdfAdapter(
+            file,
+            getString(R.string.print_write_no_stream),
+        ) {
             runCatching { file.delete() }
         }
         val jobName = "TangSnow_" + java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
