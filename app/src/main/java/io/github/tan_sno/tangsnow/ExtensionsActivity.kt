@@ -156,6 +156,8 @@ class ExtensionsActivity : AppCompatActivity() {
         //（安装流程永久挂起），且对话框会作为泄漏窗口留在已销毁的 Activity 上。
         // 只关闭本 Activity 持有的弹窗 —— MainActivity 销毁时不得误取消本页的活动弹窗。
         ExtensionPrompts.cancelAllPending(this)
+        // 本页自己展示的对话框（上者只覆盖 ExtensionPrompts 纳管的那些提示）
+        dialogs.cancelAll()
         // PromptDelegate 属于本 Activity：无论是否有进行中任务都必须解绑，
         // 否则 controller（进程级）将永久持有已销毁的 Activity
         forceReleasePromptDelegate()
@@ -309,7 +311,7 @@ class ExtensionsActivity : AppCompatActivity() {
     private fun showRegionBlocked(entry: ExtensionCatalog.Entry) {
         // 销毁守卫：Activity 已销毁/正在销毁时弹窗会抛 BadTokenException
         if (isFinishing || isDestroyed) return
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.extension_region_blocked_title)
             .setMessage(
                 getString(
@@ -321,7 +323,8 @@ class ExtensionsActivity : AppCompatActivity() {
             .setNeutralButton(R.string.extension_open_official) { _, _ ->
                 BrowserOpener.open(this, entry.officialPage)
             }
-            .show()
+            .create()
+        dialogs.track(dialog)
     }
 
     /** 目录安装：由协调器「下载 → 内核校验签名 → 安装」，界面按阶段/进度实时刷新 */
@@ -380,7 +383,7 @@ class ExtensionsActivity : AppCompatActivity() {
         if (isFinishing || isDestroyed) return
         val reason = describeInstallError(err)
         val body = getString(R.string.extension_install_failed_message, entry.name, reason)
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.extension_install_failed_title)
             .setMessage(body)
             .setNegativeButton(R.string.dlg_cancel, null)
@@ -388,7 +391,8 @@ class ExtensionsActivity : AppCompatActivity() {
                 BrowserOpener.open(this, entry.officialPage)
             }
             .setPositiveButton(R.string.extension_retry) { _, _ -> installEntry(entry) }
-            .show()
+            .create()
+        dialogs.track(dialog)
     }
 
     private fun describeInstallError(err: Throwable?): String {
@@ -638,11 +642,12 @@ class ExtensionsActivity : AppCompatActivity() {
     /** 导入失败：说明原因（含内核拒签等），提示用户换官方签名的包 */
     private fun showFileImportFailure(err: Throwable?) {
         if (isFinishing || isDestroyed) return
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.extension_install_failed_title)
             .setMessage(getString(R.string.extension_import_failed_message, describeInstallError(err)))
             .setPositiveButton(R.string.dlg_ok, null)
-            .show()
+            .create()
+        dialogs.track(dialog)
     }
 
     // ------------------------------------------------------------- 官方网页安装 / 权限确认
@@ -660,6 +665,15 @@ class ExtensionsActivity : AppCompatActivity() {
     private var promptDelegate: WebExtensionController.PromptDelegate? = null
     @Volatile
     private var destroyed = false
+
+    /**
+     * 本页展示中的对话框（地区受限 / 安装失败 / 导入失败 / 卸载确认 / 管理菜单 / 扩展信息）。
+     *
+     * 为什么必须纳管：未在销毁前收掉的对话框会被框架**强摘窗口**并打 `WindowLeaked`。
+     * 本页声明了 `configChanges`（旋屏不重建），但**点返回 / 进程回收 / 从多窗口退出**同样会
+     * 触发销毁，那时一样漏。收口在 `onDestroy`。
+     */
+    private val dialogs = io.github.tan_sno.tangsnow.ui.DialogTracker()
 
     private fun releasePromptDelegateIfIdle() {
         // 仅在 Activity 已销毁后解绑（存活的页面还需要它弹出权限确认）
@@ -743,7 +757,7 @@ class ExtensionsActivity : AppCompatActivity() {
 
     private fun uninstall(row: InstalledRow) {
         val extController = controller() ?: return
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.extension_uninstall_confirm)
             .setMessage(getString(R.string.extension_uninstall_message, row.name))
             .setNegativeButton(R.string.dlg_cancel, null)
@@ -759,7 +773,8 @@ class ExtensionsActivity : AppCompatActivity() {
                     { _ -> runOnUiThread { refreshInstalled() } }
                 )
             }
-            .show()
+            .create()
+        dialogs.track(dialog)
     }
 
     // ------------------------------------------------------------- 扩展管理（齿轮 / 装后直达）
@@ -829,7 +844,7 @@ class ExtensionsActivity : AppCompatActivity() {
             })
         }
         dialog.setView(list)
-        dialog.show()
+        dialogs.track(dialog)
     }
 
     /** 菜单里的一行（图标 + 文字）；[enabled]=false 时整体置灰且不可点 */
@@ -897,7 +912,7 @@ class ExtensionsActivity : AppCompatActivity() {
                 BrowserOpener.openNewTab(this@ExtensionsActivity, official)
             }
         }
-        builder.show()
+        dialogs.track(builder.create())
     }
 
     /** 打开扩展设置页；停用态先启用再开（停用态内置页不可达）。一律开新标签。 */

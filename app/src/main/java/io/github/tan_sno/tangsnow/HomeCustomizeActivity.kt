@@ -36,6 +36,14 @@ import kotlinx.coroutines.launch
 class HomeCustomizeActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityHomeCustomizeBinding
+
+    /** 本页展示中的对话框（新增快捷方式）。见 DialogTracker 的类注释 */
+    private val dialogs = io.github.tan_sno.tangsnow.ui.DialogTracker()
+
+    override fun onDestroy() {
+        dialogs.cancelAll()
+        super.onDestroy()
+    }
     private lateinit var prefs: PreferenceStore
 
     private val pickImageLauncher = registerForActivityResult(
@@ -257,7 +265,8 @@ class HomeCustomizeActivity : AppCompatActivity() {
                 }
                 refreshShortcuts()
             }
-            .show()
+            .create()
+            .let { dialogs.track(it) }
     }
 
 
