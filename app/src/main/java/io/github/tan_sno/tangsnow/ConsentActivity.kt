@@ -28,6 +28,14 @@ import io.github.tan_sno.tangsnow.util.UrlUtils
 class ConsentActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityConsentBinding
+
+    /** 本页展示中的对话框（协议全文兜底）。见 DialogTracker 的类注释 */
+    private val dialogs = io.github.tan_sno.tangsnow.ui.DialogTracker()
+
+    override fun onDestroy() {
+        dialogs.cancelAll()
+        super.onDestroy()
+    }
     private lateinit var prefs: PreferenceStore
     private var pendingUrl: String? = null
     private var pendingLibraryTab: Int = -1
@@ -124,7 +132,8 @@ class ConsentActivity : AppCompatActivity() {
                 // 与阅读页同一处理：`**…**` 转加粗，别让用户看到星号（见 util/LegalText）
                 .setMessage(LegalText.emphasize(this, bodyRes))
                 .setPositiveButton(R.string.dlg_ok, null)
-                .show()
+                .create()
+                .let { dialogs.track(it) }
         }
     }
 

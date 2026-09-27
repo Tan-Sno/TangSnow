@@ -27,6 +27,9 @@ import kotlinx.coroutines.withContext
 class LibraryActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLibraryBinding
+
+    /** 本页展示中的对话框（清空确认 / 书签工具菜单）。见 DialogTracker 的类注释 */
+    private val dialogs = io.github.tan_sno.tangsnow.ui.DialogTracker()
     private var currentTab = TAB_HISTORY
     private val adapter = LibraryAdapter(
         onOpen = { openRow(it) },
@@ -121,6 +124,8 @@ class LibraryActivity : AppCompatActivity() {
         // 摘掉待执行的搜索任务：否则 Handler 仍持有它，回调会摸到已失效的 binding
         searchTask?.let { searchHandler.removeCallbacks(it) }
         searchTask = null
+        // 仍显示着的对话框一并收掉（未收 = 框架强摘窗口 + WindowLeaked）
+        dialogs.cancelAll()
         super.onDestroy()
     }
 
@@ -278,7 +283,8 @@ class LibraryActivity : AppCompatActivity() {
             .setMessage(message)
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.dlg_ok) { _, _ -> clearCurrentTab() }
-            .show()
+            .create()
+            .let { dialogs.track(it) }
     }
 
     private fun clearCurrentTab() {
@@ -315,7 +321,8 @@ class LibraryActivity : AppCompatActivity() {
                     )
                 }
             }
-            .show()
+            .create()
+            .let { dialogs.track(it) }
     }
 
     /** 导出：全部书签 → Netscape HTML → 公共「下载」目录（零存储权限，与存为 PDF 同路） */

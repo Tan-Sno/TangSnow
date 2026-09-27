@@ -21,6 +21,14 @@ import io.github.tan_sno.tangsnow.util.dp
 class EngineSettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityEngineSettingsBinding
+
+    /** 本页展示中的对话框（新增引擎 / 删除确认）。见 DialogTracker 的类注释 */
+    private val dialogs = io.github.tan_sno.tangsnow.ui.DialogTracker()
+
+    override fun onDestroy() {
+        dialogs.cancelAll()
+        super.onDestroy()
+    }
     private lateinit var prefs: PreferenceStore
 
     private val engineList: List<SearchEngine>
@@ -101,7 +109,8 @@ class EngineSettingsActivity : AppCompatActivity() {
                 }
                 if (ok) refreshList()
             }
-            .show()
+            .create()
+            .let { dialogs.track(it) }
     }
 
     private fun confirmDelete(engine: SearchEngine) {
@@ -118,7 +127,8 @@ class EngineSettingsActivity : AppCompatActivity() {
                     refreshList()
                 }
             }
-            .show()
+            .create()
+            .let { dialogs.track(it) }
     }
 
     private inner class EngineAdapter(private val data: List<SearchEngine>) : BaseAdapter() {

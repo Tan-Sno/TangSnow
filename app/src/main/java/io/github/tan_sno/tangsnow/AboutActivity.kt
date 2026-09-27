@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import io.github.tan_sno.tangsnow.databinding.ActivityAboutBinding
 import io.github.tan_sno.tangsnow.update.UpdateChecker
+import io.github.tan_sno.tangsnow.ui.DialogTracker
 import io.github.tan_sno.tangsnow.util.LegalText
 import io.github.tan_sno.tangsnow.util.dp
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,17 @@ import kotlinx.coroutines.withContext
 class AboutActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAboutBinding
+
+    /**
+     * 本页展示中的对话框（崩溃日志列表 / 单条详情 / 分享确认 / 协议全文兜底）。
+     * 未在销毁前收掉的会被框架强摘窗口并打 `WindowLeaked`，收口见 [onDestroy]。
+     */
+    private val dialogs = DialogTracker()
+
+    override fun onDestroy() {
+        dialogs.cancelAll()
+        super.onDestroy()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,14 +104,15 @@ class AboutActivity : AppCompatActivity() {
                     .replace(crashNamePattern, "$1-$2-$3 $4:$5:$6")
             }
             var chosen = 0
-            AlertDialog.Builder(this@AboutActivity)
+            val dialog = AlertDialog.Builder(this@AboutActivity)
                 .setTitle(R.string.about_crash_title)
                 .setSingleChoiceItems(names.toTypedArray(), 0) { _: android.content.DialogInterface, which: Int -> chosen = which }
                 .setNegativeButton(R.string.dlg_cancel, null)
                 .setPositiveButton(R.string.about_crash_view) { _: android.content.DialogInterface, _: Int ->
                     if (chosen in files.indices) showCrashDetail(files[chosen])
                 }
-                .show()
+                .create()
+            dialogs.track(dialog)
         }
     }
 
@@ -140,7 +153,7 @@ class AboutActivity : AppCompatActivity() {
                 )
             )
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(file.name)
             .setView(box)
             .setNegativeButton(R.string.about_crash_delete) { _: android.content.DialogInterface, _: Int ->
@@ -153,7 +166,9 @@ class AboutActivity : AppCompatActivity() {
             .setPositiveButton(R.string.about_crash_share) { _: android.content.DialogInterface, _: Int ->
                 confirmShareCrash(file)
             }
-            .show()
+            .create()
+        // 正文可能很长（用户会读一阵），且"删除/分享"是离开本页前的多步操作 ⇒ 必须纳管
+        dialogs.track(dialog)
     }
 
     /**
@@ -171,7 +186,8 @@ class AboutActivity : AppCompatActivity() {
             .setPositiveButton(R.string.dlg_ok) { _: android.content.DialogInterface, _: Int ->
                 shareCrashFile(file)
             }
-            .show()
+            .create()
+            .let { dialogs.track(it) }
     }
 
     /** 通过系统分享面板把崩溃日志内容发给别人（如开发者）。读盘在 IO 线程，发送回主线程 */
@@ -204,7 +220,8 @@ class AboutActivity : AppCompatActivity() {
                 // 与阅读页同一处理：`**…**` 转加粗，别让用户看到星号（见 util/LegalText）
                 .setMessage(LegalText.emphasize(this, bodyRes))
                 .setPositiveButton(R.string.dlg_ok, null)
-                .show()
+                .create()
+                .let { dialogs.track(it) }
         }
     }
 
