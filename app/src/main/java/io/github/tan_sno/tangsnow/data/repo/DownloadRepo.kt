@@ -627,73 +627,93 @@ object DownloadRepo {
         }
     }
 
+    /**
+     * 单条记录的存在性判定。
+     *
+     * 为什么必须是三态而不是 Boolean：`query` **抛异常**（provider 抖动、备份恢复期、Binder 抖动）
+     * 与「确实查不到这一行」在调用方看来都是「没拿到东西」，可处置**完全相反** ——
+     * 前者必须**保留**记录（下次再试），后者才可以摘除。压成一个布尔，一次瞬时故障就会被
+     * 当成「已失效」写上删除，于是**永久丢记录**：文件还躺在系统下载目录里，本应用却再也
+     * 列不出来，而且没有任何提示。
+     * 与写入侧的 `PendingState` 四态是同一思路（见 [writeToDownloads]）。
+     */
+    private enum class Presence { ALIVE, GONE, UNKNOWN }
+
     /** 系统 DownloadManager 里的记录 */
     private fun downloadManagerItems(context: Context): List<Item> {
         val ids = rememberIds(context)
         if (ids.isEmpty()) return emptyList()
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val alive = mutableListOf<Long>()
+        val gone = mutableListOf<Long>()
         val items = ids.mapNotNull { id ->
-            try {
-                val c = dm.query(DownloadManager.Query().setFilterById(id))
-                c.use {
-                    if (!it.moveToFirst()) return@mapNotNull null
-                    alive += id
-                    val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                    val title = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE)).orEmpty()
-                    val bytes = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                    val total = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-                    val localUri = it.getString(it.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-                    val (stateText, percent) = when (status) {
-                        DownloadManager.STATUS_SUCCESSFUL -> STATE_SUCCESS to 100
-                        DownloadManager.STATUS_RUNNING -> {
-                            val p = if (total > 0) ((bytes * 100) / total).toInt() else 0
-                            STATE_RUNNING to p
-                        }
-                        DownloadManager.STATUS_PAUSED -> STATE_PAUSED to 0
-                        DownloadManager.STATUS_PENDING -> STATE_PENDING to 0
-                        else -> STATE_FAILED to 0
-                    }
-                    Item(id, title, stateText, percent, localUri)
-                }
-            } catch (e: Exception) {
-                null
-            }
+            val (item, presence) = probeDownloadManager(dm, id)
+            if (presence == Presence.GONE) gone += id
+            item
         }
         // 清理已被系统下载器遗忘的记录，避免 id 列表只增不减。
-        // 只摘掉**本次确认已失效**的那些 id，且在锁内基于最新列表重算 ——
-        // 否则会把清理期间并发新增的 id 一起覆盖掉（见 [recordsLock]）。
-        val dead = ids.filterNot { it in alive }
-        if (dead.isNotEmpty()) {
+        // 只摘掉**本次确认已失效**（GONE）的 id；UNKNOWN（查询失败）一律保留、下次再核。
+        // 且在锁内基于最新列表重算 —— 否则会把清理期间并发新增的 id 一起覆盖掉（见 [recordsLock]）。
+        if (gone.isNotEmpty()) {
             synchronized(recordsLock) {
-                writeIds(context, rememberIds(context).filterNot { it in dead })
+                writeIds(context, rememberIds(context).filterNot { it in gone })
             }
         }
         return items
     }
 
-    /** 本应用自管记录（MediaStore content uri / 应用目录 file uri）；失效的自动剔除 */
+    /**
+     * 查一条系统下载器记录。
+     * @return 可展示项（不存在 / 查询失败时为 null）与其 [Presence]
+     */
+    private fun probeDownloadManager(dm: DownloadManager, id: Long): Pair<Item?, Presence> =
+        try {
+            dm.query(DownloadManager.Query().setFilterById(id)).use { c ->
+                // 游标能开、但一行都没有 ⇒ 下载器确实已把它遗忘，可以摘除
+                if (!c.moveToFirst()) return null to Presence.GONE
+                val status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                val title = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE)).orEmpty()
+                val bytes = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                val total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                val localUri = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+                val (stateText, percent) = when (status) {
+                    DownloadManager.STATUS_SUCCESSFUL -> STATE_SUCCESS to 100
+                    DownloadManager.STATUS_RUNNING -> {
+                        val p = if (total > 0) ((bytes * 100) / total).toInt() else 0
+                        STATE_RUNNING to p
+                    }
+                    DownloadManager.STATUS_PAUSED -> STATE_PAUSED to 0
+                    DownloadManager.STATUS_PENDING -> STATE_PENDING to 0
+                    else -> STATE_FAILED to 0
+                }
+                Item(id, title, stateText, percent, localUri) to Presence.ALIVE
+            }
+        } catch (_: Exception) {
+            // 查询**抛异常** = 什么也没探测到，不等于「不存在」：保留记录，下次 [list] 再试
+            null to Presence.UNKNOWN
+        }
+
+    /** 本应用自管记录（MediaStore content uri / 应用目录 file uri）；**确认失效**的才剔除 */
     private fun managedItems(context: Context): List<Item> {
         val records = rememberManaged(context)
         if (records.isEmpty()) return emptyList()
         val resolver = context.contentResolver
-        val alive = mutableListOf<Managed>()
+        val kept = mutableListOf<Managed>()
         val items = records.mapNotNull { m ->
             val uri = runCatching { android.net.Uri.parse(m.uri) }.getOrNull() ?: return@mapNotNull null
-            val exists = when (uri.scheme) {
-                "content" -> runCatching {
-                    resolver.query(uri, arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)
-                        ?.use { it.moveToFirst() } == true
-                }.getOrDefault(false)
-                "file" -> java.io.File(uri.path.orEmpty()).exists()
-                else -> false
+            when (managedPresence(resolver, uri)) {
+                // ALIVE 与 UNKNOWN **一视同仁**：记录是「写入成功之后」才登记的，一次查询失败
+                // 不足以否定它。此前把「查询失败」与「确实不存在」压成一个 Boolean ⇒ 查询一抖
+                // 记录就永久消失（文件还在系统下载目录里）。宁可多显示一次，也不要丢记录。
+                Presence.ALIVE, Presence.UNKNOWN -> {
+                    kept += m
+                    Item(-1L, m.title, "suc", 100, m.uri, m.mime, managed = true)
+                }
+                Presence.GONE -> null
             }
-            if (!exists) return@mapNotNull null
-            alive += m
-            Item(-1L, m.title, "suc", 100, m.uri, m.mime, managed = true)
         }
-        val aliveSet = alive.toSet()
-        val dead = records.filterNot { it in aliveSet }
+        // 只摘掉**确认失效**的记录；ALIVE / UNKNOWN 都保留（[kept] 同时决定「保留」与「展示」）
+        val keptSet = kept.toSet()
+        val dead = records.filterNot { it in keptSet }
         if (dead.isNotEmpty()) {
             // 同 [downloadManagerItems]：锁内基于最新列表只摘失效项，避免覆盖并发新增
             synchronized(recordsLock) {
@@ -702,6 +722,22 @@ object DownloadRepo {
         }
         return items
     }
+
+    /** 判定一条自管记录的 URI 是否仍指向真实文件（三态，理由见 [Presence]） */
+    private fun managedPresence(resolver: android.content.ContentResolver, uri: android.net.Uri): Presence =
+        when (uri.scheme) {
+            "content" -> try {
+                val exists = resolver
+                    .query(uri, arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)
+                    ?.use { it.moveToFirst() } == true
+                if (exists) Presence.ALIVE else Presence.GONE
+            } catch (_: Exception) {
+                // 查询抛异常 ⇒ 什么也没探测到，保留记录下次再试（**不能**回退成「已失效」）
+                Presence.UNKNOWN
+            }
+            "file" -> if (java.io.File(uri.path.orEmpty()).exists()) Presence.ALIVE else Presence.GONE
+            else -> Presence.GONE
+        }
 
     /**
      * [open] / [share] 的共享前置：就绪判定 + 解析可对外交付的 URI 与 MIME。
