@@ -150,8 +150,9 @@ class ExtInstallCoordinator(
                     onDone(source, cb, performInstall(source, controller, cb))
                 }
             } catch (e: TimeoutCancellationException) {
+                // 总预算耗尽 = **兜底**（每一步都有独立上限，正常情况下跑不到这里）
                 settle(source.key)
-                withContext(Dispatchers.Main) { cb.onFailure(source, InstallTimeoutException()) }
+                withContext(Dispatchers.Main) { cb.onFailure(source, InstallTimeoutException(Stage.TOTAL)) }
             } catch (e: CancellationException) {
                 // 宿主销毁：静默收尾（孤儿态由列表页 onResume 的自愈逻辑清理）
                 settle(source.key)
@@ -309,14 +310,32 @@ class ExtInstallCoordinator(
         }
     }
 
-    /** 把一个本地 .xpi 交给内核安装（Mozilla 签名仍由内核校验） */
-    private suspend fun installFromFile(file: File, controller: WebExtensionController): WebExtension? =
-        controller
-            .install(
-                android.net.Uri.fromFile(file).toString(),
-                WebExtensionController.INSTALLATION_METHOD_FROM_FILE,
-            )
-            .awaitResult()
+    /**
+     * 把一个本地 .xpi 交给内核安装（Mozilla 签名仍由内核校验）。
+     *
+     * ⚠️ 这一步**必须有自己的上限**：它是全链路里唯一可能「内核零回应却没人管」的地方
+     * （直链步那处已用 [KERNEL_STEP_MS] 封顶），此前完全没有超时 —— 一旦内核不回应就会吃光
+     * 总预算，而总预算耗尽只能给出笼统的「安装超时」，归因与真实原因对不上。
+     *
+     * 用 [withTimeoutOrNull] 而不是 `withTimeout`：后者抛的 TimeoutCancellationException 与
+     * **外层总超时**是同一种异常，混在一起就会把「总超时」误报成本步超时。
+     * `withTimeoutOrNull` 只在**它自己**超时时返回 null（外部取消原样抛出），
+     * 再用 `completed` 标记区分「本步超时」与「确实返回了 null」。
+     */
+    private suspend fun installFromFile(file: File, controller: WebExtensionController): WebExtension? {
+        var completed = false
+        val ext = withTimeoutOrNull(FILE_INSTALL_MS) {
+            controller
+                .install(
+                    android.net.Uri.fromFile(file).toString(),
+                    WebExtensionController.INSTALLATION_METHOD_FROM_FILE,
+                )
+                .awaitResult()
+                .also { completed = true }
+        }
+        if (ext == null && !completed) throw InstallTimeoutException(Stage.FILE_INSTALL)
+        return ext
+    }
 
     /** 一次安装的终态收口：摘除作业记录 */
     private fun settle(key: String) {
@@ -368,14 +387,45 @@ class ExtInstallCoordinator(
         private const val DOWNLOAD_TIMEOUT_MS = 45_000L
 
         /**
-         * 全链路总超时：覆盖「内核直链安装（≤45s）」+「自建下载（最多两个候选、每个 45s）」
-         * +「file:// 安装」。
-         * 取 150s = 45×3 + 15s 余量：**每一环都有独立上限，且三段加起来确实塞得进总时长**，
-         * 于是最坏情况下兜底链也一定跑得完。超时必然给出失败原因，不会无声卡死。
+         * `file://` 交给内核安装这一步的独立上限。
+         *
+         * 为什么补上：它此前是**全链路唯一没有上限**的一步 —— 内核若在这里零回应，就会一直挂着
+         * 直到总预算耗尽，而总超时只能给出笼统归因。本地安装 30s 足够宽裕（内核做的是
+         * 签名校验 + 落盘，正常远快于此）。
          */
-        private const val TOTAL_TIMEOUT_MS = 150_000L
+        private const val FILE_INSTALL_MS = 30_000L
+
+        /**
+         * 全链路总超时：覆盖「内核直链安装（≤[KERNEL_STEP_MS]）」+「自建下载（最多两个候选、
+         * 每个 [DOWNLOAD_TIMEOUT_MS]）」+「file:// 安装（≤[FILE_INSTALL_MS]）」。
+         *
+         * 取 170s：45 + 45×2 + 30 = 165，留 5s 余量。**每一环都有独立上限、且三段之和确实塞得进
+         * 总时长**，于是总超时退回纯兜底 —— 一旦触发就说明某一步的上限没兜住。
+         * （此前是 150s：那时 file:// 那步没有上限，「三段之和」根本无从谈起；补上它的 30s 之后
+         * 必须相应放宽总时长，否则总超时会先于某一段触发、把归因又搞乱。）
+         */
+        private const val TOTAL_TIMEOUT_MS = 170_000L
     }
 
-    /** 超时：安装请求已交给内核，但内核在期限内没有任何回应 */
-    class InstallTimeoutException : Exception("install timeout: engine gave no response")
+    /**
+     * 超时。**必须带上发生阶段** —— 否则归因必然出错：同是「超时」，「内核没回应」与
+     * 「自建下载把总预算烧完了」对用户是两件完全不同的事，不能共用一个文案
+     * （映射见 ExtensionsActivity 的失败归因）。
+     */
+    class InstallTimeoutException(val stage: Stage) : Exception("install timeout at $stage")
+
+    /**
+     * 超时发生的阶段。
+     *
+     * 刻意只留两个取值：直链步超时**不是错误**（[KERNEL_STEP_MS] 到点就继续走兜底、不抛异常），
+     * 自建下载失败另有自己的 `IllegalStateException("官方直链与自建下载均不可用")` ——
+     * 只有下面两处真的需要区分。多留取值只会变成没人走的死分支。
+     */
+    enum class Stage {
+        /** `file://` 交给内核安装那一步（同为「请求已交给内核、内核没回应」，只是换了个入口） */
+        FILE_INSTALL,
+
+        /** 全链路总预算耗尽（兜底；正常情况下每一步都各自封顶，跑不到这里） */
+        TOTAL,
+    }
 }
