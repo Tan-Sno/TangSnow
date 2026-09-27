@@ -2115,9 +2115,20 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                     runOnUiThread { toast(R.string.pdf_failed) }
                     return@accept
                 }
-                lifecycleScope.launch {
-                    val ok = writePdf(input)
-                    toast(if (ok) R.string.pdf_saved else R.string.pdf_failed)
+                // ⚠️ 判定必须放在**启动协程之前**：lifecycleScope 随 Activity 销毁而取消，
+                // 那时 launch 的块体**根本不会执行** —— writePdf 里的 input.use 一行不跑，
+                // 内核给的 PDF 管道流就永远不关（只能等 GC 的 Cleaner 兜）。
+                // 放进 runOnUiThread 与 toast 分支同口径：本 Runnable 执行时若已销毁，就当场
+                // 把流关掉、放弃这次保存（宁可这次没存成，也不漏一个 fd）。
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) {
+                        runCatching { input.close() }
+                        return@runOnUiThread
+                    }
+                    lifecycleScope.launch {
+                        val ok = writePdf(input)
+                        toast(if (ok) R.string.pdf_saved else R.string.pdf_failed)
+                    }
                 }
             },
             { _ -> runOnUiThread { toast(R.string.pdf_failed) } }
@@ -2146,13 +2157,21 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                     runOnUiThread { toast(R.string.print_failed) }
                     return@accept
                 }
-                lifecycleScope.launch {
-                    val file = withContext(Dispatchers.IO) { cachePrintPdf(input) }
-                    if (file == null) {
-                        toast(R.string.print_failed)
-                        return@launch
+                // 与「存为 PDF」同口径：判定要在启动协程**之前**，否则 Activity 已销毁时
+                // 协程块体不执行、这个 PDF 管道流没人关（见那处的详细说明）
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) {
+                        runCatching { input.close() }
+                        return@runOnUiThread
                     }
-                    startPrint(file)
+                    lifecycleScope.launch {
+                        val file = withContext(Dispatchers.IO) { cachePrintPdf(input) }
+                        if (file == null) {
+                            toast(R.string.print_failed)
+                            return@launch
+                        }
+                        startPrint(file)
+                    }
                 }
             },
             { _ -> runOnUiThread { toast(R.string.print_failed) } }
@@ -2209,6 +2228,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // ⚠️ `input.use` 放在**最外层**：writeToDownloads 在 `insert` 返回 null、或协程被取消时
         // 根本不会调用 write 回调，那时只有这里能关掉内核给的 PDF 管道流（放进去就漏一个 fd，
         // 要等 GC 的 Cleaner 兜）。
+        // ⚠️ 但它**只兜得住"协程跑起来了、中途取消"**这一种；"launch 之前 Activity 就已销毁、
+        // 块体压根不执行"是**更大**的窗口 —— 那种情况下本函数根本不会被调用，靠的是两个调用点
+        // （saveAsPdf 的 accept 回调）在启动协程前自行判 isFinishing/isDestroyed 并当场 close。
         return input.use { body ->
             DownloadRepo.writeToDownloads(this, name, "application/pdf") { out ->
                 body.copyTo(out)
