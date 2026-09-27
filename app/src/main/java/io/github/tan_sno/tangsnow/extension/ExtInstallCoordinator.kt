@@ -206,7 +206,7 @@ class ExtInstallCoordinator(
         // 早先这里无条件删除所有 `install-` 前缀文件，于是 A 的清理会把 B **正在写入**的
         // 临时包删掉 —— B 随即在体积校验处失败并跳到下一个候选，最终报「官方直链与自建
         // 下载均不可用」，用户看到的是"这次装不上"，重试又好了（极难复现）。
-        // 阈值取得远大于单次安装的最长耗时（TOTAL_TIMEOUT_MS = 150s），
+        // 阈值取得远大于单次安装的最长耗时（TOTAL_TIMEOUT_MS = 170s），
         // 既能清掉上次崩溃留下的残包，又不会碰到在途文件。
         val staleBefore = System.currentTimeMillis() - STALE_TMP_MS
         dir.listFiles { f -> f.name.startsWith(TMP_PREFIX) && f.lastModified() < staleBefore }
