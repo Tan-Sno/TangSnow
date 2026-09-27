@@ -2259,7 +2259,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
             .format(java.util.Date())
         val name = "TangSnow_$stamp.pdf"
-        // 落盘走统一出口（IS_PENDING 占位行、失败清理、update 行数判定都在那里收口）。
+        // 落盘走统一出口（IS_PENDING 占位、写流失败清理、转正失败保留待重试、update 行数判定都在那里收口）。
         // 此前这里自己抄了一份 MediaStore 代码，与书签导出、内核流下载并成三份同构副本，
         // 且已漂成三种语义（本处把 update 留在 try 外 ⇒ 它抛异常就留 IS_PENDING=1 的幽灵行）。
         // 副本越少，越不会被改漏。
