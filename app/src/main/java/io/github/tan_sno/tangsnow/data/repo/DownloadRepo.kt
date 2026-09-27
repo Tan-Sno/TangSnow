@@ -363,6 +363,13 @@ object DownloadRepo {
      * 且写前重读，与既有 read-modify-write 同口径。
      */
     private fun sweepStalePromotions(context: Context) {
+        // 快路径：锁外先看一眼队列是否为空（绝大多数情况）—— 空就不必进锁，
+        // 更不会在锁内做 Binder，主线程的「清空」也就不会在此久等（N5）。
+        // getString 带了 "[]" 默认值 ⇒ raw 不会是 null/空白，只判 "[]" 即可。
+        // ⚠️ 这是**乐观**判断：真正干活的读取仍在锁内重做一遍（见下）。
+        val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_STALE_PROMOTIONS, "[]")
+        if (raw == "[]") return
         // 整体持 recordsLock：读、重试、写回原子化 —— 否则扫尾期间并发「转正失败再登记」
         // 的写入会被本次写回覆盖（与 downloadManagerItems 的锁内重读同一考量）。
         // synchronized 可重入：扫尾内 registerPromoted → registerSavedFile → rememberId
@@ -1024,21 +1031,27 @@ object DownloadRepo {
     }
 
     /**
-     * 清空全部下载**记录**（系统下载器 id 列表 + 自管条目）。
+     * 清空全部下载**记录**（系统下载器 id 列表 + 自管条目 + 转正待重试队列）。
      *
      * 与逐行 [remove] 的关键区别：**不删除磁盘上的文件**。下载文件是用户资产，
      * 一键清空若连文件一起删，误操作不可逆；这里只让「下载」页回到空态。
      * 需要删除具体文件时仍走逐行 remove。
+     *
+     * `suspend` + IO：等 [recordsLock] 与 SharedPreferences 落盘都是磁盘级操作，
+     * 而持锁方（[sweepStalePromotions]）锁内会做 Binder（query / update /
+     * addCompletedDownload）⇒ **等锁的人绝不能是主线程**（N5）。
      */
-    fun clearRecords(context: Context) = synchronized(recordsLock) {
-        // 与 rememberId/rememberManaged 同锁：否则「清空」与并发下载的完成登记
-        // 读-改-写交错时，在途写入会用旧列表把刚清掉的记录整体写回
-        // 逐键清，而不是点名两个：新增键只要登记进 [ALL_RECORD_KEYS] 就必然被清到
-        // （此前只 remove 了 KEY_IDS/KEY_MANAGED，漏了后加的 KEY_STALE_PROMOTIONS
-        // ⇒ 「清空下载记录」之后，转正待重试队列仍带着旧条目复活）。
-        val e = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-        ALL_RECORD_KEYS.forEach { e.remove(it) }
-        e.apply()
+    suspend fun clearRecords(context: Context) = withContext(Dispatchers.IO) {
+        synchronized(recordsLock) {
+            // 与 rememberId/rememberManaged 同锁：否则「清空」与并发下载的完成登记
+            // 读-改-写交错时，在途写入会用旧列表把刚清掉的记录整体写回
+            // 逐键清，而不是点名两个：新增键只要登记进 [ALL_RECORD_KEYS] 就必然被清到
+            // （此前只 remove 了 KEY_IDS/KEY_MANAGED，漏了后加的 KEY_STALE_PROMOTIONS
+            // ⇒ 「清空下载记录」之后，转正待重试队列仍带着旧条目复活）。
+            val e = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            ALL_RECORD_KEYS.forEach { e.remove(it) }
+            e.apply()
+        }
     }
 
     // ------------------------------------------------------------- 记录持久化
