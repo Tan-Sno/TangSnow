@@ -177,6 +177,9 @@ class SuggestionsController(private val activity: MainActivity) {
         panelView.isVisible = true
     }
 
+    /** 联想面板是否可见（返回键判定用；尚未 resolve 时恒为 false） */
+    val isShowing: Boolean get() = panel?.isVisible == true
+
     fun hide() {
         cancelPending()
         panel?.isVisible = false

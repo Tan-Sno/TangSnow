@@ -1212,6 +1212,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         setReloadButtonLoading(false)
         // 安全指示同样复位：新标签的页面会各自上报自己的安全状态
         hideSecurityIndicator()
+        // 切标签必须收掉查找条、并清掉**上一个标签**的页内高亮：查找条属于「标签内的界面状态」，
+        // 留着会显示上一个页面的结果计数，高亮还残留在原标签上（用户切回去会以为还在查找中）。
+        // 位置刻意在 showHome/showBrowser **之前** —— 那两处内部也会 close(clear = false)
+        // （只隐藏、不清高亮），顺序反了就是先被它们收掉条子，这里的 clear 反而无从下手。
+        findBarController.close(clear = true)
         if (tab.url.isNullOrBlank()) showHome() else showBrowser()
         updateBookmarkIcon()
         updatePrivateButton()
@@ -1439,6 +1444,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      * 统一的「返回」判定 —— 系统返回键与底栏后退格**共用同一实现**。
      *
      * 顺序即优先级：先收最上层的覆盖层，再处理首页退出，最后才是网页历史与回首页。
+     * ⚠️ 「覆盖层」这份清单**必须完整** —— 漏掉任何一档，返回键就会**穿透**到下一档：
+     *  · 查找条漏了 → 直接去走网页历史 / 回首页，条子与页内高亮都留着；
+     *  · 首页联想面板漏了 → 落到 `homeVisible` 档，一次误按提示「再按一次退出」，
+     *    连按两下就把应用退掉（连输入法的候选都没收掉）。
      * 之所以抽成一个函数：两处入口若各写一份判定，只要有一处忘记同步，就会出现
      * "屏幕后退与系统返回行为不一致"的诡异手感。
      */
@@ -1446,6 +1455,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         when {
             binding.tabsPanel.isVisible -> hideTabsPanel()
             binding.moreSheet.isVisible -> hideMoreSheet()
+            // 下面两档必须排在 homeVisible **之前**，否则首页上的联想态会直接走双击退出
+            findBarController.isOpen -> findBarController.close()
+            suggestionsController.isShowing -> suggestionsController.hide()
             // 首页返回键：连续两下才退出（业界惯例），避免误触直接退出
             homeVisible -> confirmExitByDoubleBack()
             // 对齐主流浏览器：网页内先回退历史，无历史再回主页

@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import androidx.core.view.isVisible
+import io.github.tan_sno.tangsnow.browser.Tab
 import org.mozilla.geckoview.GeckoSession
 
 /**
@@ -18,6 +19,19 @@ class FindBarController(private val activity: MainActivity) {
     private var bar: android.widget.LinearLayout? = null
     private var input: android.widget.EditText? = null
     private var count: android.widget.TextView? = null
+
+    /**
+     * 当前被高亮的**发起标签**（`open()` 时置位；清过高亮后置空）。
+     *
+     * 为什么不能取「关闭瞬间的 activeTab」：用户完全可以先开查找、再切标签，然后才关。
+     * 那时清 `activeTab` 会**清错对象** —— 原标签的高亮残留在页面上，新标签反而被无谓 clear。
+     * ⚠️ `close(clear = false)` **不清**这个字段（它只负责隐藏条子），否则紧随其后的
+     * `close(clear = true)`（切标签时调用）就找不到该清谁了。
+     */
+    private var highlighted: Tab? = null
+
+    /** 查找条是否可见（返回键判定用；尚未 resolve 时恒为 false） */
+    val isOpen: Boolean get() = bar?.isVisible == true
 
     /** 从主布局解析查找条（findViewById 比 viewBinding include 更直接，避免绑定类型差异） */
     fun resolve() {
@@ -58,6 +72,7 @@ class FindBarController(private val activity: MainActivity) {
             return
         }
         activity.hideMoreSheet()
+        highlighted = tab
         runCatching {
             val finder = tab.session.finder
             finder.setDisplayFlags(GeckoSession.FINDER_DISPLAY_HIGHLIGHT_ALL)
@@ -75,7 +90,10 @@ class FindBarController(private val activity: MainActivity) {
     fun close(clear: Boolean = true) {
         debounce?.let { handler.removeCallbacks(it) }
         debounce = null
-        if (clear) runCatching { activity.sessionManager.activeTab?.session?.finder?.clear() }
+        if (clear) {
+            runCatching { highlighted?.session?.finder?.clear() }
+            highlighted = null
+        }
         if (bar?.isVisible == true) bar?.isVisible = false
         activity.hideKeyboard()
     }
@@ -97,6 +115,10 @@ class FindBarController(private val activity: MainActivity) {
         finder.find(query, flags).accept(
             { res ->
                 activity.runOnUiThread {
+                    // 结果可能在 Activity 已销毁之后才回来（快速退出 / 旋屏）：那时 count 所属的
+                    // 视图树已失效，再写就是把状态灌进一个废弃的界面。对齐 TabPreviewController
+                    // 的做法（那里三处回调都判了）。
+                    if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
                     val text = if (res != null && res.found && res.total > 0) {
                         activity.getString(R.string.find_result, res.current + 1, res.total)
                     } else {
