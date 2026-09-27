@@ -72,13 +72,32 @@ object ExtensionPrompts {
     }
 
     /**
-     * 一次性应答闸：用户点击与"销毁兜底取消"可能竞争同一次提示，
-     * 而 GeckoResult 只允许完成一次，故统一经此收口。
+     * 一次性应答闸：用户点击、「销毁兜底取消」、以及**内核自己**都可能结算同一个 GeckoResult，
+     * 而它只允许完成一次，故统一经此收口。
+     *
+     * ⚠️ 本类的 AtomicBoolean 只挡**本文件**的重复应答，挡不住**内核先行完成/取消**：
+     * 那时 `GeckoResult.complete()` / `completeExceptionally()` 会抛
+     * `IllegalStateException("result is already complete")` —— 已用 `javap` 在本项目锁定的
+     * geckoview 155 制品上证实（这两个方法都在 `mComplete` 为真时直接 `new IllegalStateException`）。
+     * 该异常原本会从**主线程的按钮回调**里逃逸出去 —— 未捕获即崩溃；所以必须在这里吞掉
+     * **这一种**（且只这一种，不扩大吞异常面）。内核何时会先行结算不由本仓控制，
+     * 这一段是纯粹的防御。
      */
     private class Once<T>(private val result: GeckoResult<T>) {
         private val done = java.util.concurrent.atomic.AtomicBoolean(false)
-        fun complete(value: T) {
-            if (done.compareAndSet(false, true)) result.complete(value)
+
+        fun complete(value: T) = settle { result.complete(value) }
+
+        fun completeExceptionally(error: Throwable) = settle { result.completeExceptionally(error) }
+
+        private fun settle(reply: () -> Unit) {
+            if (!done.compareAndSet(false, true)) return
+            try {
+                reply()
+            } catch (e: IllegalStateException) {
+                // 内核已先行结算：本次应答无处可去。debug 留痕便于排障；release 由 proguard 剥掉 Log.d。
+                android.util.Log.d("ExtensionPrompts", "GeckoResult 已结算，本次应答被丢弃", e)
+            }
         }
     }
 
@@ -363,6 +382,12 @@ object ExtensionPrompts {
                 details: WebExtension.CreateTabDetails,
             ): GeckoResult<GeckoSession> {
                 val result = GeckoResult<GeckoSession>()
+                // 经 Once 收口：内核可能已先行结算这个 result，直接 complete 会抛 ISE 逃逸出
+                // 这个协程（SupervisorJob + Main，无 CoroutineExceptionHandler ⇒ 崩溃）。
+                // 更早的写法里失败分支是 `runCatching { … result.complete(…) }.onFailure {
+                // result.completeExceptionally(it) }` —— 一旦 complete 抛 ISE，被 runCatching 接住后
+                // onFailure 又会**再抛一次** ISE，且这次没有任何东西接住它。
+                val once = Once(result)
                 extScope.launch {
                     runCatching {
                         val sm = BrowserSessionManager.get(
@@ -375,8 +400,8 @@ object ExtensionPrompts {
                         sm.switchTo(tab)
                         // 让前台主界面切到该标签并展示（best-effort；无前台界面则暂不显示）
                         val shown = popupHost?.focusExtensionTab(tab)
-                        result.complete(shown ?: tab.session)
-                    }.onFailure { result.completeExceptionally(it) }
+                        once.complete(shown ?: tab.session)
+                    }.onFailure { once.completeExceptionally(it) }
                 }
                 return result
             }
