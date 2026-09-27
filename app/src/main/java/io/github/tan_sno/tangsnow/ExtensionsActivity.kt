@@ -403,12 +403,20 @@ class ExtensionsActivity : AppCompatActivity() {
             return getString(R.string.extension_error_download)
         }
         if (err is ExtInstallCoordinator.InstallTimeoutException) {
-            // 安装请求已交给内核，但内核在期限内没有任何回应
-            return getString(R.string.extension_error_engine_no_response)
+            // 按**发生阶段**归因。「请求已交给内核、但内核在期限内没有任何回应」这句对
+            // file:// 安装步同样成立（只是换了个入口）；只有「总预算耗尽」才是笼统的超时。
+            return when (err.stage) {
+                ExtInstallCoordinator.Stage.FILE_INSTALL ->
+                    getString(R.string.extension_error_engine_no_response)
+                ExtInstallCoordinator.Stage.TOTAL ->
+                    getString(R.string.extension_error_timeout)
+            }
         }
         if (err is java.util.concurrent.TimeoutException ||
             err is kotlinx.coroutines.TimeoutCancellationException
         ) {
+            // 兜底：协调器现在只会给阶段化超时（上面那一支），此处留给任何**别处**抛出的裸超时。
+            // （原先它是「总超时」的唯一出口，但被上面那支抢先拦死、从未生效 —— 现已接通。）
             return getString(R.string.extension_error_timeout)
         }
         if (err !is WebExtension.InstallException) {
