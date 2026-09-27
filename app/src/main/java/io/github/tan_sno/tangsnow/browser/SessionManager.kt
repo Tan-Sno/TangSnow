@@ -559,7 +559,7 @@ class BrowserSessionManager private constructor(
         session.progressDelegate = progressDelegate(tab)
         session.historyDelegate = historyDelegate(tab)
         attachPromptDelegate(tab)
-        attachPermissionDelegate(session)
+        attachPermissionDelegate(tab)
         session.mediaSessionDelegate = mediaSessionDelegate(tab)
     }
 
@@ -1272,7 +1272,18 @@ class BrowserSessionManager private constructor(
 
     // --------------------------------------------------------- 站点权限（A3）
 
-    private fun attachPermissionDelegate(session: GeckoSession) {
+    /**
+     * 权限征询的**执行瞬间复查** —— 与 [promptStale] 同口径、同理由（那里写得最全）：
+     * 入口判定发生在内核回调时刻，而真正的弹窗是 `post{}` 执行时才创建，两者之间用户完全可能
+     * 切走 / 关掉这个标签。不复查的话，权限框照样弹到前台（**抢走用户焦点**），
+     * 应答也会打到已经不在前台的会话上。
+     *
+     * @return true 表示此刻已不该弹（调用方按「后台/已关标签」的同一口径自行应答并 `return@post`）
+     */
+    private fun permissionStale(tab: Tab): Boolean = !(isAlive(tab) && tab === active)
+
+    private fun attachPermissionDelegate(tab: Tab) {
+        val session = tab.session
         session.permissionDelegate = object : GeckoSession.PermissionDelegate {
             override fun onContentPermissionRequest(
                 session: GeckoSession,
@@ -1300,7 +1311,19 @@ class BrowserSessionManager private constructor(
                     GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION,
                     GeckoSession.PermissionDelegate.PERMISSION_LOCAL_DEVICE_ACCESS,
                     GeckoSession.PermissionDelegate.PERMISSION_LOCAL_NETWORK_ACCESS -> {
+                        // 只有这一支会弹 UI：与 prompt 侧同口径，后台/已关标签**不弹**、不抢焦点，
+                        // 直接按拒绝应答。①自动放行与③自动拒绝两支**刻意不加**这道闸 ——
+                        // 给后台标签授存储 / DRM 属正常行为，顺带拒绝反而是功能回退。
+                        if (!isAlive(tab) || tab !== active) {
+                            result.complete(deny)
+                            return result
+                        }
                         post {
+                            // 投递到主线程后仍可能已切走 / 关掉该标签：执行瞬间复查
+                            if (permissionStale(tab)) {
+                                result.complete(deny)
+                                return@post
+                            }
                             val h = permissionHandler
                             if (h == null) {
                                 result.complete(deny)
@@ -1342,7 +1365,16 @@ class BrowserSessionManager private constructor(
                 permissions: Array<out String>?,
                 callback: GeckoSession.PermissionDelegate.Callback
             ) {
+                // 会弹系统级权限 UI：后台/已关标签一律拒绝（不抢焦点），与 prompt 侧同口径
+                if (!isAlive(tab) || tab !== active) {
+                    callback.reject()
+                    return
+                }
                 post {
+                    if (permissionStale(tab)) {
+                        callback.reject()
+                        return@post
+                    }
                     val h = permissionHandler
                     if (h == null) callback.reject()
                     else h.onAndroidPermissions(
@@ -1360,8 +1392,18 @@ class BrowserSessionManager private constructor(
                 audio: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
                 callback: GeckoSession.PermissionDelegate.MediaCallback
             ) {
+                // 会弹系统级权限 UI：后台/已关标签一律拒绝（不抢焦点），与 prompt 侧同口径
+                if (!isAlive(tab) || tab !== active) {
+                    callback.reject()
+                    return
+                }
                 val host = android.net.Uri.parse(uri).host ?: uri
                 post {
+                    // 执行瞬间复查（见 permissionStale 的 KDoc）
+                    if (permissionStale(tab)) {
+                        callback.reject()
+                        return@post
+                    }
                     val h = permissionHandler
                     if (h == null) callback.reject()
                     else h.onMediaPermission(
