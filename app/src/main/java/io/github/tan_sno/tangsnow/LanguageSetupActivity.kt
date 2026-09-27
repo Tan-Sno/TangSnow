@@ -56,12 +56,28 @@ class LanguageSetupActivity : AppCompatActivity() {
 
         // 默认选中 English：能走到本页的用户，其设备语言既不是中文也不是英文，
         // 对他而言英文是唯一可能看懂的国际通用语言（也符合仓库「英文为默认」的定位）。
-        binding.languageGroup.check(R.id.radioEnglish)
+        //
+        // ⚠️ 重建（旋屏 / 主题重建）时要恢复到用户刚才的选择，且**字段与单选钮必须同源**：
+        // 系统随后还会用 view state 还原 RadioGroup 的选中项，若只有一边恢复到位，
+        // 就会出现「界面显示中文、点继续却落盘 EN」的错配。
+        val restored = savedInstanceState?.getString(KEY_CHOSEN)
+            ?.takeIf { it == LocaleManager.ZH || it == LocaleManager.EN }
+        if (restored != null) chosen = restored
+        binding.languageGroup.check(
+            if (chosen == LocaleManager.ZH) R.id.radioChinese else R.id.radioEnglish
+        )
 
         binding.languageGroup.setOnCheckedChangeListener { _, checkedId ->
             chosen = if (checkedId == R.id.radioChinese) LocaleManager.ZH else LocaleManager.EN
         }
         binding.btnContinue.setOnClickListener { applyAndContinue() }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // 不存的话，旋屏后 `chosen` 会退回默认 EN —— 它是普通字段，不像 RadioGroup 那样
+        // 由系统自动保存（详见 onCreate 里那段的说明）
+        outState.putString(KEY_CHOSEN, chosen)
     }
 
     private fun applyAndContinue() {
@@ -89,5 +105,10 @@ class LanguageSetupActivity : AppCompatActivity() {
     private fun goNext() {
         startActivity(Intent(intent).setClass(this, ConsentActivity::class.java))
         finish()
+    }
+
+    private companion object {
+        /** 仅用于本页 Activity 重建的状态键，与 PreferenceStore 的键无关 */
+        const val KEY_CHOSEN = "language_setup_chosen"
     }
 }
