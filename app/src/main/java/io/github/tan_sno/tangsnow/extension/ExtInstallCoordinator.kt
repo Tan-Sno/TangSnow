@@ -99,14 +99,18 @@ class ExtInstallCoordinator(
 
         /** 自定义官方链接安装 */
         class Remote(override val label: String, override val remoteUrl: String) : Source() {
-            override val key: String = "__remote__"
+            // key 必须带上**本次安装的来源**：此前是常量 "__remote__"，于是「同时装两个不同链接」
+            // 会命中同一个去重键而被 [isWorking] 拦下 —— 第二次点击像被吞掉一样毫无反馈。
+            // 三个子类里只有 Catalog 允许用常量键（它本来就是「每个扩展一条」）。
+            override val key: String = "remote:$remoteUrl"
             override val localFile: File? = null
             override val candidateUrls: List<String> get() = listOf(remoteUrl)
         }
 
         /** 本地 .xpi 导入（已完成复制与基础校验，直接安装） */
         class LocalFile(override val label: String, val file: File) : Source() {
-            override val key: String = "__localfile__"
+            // 同 [Remote]：按文件路径区分，两个不同文件才能同时装
+            override val key: String = "localfile:${file.absolutePath}"
             override val remoteUrl: String? = null
             override val localFile: File get() = file
         }
