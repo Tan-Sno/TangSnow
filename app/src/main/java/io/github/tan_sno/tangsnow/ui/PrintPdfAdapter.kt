@@ -7,6 +7,10 @@ import android.print.PageRange
 import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
 import android.print.PrintDocumentInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileInputStream
 
@@ -16,7 +20,9 @@ import java.io.FileInputStream
  * 为什么是「先落盘、再打印」，而不是直接用 GeckoView 的 `PrintDelegate`：
  * 后者的 PDF 由内核**异步回调**产出，而本类的 [onWrite] 必须在用户点「打印」后**当即**交出数据
  * —— 两者时序对不上。因此由调用方先把 PDF 流写进缓存文件，本类只负责把它复制给系统的
- * [ParcelFileDescriptor]，时序简单，也不必阻塞主线程。
+ * [ParcelFileDescriptor]，时序简单。
+ * ⚠️ [onWrite] 本身是**主线程**回调（见其实现处的 AOSP 依据），故复制动作放在自己的 IO 域里做
+ * —— 「不必阻塞主线程」这句话原先只是意图，现在才是事实。
  *
  * ⚠️ 生命周期约定：[onFinish] 一定会被框架调用一次（成功、失败、取消都算），
  * 调用方应在 [onDone] 里删除临时文件，避免缓存目录残留。
@@ -33,6 +39,15 @@ internal class PrintPdfAdapter(
     private val noStreamMessage: String,
     private val onDone: () -> Unit,
 ) : PrintDocumentAdapter() {
+
+    /**
+     * 复制用的后台协程域。
+     *
+     * 刻意**不在 [onFinish] 里取消**：`onFinish` 可能在复制仍在进行时到达，取消会把文件截断、
+     * 交给框架一份残缺的 PDF。本协程只做「把已经落盘的 PDF 复制给框架」这一件事，自然结束；
+     * 它不持有 Context / Activity，也不构成泄漏。
+     */
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onLayout(
         oldAttributes: PrintAttributes?,
@@ -76,22 +91,46 @@ internal class PrintPdfAdapter(
             callback.onWriteFailed(noStreamMessage)
             return
         }
-        try {
-            FileInputStream(pdf).use { input ->
-                // 用 AutoCloseOutputStream 而不是 FileOutputStream(fd)：
-                // 后者会让 fd 的关闭责任变得含糊，前者与 use{} 配合能确保写完后正确释放。
-                ParcelFileDescriptor.AutoCloseOutputStream(dest).use { output ->
-                    input.copyTo(output)
+        // ⚠️ `onWrite` 是**主线程**回调 —— 平台约定，已用 AOSP 源码坐实：
+        // `PrintManager.PrintDocumentAdapterDelegate.write()`（是个 Binder Stub，从 Binder 线程进来）
+        // 只是把 `MSG_ON_WRITE` 投给 `mHandler = new MyHandler(mActivity.getMainLooper())`。
+        // 而这里要整份复制 PDF（数 MB 级），放主线程就是一次可感知的卡顿乃至 ANR。
+        // 平台自带的同款实现（`PrintFileDocumentAdapter.onWrite`）也是把复制丢给 AsyncTask 的 ——
+        // 本类照同一范式：复制放 IO，结果从后台线程回调（`WriteResultCallback` 是 Binder 回调，线程无关）。
+        ioScope.launch {
+            try {
+                FileInputStream(pdf).use { input ->
+                    // 用 AutoCloseOutputStream 而不是 FileOutputStream(fd)：
+                    // 后者会让 fd 的关闭责任变得含糊，前者与 use{} 配合能确保写完后正确释放。
+                    ParcelFileDescriptor.AutoCloseOutputStream(dest).use { output ->
+                        // 分块复制，好让取消信号**在途中**也认（框架自带的那个把 cancellationSignal
+                        // 直接交给 FileUtils.copy，同样不是只在开头查一次）
+                        val buf = ByteArray(COPY_BUFFER_BYTES)
+                        while (true) {
+                            if (cancellationSignal?.isCanceled == true) {
+                                callback.onWriteCancelled()
+                                return@launch
+                            }
+                            val read = input.read(buf)
+                            if (read <= 0) break
+                            output.write(buf, 0, read)
+                        }
+                    }
                 }
+                callback.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
+            } catch (t: Throwable) {
+                // 不吞异常：把原因交给框架，系统打印界面会据此提示失败
+                callback.onWriteFailed(t.message)
             }
-            callback.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
-        } catch (t: Throwable) {
-            // 不吞异常：把原因交给框架，系统打印界面会据此提示失败
-            callback.onWriteFailed(t.message)
         }
     }
 
     override fun onFinish() {
         onDone()
+    }
+
+    private companion object {
+        /** 复制缓冲区（64 KB）：与 ExtInstallCoordinator 的下载缓冲同量级，够大以摊薄系统调用 */
+        const val COPY_BUFFER_BYTES = 64 * 1024
     }
 }
