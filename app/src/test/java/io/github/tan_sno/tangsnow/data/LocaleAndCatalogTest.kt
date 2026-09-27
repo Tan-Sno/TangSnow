@@ -71,6 +71,28 @@ class LocaleAndCatalogTest {
     }
 
     @Test
+    fun `地区受限标记只在 451 置位，其它有响应的码一律清除`() {
+        val slug = "region-probe"
+        try {
+            // 451（Unavailable For Legal Reasons）是唯一表达法律性封锁的码 ⇒ 置位
+            ExtensionCatalog.applyRegionState(slug, 451)
+            assertTrue("451 应置位", slug in ExtensionCatalog.regionBlocked)
+
+            // 之后任何**有响应**的码都证明「这次不是封锁」⇒ 必须清除。
+            // 回归点：旧写法只在 200 时清除，于是 451 之后转为持续 5xx / 超时就一直粘着，
+            // 目录里那条扩展永久显示「地区受限」，而真实原因早已是服务端故障。
+            listOf(200, 301, 404, 500, 503).forEach { code ->
+                ExtensionCatalog.applyRegionState(slug, code)
+                assertFalse("$code 应清除标记", slug in ExtensionCatalog.regionBlocked)
+                ExtensionCatalog.applyRegionState(slug, 451) // 复位，逐个码独立验证
+            }
+        } finally {
+            // regionBlocked 是进程级集合，测试必须自己收拾干净（与上面的 installedIdsBySlug 同口径）
+            ExtensionCatalog.regionBlocked.remove(slug)
+        }
+    }
+
+    @Test
     fun `目录不得收录广告拦截类扩展（合规回归）`() {
         val forbidden = setOf("ublock-origin", "ublock", "adguard", "ghostery", "adblock-plus", "adblock")
         val hits = ExtensionCatalog.all.map { it.slug }.filter { it.lowercase() in forbidden }

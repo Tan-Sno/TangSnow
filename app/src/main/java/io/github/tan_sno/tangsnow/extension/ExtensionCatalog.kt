@@ -108,6 +108,23 @@ object ExtensionCatalog {
     val displayNames = ConcurrentHashMap<String, String>()
 
     /**
+     * 依据一次 [hydrate] 的 HTTP 响应码更新「地区受限」标记。
+     *
+     * 为什么单独抽出来：这条状态迁移的**对称性**正是曾经的缺陷所在 —— 旧写法只在 200 时
+     * 清除标记，于是「451 之后再转为持续 5xx / 超时」就一直粘着，目录里那条扩展永久显示
+     * 「地区受限」，而真实原因早已变成服务端故障。抽成纯函数才能被单测钉住
+     * （见 `LocaleAndCatalogTest`）。
+     *
+     * 语义：**451 ⇒ 置位；其它任何有响应的码（3xx / 4xx / 5xx）⇒ 清除**。
+     * 两侧都必须是「服务端给了明确答复」才算数：451 是唯一表达法律性封锁的码，非 451 的
+     * 有响应即证明「这次不是封锁」。**完全无响应**（抛异常）时**不调用**本函数 ——
+     * 什么都没探测到，置位或清除都是假反馈。
+     */
+    internal fun applyRegionState(slug: String, code: Int) {
+        if (code == 451) regionBlocked.add(slug) else regionBlocked.remove(slug)
+    }
+
+    /**
      * 从 AMO 官方 API 拉取名称与当前版本直链。
      * @return HTTP 状态码（200 成功 / 451 地区受限 / 0 网络失败）
      */
@@ -119,11 +136,8 @@ object ExtensionCatalog {
             ).build()
             AppHttp.client.newCall(req).execute().use { resp ->
                 val code = resp.code
-                if (code != 200) {
-                    if (code == 451) regionBlocked.add(entry.slug)
-                    return@use code
-                }
-                regionBlocked.remove(entry.slug)
+                applyRegionState(entry.slug, code)
+                if (code != 200) return@use code
                 val body = resp.body.string()
                 val json = JSONObject(body)
 
