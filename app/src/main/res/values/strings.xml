@@ -393,6 +393,7 @@
     <!-- 新增网页弹窗（GeckoView PromptDelegate 补全） -->
     <string name="prompt_color_title">选择颜色</string>
     <string name="prompt_color_custom">自定义…</string>
+    <string name="prompt_color_swatch">颜色 %1$s</string>
     <string name="prompt_color_invalid">颜色格式应为 #RRGGBB（如 #3366CC）</string>
     <!-- 弹窗窗口请求：内核侧永远不新开窗口（见 NavigationDelegate.onNewSession），
          实际行为是在**当前标签**打开，文案必须如实说明，不能让用户以为会开新窗口 -->

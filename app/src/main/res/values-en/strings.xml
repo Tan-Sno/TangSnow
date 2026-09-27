@@ -390,6 +390,7 @@
     <!-- New web prompts (GeckoView PromptDelegate completion) -->
     <string name="prompt_color_title">Pick a color</string>
     <string name="prompt_color_custom">Custom…</string>
+    <string name="prompt_color_swatch">Color %1$s</string>
     <string name="prompt_color_invalid">Color must be #RRGGBB (e.g. #3366CC)</string>
     <string name="prompt_popup_message">“%1$s” requested a window. TangSnow does not open new windows and will load it in the current tab.</string>
     <string name="prompt_repost_title">Resubmit form?</string>

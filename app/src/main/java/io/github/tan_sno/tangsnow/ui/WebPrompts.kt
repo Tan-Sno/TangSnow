@@ -367,6 +367,8 @@ class WebPrompts(
             setPadding(pad, pad / 2, pad, 0)
         }
         val size = activity.dp(52)
+        // 内核给的当前色（如有）统一成大写再比对：色板与输入框都要用它
+        val current = defaultValue.trim().uppercase()
         COLOR_PALETTE.forEach { hex ->
             grid.addView(
                 Button(activity).apply {
@@ -376,6 +378,8 @@ class WebPrompts(
                         height = size
                         setMargins(pad / 3, pad / 3, pad / 3, pad / 3)
                     }
+                    // 无障碍：色块没有文字，读屏用户只能靠它知道这是什么
+                    contentDescription = activity.getString(R.string.prompt_color_swatch, hex)
                 }
             )
         }
@@ -383,6 +387,9 @@ class WebPrompts(
             hint = activity.getString(R.string.prompt_color_custom)
             inputType = InputType.TYPE_CLASS_TEXT
             setPadding(pad, pad / 2, pad, 0)
+            // 回填当前值：点开对话框看到的是「现在的颜色」，而不是一个空框
+            // （此前 defaultValue 被完全忽略 ⇒ 用户每次都要从头输入）
+            if (current.isNotEmpty()) setText(current)
         }
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
