@@ -58,6 +58,12 @@ object DownloadRepo {
     private const val KEY_STALE_PROMOTIONS = "tangsnow_stale_promotions"
 
     /**
+     * 本文件持久化的**全部**记录键（N1）：新增持久化键时必须加进来 ——
+     * [clearRecords] 靠它保证「清空」不漏清，并由 `DownloadRecordKeysTest` 的反射哨兵守着。
+     */
+    private val ALL_RECORD_KEYS = setOf(KEY_IDS, KEY_MANAGED, KEY_STALE_PROMOTIONS)
+
+    /**
      * 待重试条目的保留时长：pending 行约 7 天后被系统按 DATE_EXPIRES 回收，
      * 多留 1 天缓冲后出队（内容与行都已消失，继续保留没有意义）。
      */
@@ -381,10 +387,14 @@ object DownloadRepo {
                 when (pendingState(resolver, parsed)) {
                     PendingState.CLEARED -> registerPromoted(context, o, parsed)
                     PendingState.STILL_PENDING -> {
-                        val promoted = runCatching {
-                            resolver.update(parsed, values, null, null) > 0
-                        }.getOrDefault(false)
-                        if (promoted) registerPromoted(context, o, parsed) else survivors.put(o)
+                        runCatching { resolver.update(parsed, values, null, null) }
+                        // 与 pendingState 同口径（见其 KDoc）：update 的返回值在个别实现上
+                        // 不表示受影响行数，**不能**只凭它登记 ⇒ 再查一次，以事实为准。
+                        if (pendingState(resolver, parsed) == PendingState.CLEARED) {
+                            registerPromoted(context, o, parsed)
+                        } else {
+                            survivors.put(o) // 没确认清零 ⇒ 留队下次再核
+                        }
                     }
                     // GONE：行已消失，内容无从谈起 ⇒ 出队
                     PendingState.GONE -> Unit
@@ -843,14 +853,21 @@ object DownloadRepo {
     /** 判定一条自管记录的 URI 是否仍指向真实文件（三态，理由见 [Presence]） */
     private fun managedPresence(resolver: android.content.ContentResolver, uri: android.net.Uri): Presence =
         when (uri.scheme) {
-            "content" -> try {
-                val exists = resolver
-                    .query(uri, arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)
-                    ?.use { it.moveToFirst() } == true
-                if (exists) Presence.ALIVE else Presence.GONE
-            } catch (_: Exception) {
-                // 查询抛异常 ⇒ 什么也没探测到，保留记录下次再试（**不能**回退成「已失效」）
-                Presence.UNKNOWN
+            "content" -> {
+                // 三态不许压成两态：`query` 返回 **null** 与「抛异常」同为「没探测到」，
+                // 只有「游标能开且确实 0 行」才是 GONE。此前 `?.use { … } == true` 把 null
+                // 折叠进 GONE ⇒ 一次 provider 抖动就把用户记录永久摘除（文件还在磁盘上）。
+                val cursor = try {
+                    resolver
+                        .query(uri, arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)
+                } catch (_: Exception) {
+                    null // 抛异常 = 没探测到
+                }
+                if (cursor == null) {
+                    Presence.UNKNOWN // 返回 null 也是「没探测到」—— 与抛异常同类
+                } else {
+                    cursor.use { if (it.moveToFirst()) Presence.ALIVE else Presence.GONE }
+                }
             }
             "file" -> if (java.io.File(uri.path.orEmpty()).exists()) Presence.ALIVE else Presence.GONE
             else -> Presence.GONE
@@ -1011,11 +1028,12 @@ object DownloadRepo {
     fun clearRecords(context: Context) = synchronized(recordsLock) {
         // 与 rememberId/rememberManaged 同锁：否则「清空」与并发下载的完成登记
         // 读-改-写交错时，在途写入会用旧列表把刚清掉的记录整体写回
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_IDS)
-            .remove(KEY_MANAGED)
-            .apply()
+        // 逐键清，而不是点名两个：新增键只要登记进 [ALL_RECORD_KEYS] 就必然被清到
+        // （此前只 remove 了 KEY_IDS/KEY_MANAGED，漏了后加的 KEY_STALE_PROMOTIONS
+        // ⇒ 「清空下载记录」之后，转正待重试队列仍带着旧条目复活）。
+        val e = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+        ALL_RECORD_KEYS.forEach { e.remove(it) }
+        e.apply()
     }
 
     // ------------------------------------------------------------- 记录持久化
