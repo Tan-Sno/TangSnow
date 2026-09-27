@@ -1032,6 +1032,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private val INTENT_SCHEME = "intent"
 
     /**
+     * 由网页触发、但语义是**系统动作**（而非"某应用处理内容"）的 scheme —— `openExternalUrl`
+     * 的非 `intent:` 分支对它一律不放行。
+     *
+     * 目前只收 `package`：它的既有语义是打开应用详情 / 卸载界面，给网页开放没有正当用途。
+     * 刻意**不**扩大：其余 scheme 的泄露路径逐条核过均不成立（见该分支注释）。
+     */
+    private val SYSTEM_ACTION_SCHEMES = setOf("package")
+
+    /**
      * 把非 http(s) 的外部链接交给系统 / 其它应用打开，并**如实反馈结果**。
      *
      * 修掉两个真实问题：
@@ -1061,7 +1070,20 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 }
             }.getOrNull()
         } else {
-            runCatching { Intent(Intent.ACTION_VIEW, Uri.parse(url)) }.getOrNull()
+            // 与 `intent:` 支**不对称是刻意的**，但也要挡住「网页触发系统动作」这一小类：
+            //  - `intent:` 支的风险是「网页指定目标组件」，故清 component/selector；
+            //  - 这一支是裸 ACTION_VIEW，风险面不同，但对 `package:` 这类**系统动作** scheme
+            //    不该放行（`package:<包名>` 的既有语义是打开应用详情/卸载界面，属系统动作，
+            //    不是"某个应用处理内容"）。
+            // 可达路径（实测）：扫码结果的第二类（非 http(s) scheme）会给出「用其它应用打开」，
+            // 用户点下即进入本支。
+            // ⚠️ 只挡这一小类，不扩大黑名单：其余 scheme 逐条想过泄露路径均不成立
+            //（file:// 指向本应用私有目录时接收方无权读取；content:// 未附 URI 授权同样受限）。
+            if (scheme in SYSTEM_ACTION_SCHEMES) {
+                null
+            } else {
+                runCatching { Intent(Intent.ACTION_VIEW, Uri.parse(url)) }.getOrNull()
+            }
         }
         if (intent != null && runCatching { startActivity(intent) }.isSuccess) {
             // 确实交出去了才提示（原先在尝试之前就提示，成功与否都会说"正在打开"）
