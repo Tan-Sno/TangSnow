@@ -52,6 +52,8 @@ object ExtensionCatalog {
     const val AMO_HOST = "addons.mozilla.org"
     const val AMO_ORIGIN = "https://" + AMO_HOST
 
+    private const val TAG = "ExtensionCatalog"
+
     const val OFFICIAL_STORE_URL = AMO_ORIGIN + "/firefox/extensions/"
 
     data class Entry(
@@ -149,6 +151,19 @@ object ExtensionCatalog {
                 json.optJSONObject("current_version")?.optJSONObject("file")
                     ?.optString("url", "")?.takeIf { it.isNotBlank() }?.let { fileUrl ->
                         resolvedUrls[entry.slug] = fileUrl
+                        // 形态诊断（G1，**只记录、不拦截**）：resolvedUrl 取自该 slug 自己的
+                        // API 响应 ⇒ 归属由构造保证；出现非 AMO 主机只可能是服务端异常。
+                        // ⚠️ 绝不能据此拒绝候选 —— AMO 的 file URL（302 之后的形态）既不含
+                        // addonId 也不含 slug，拿它俩做「归属校验」会误杀合法候选、把回退
+                        // 通道变成死代码。这里记日志只为排障。
+                        if (!fileUrl.startsWith("$AMO_ORIGIN/", ignoreCase = true) &&
+                            io.github.tan_sno.tangsnow.BuildConfig.DEBUG
+                        ) {
+                            android.util.Log.w(
+                                TAG,
+                                "hydrate: non-AMO file url for ${entry.slug}: $fileUrl",
+                            )
+                        }
                     }
                 code
             }

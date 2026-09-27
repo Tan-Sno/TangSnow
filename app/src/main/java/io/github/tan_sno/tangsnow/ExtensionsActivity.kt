@@ -339,8 +339,30 @@ class ExtensionsActivity : AppCompatActivity() {
             object : ExtInstallCoordinator.Callback {
                 override fun onSuccess(source: ExtInstallCoordinator.Source, ext: WebExtension?) {
                     finishInstall(entry)
-                    ext?.let { ExtensionCatalog.installedIdsBySlug[entry.slug] = it.id }
-                    toast(R.string.extension_install_success)
+                    // 记账键与判定键必须**同源**（G2）：键从**安装结果**反解 slug，
+                    // 而不是从「被点的条目」取 —— 否则 AMO 迁移/换 id 后会
+                    //「装的是 A、记的是 B」，反过来把正确的包判成已安装。
+                    var unindexed = false
+                    ext?.let { installed ->
+                        val slug = ExtensionCatalog.slugOf(installed)
+                        if (slug != null) {
+                            ExtensionCatalog.installedIdsBySlug[slug] = installed.id
+                        } else {
+                            // 非 AMO 来源（本地导入的第三方包等）反解不到 slug ⇒ 不记账。
+                            // 不静默：留痕 + 提示如实说明（不假装成功、也不假装进过目录）。
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.w(
+                                    TAG,
+                                    "install ok but slug unresolved; not indexed: ${installed.id}",
+                                )
+                            }
+                            unindexed = true
+                        }
+                    }
+                    toast(
+                        if (unindexed) R.string.extension_install_success_unindexed
+                        else R.string.extension_install_success
+                    )
                     refreshInstalled()
                     notifyCatalogItemChanged(entry.slug)
                     // 装完打开扩展自己的管理界面（先取最新元数据定位）
