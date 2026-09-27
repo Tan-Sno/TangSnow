@@ -512,13 +512,16 @@ object DownloadRepo {
      *
      * 线程：内部切到 [Dispatchers.IO]，调用方不必再自己包一层。
      *
+     * @param register 是否登记进应用「下载」列表。**没有默认值**是刻意的：默认值会让
+     *        调用方「忘记表态」，把用户主动导出的产物（书签 / PDF）变成应用内永远
+     *        不可见；每个调用点都必须逐个显式决定。
      * @return 成功返回落点；失败返回 null
      */
     internal suspend fun writeToDownloads(
         context: Context,
         fileName: String,
         mime: String,
-        register: Boolean = false,
+        register: Boolean,
         write: (java.io.OutputStream) -> Unit,
     ): Placement? = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
@@ -584,8 +587,10 @@ object DownloadRepo {
                 // 平台依据（SDK 源码 MediaStore.java 列文档）：IS_PENDING=1 期间只有本应用
                 // 能打开该文件（内容没丢）；pending 项默认约 7 天后过期、由系统在 idle 时
                 // 自动删除 ⇒ 队列超期的条目由扫尾出队，不会无限堆积。
-                // 代价（N13-C 措辞对齐）：重试成功前，该行不进自管列表、应用内「下载」页
-                // 看不到 —— 是「暂时不可见」，不是「用户仍能拿到」。
+                // 口径（与 writeToDownloads 的 @param register 对应）：register = true 的
+                // 来源是「暂时不可见」—— 扫尾重试成功即登记、对用户可见；register = false
+                // 的来源扫尾也不登记，对应用内是**最终**不可见（文件本身在系统公开
+                // 「下载」目录，系统文件管理器可见，不是「文件丢失」）。
                 recordStalePromotion(
                     context,
                     StalePromotion(uri.toString(), fileName, mime, register, System.currentTimeMillis()),
