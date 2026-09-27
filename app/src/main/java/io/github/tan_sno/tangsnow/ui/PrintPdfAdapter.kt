@@ -22,10 +22,15 @@ import java.io.FileInputStream
  * 调用方应在 [onDone] 里删除临时文件，避免缓存目录残留。
  *
  * @param pdf 已写好的 PDF 文件
+ * @param noStreamMessage 「框架未提供输出流」时回给框架的失败原因
+ *        （**由调用方传入已本地化的串**，故本类不需要持有 Context —— 避免为一条文案引入
+ *        Activity 引用。⚠️ 该文案最终由**系统打印界面**展示，它按**系统**语言渲染，
+ *        不是应用语言；这是平台接口的限制，本应用只能保证不再写死中文）
  * @param onDone 结束回调（用于清理临时文件）
  */
 internal class PrintPdfAdapter(
     private val pdf: File,
+    private val noStreamMessage: String,
     private val onDone: () -> Unit,
 ) : PrintDocumentAdapter() {
 
@@ -68,7 +73,7 @@ internal class PrintPdfAdapter(
             // ⚠️ 框架未提供输出流属于**失败**，不是用户取消。
             // 此前与取消合并处理、报 onWriteCancelled()，会让系统打印界面显示
             // 「已取消」—— 而用户并没有取消（本次修复的正是这个误报）。
-            callback.onWriteFailed("打印框架未提供输出流")
+            callback.onWriteFailed(noStreamMessage)
             return
         }
         try {

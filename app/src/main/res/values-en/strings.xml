@@ -105,6 +105,8 @@
     <string name="pdf_saved">PDF saved to Downloads</string>
     <string name="pdf_failed">PDF generation failed. Please try again later.</string>
     <string name="print_failed">Could not prepare the page for printing. Please try again later.</string>
+    <!-- Failure reason handed back to the system print framework (shown by its UI; see PrintPdfAdapter) -->
+    <string name="print_write_no_stream">The print framework did not provide an output stream</string>
     <string name="dlg_exit_title">Exit TangSnow</string>
     <string name="dlg_exit_message">Are you sure to exit the browser?</string>
     <string name="toast_exit_again">Press back again to exit</string>
