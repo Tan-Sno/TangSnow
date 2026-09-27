@@ -41,6 +41,31 @@ class DownloadFileNameTest {
     }
 
     @Test
+    fun `RFC5987 的 charset 大小写不敏感`() {
+        // HTTP 参数只规定 MIME charset 名大小写不敏感，服务端写 Utf-8 / UTF8 变体都属合法：
+        // 见 RFC 5987 的 ext-value 语法（charset 是 mime-charset）
+        assertEquals(
+            "报告.pdf",
+            DownloadRepo.parseFileName("attachment; filename*=Utf-8''%E6%8A%A5%E5%91%8A.pdf", null),
+        )
+    }
+
+    @Test
+    fun `Content-Disposition 的参数名大小写不敏感`() {
+        // RFC 6266 §4.1 / RFC 2616 §2.2：参数名本身大小写不敏感。真实服务端确有大写的
+        assertEquals("a.pdf", DownloadRepo.parseFileName("attachment; FILENAME=\"a.pdf\"", null))
+        assertEquals("a.pdf", DownloadRepo.parseFileName("attachment; Filename=a.pdf", null))
+    }
+
+    @Test
+    fun `RFC5987 的参数名大小写不敏感`() {
+        assertEquals(
+            "报告.pdf",
+            DownloadRepo.parseFileName("attachment; Filename*=utf-8''%E6%8A%A5%E5%91%8A.pdf", null),
+        )
+    }
+
+    @Test
     fun `无头部时取 URL 末段`() {
         assertEquals("file.zip", DownloadRepo.parseFileName(null, "https://a.com/dir/file.zip"))
     }

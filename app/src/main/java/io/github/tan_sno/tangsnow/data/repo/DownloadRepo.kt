@@ -195,13 +195,21 @@ object DownloadRepo {
     // Cookie，会把登录页 HTML 存成目标文件名还报成功（错误内容比中断更糟）。
     // 两全方案（GeckoWebExecutor 带 Cookie 流式）留待 javap/真机验证后另行实施。
 
-    /** RFC 5987：filename*=UTF-8''%E4%B8%AD.pdf（charset 部分允许任意大小写与引号） */
+    /**
+     * RFC 5987：`filename*=UTF-8''%E4%B8%AD.pdf`。
+     *
+     * ⚠️ `IGNORE_CASE` 不是可选项：**参数名**与**MIME charset 名**都大小写不敏感
+     * （RFC 6266 §4.1 沿用 RFC 2616 §2.2 的「参数名不敏感」；charset 按 MIME 规则亦然）。
+     * 服务端写 `FILENAME=` / `Filename*=` / `Utf-8''` 全都合法；漏掉这一位就会**静默回退**
+     * 到 URL 末段或兜底名 `download` —— 用户拿到名字不对的文件，且没有任何提示。
+     * 同仓 `BookmarkHtml.HREF_ATTR` 早已这么处理，此处此前是漏网。
+     */
     private val RFC5987_FILENAME =
-        Regex("""filename\*\s*=\s*(?:UTF-8|utf-8)''\s*"?([^";]+)"?""")
+        Regex("""filename\*\s*=\s*UTF-8''\s*"?([^";]+)"?""", RegexOption.IGNORE_CASE)
 
-    /** 普通形式：filename="a.pdf" / filename=a.pdf */
+    /** 普通形式：filename="a.pdf" / filename=a.pdf（参数名同样大小写不敏感） */
     private val PLAIN_FILENAME =
-        Regex("""filename\s*=\s*"?([^";]+)"?""")
+        Regex("""filename\s*=\s*"?([^";]+)"?""", RegexOption.IGNORE_CASE)
 
     /**
      * 百分号解码（自实现，替代 `android.net.Uri.decode`）。
