@@ -377,7 +377,14 @@ object DownloadRepo {
         synchronized(recordsLock) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val arr = runCatching { org.json.JSONArray(prefs.getString(KEY_STALE_PROMOTIONS, "[]")) }
-                .getOrElse { return }
+                .getOrElse {
+                    // 队列内容损坏 ⇒ **清掉**它。原先只 `return`：坏值会一直留在 prefs 里，
+                    // 每次扫尾都在这里失败并返回，**永远**不会被清理，队列也就永久失效。
+                    // 出队是安全的：这里存的只是「转正待重试」的候选，丢了最多是那几行不再自动
+                    // 转正，**不会删任何文件**（内容与行都还在）。
+                    prefs.edit().remove(KEY_STALE_PROMOTIONS).apply()
+                    return
+                }
             if (arr.length() == 0) return
             val resolver = context.contentResolver
             val now = System.currentTimeMillis()
