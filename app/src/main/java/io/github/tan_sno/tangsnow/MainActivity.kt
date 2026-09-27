@@ -181,9 +181,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
             localNetworkPromptInFlight = false
             val pending = pendingLocalNetworkUrl
+            val origin = pendingLocalNetworkTab
             pendingLocalNetworkUrl = null
+            pendingLocalNetworkTab = null
             if (granted && !pending.isNullOrBlank()) {
-                sessionManager.activeTab?.let { loadInTab(it, pending) }
+                // 打回**发起标签**（C1）：跨重建后标签引用已失效（isAlive=false）
+                // ⇒ 退回当前活动标签 —— 那时标签集合刚从快照重建，活动标签就是用户看到的那个
+                val target = origin?.takeIf { sessionManager.isAlive(it) }
+                    ?: sessionManager.activeTab
+                target?.let { loadInTab(it, pending) }
             } else if (!granted) {
                 // 用户 deny（或被系统直接回绝）时给一次说明 —— 不给的话表现就是
                 // 「点开局域网地址什么都不发生」，与本次改动的初衷（别静默失败）相悖。
@@ -195,7 +201,20 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             }
         }
 
-    /** 因等待本地网络权限而暂缓的导航目标（授权后自动续跑；只由 [loadInTab] 写入） */
+    /**
+     * 因等待本地网络权限而暂缓的导航：**发起标签**与目标地址（授权后自动续跑；只由 [loadInTab] 写入）。
+     *
+     * ⚠️ 必须记下**发起标签**（C1）：授权是异步的，期间用户完全可能切到别的标签；若授权后灌进
+     * 「当时的活动标签」，就会把 A 标签请求的局域网地址打开在 B 标签里 —— 写入时发起者
+     * 本就是活动标签，竞态发生在**写入之后、授权之前**，只判「写入时是不是活动标签」拦不住它。
+     *
+     * 跨重建时标签集合整体重建、引用必然失效（[sessionManager.isAlive] 为 false）
+     * ⇒ 那时只恢复 URL、由恢复后的活动标签接手（见 [onSaveInstanceState] 与 onCreate 恢复处）。
+     *
+     * 后到的导航**覆盖**先到的（最后写入者胜）：提示框弹出期间地址栏已经显示新输入的目标，
+     * 授权后加载旧目标反而与所见不符。
+     */
+    private var pendingLocalNetworkTab: Tab? = null
     private var pendingLocalNetworkUrl: String? = null
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -559,6 +578,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         //    「允许」→ 什么都不加载」，正是本文件 requestLocalNetworkAccess 注释里要消灭的
         //    那种静默失败（授权回调只读这个字段，它空了就什么也不做）。
         savedInstanceState?.getString(KEY_PENDING_LOCAL_NETWORK_URL)?.let {
+            // 只恢复 URL、不恢复发起标签：标签集合此刻刚从快照重建，无从对应 ——
+            // 授权后由恢复后的活动标签接手（见 pendingLocalNetworkTab 的注释）
             pendingLocalNetworkUrl = it
         }
         if (savedInstanceState == null) handleIntent(intent)
@@ -1524,6 +1545,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      */
     private fun loadInTab(tab: Tab, url: String) {
         if (needsLocalNetworkGrant(url)) {
+            pendingLocalNetworkTab = tab
             pendingLocalNetworkUrl = url
             requestLocalNetworkPromptIfIdle()
             return
