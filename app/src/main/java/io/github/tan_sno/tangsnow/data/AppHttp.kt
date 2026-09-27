@@ -16,6 +16,16 @@ object AppHttp {
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
+            // ⚠️ `callTimeout` 必须有，**不能**指望 readTimeout 顶替：readTimeout 只约束「两次读到
+            // 数据之间的间隔」，对「慢滴 / 黑洞」型响应（每隔 <30s 发一点点）永远不触发 ——
+            // 于是阻塞式 `execute()` 会一直挂着，连超时提示都没有。本仓 ExtInstallCoordinator
+            // 的注释记录过这个失效模式（那里是给下载显式加了 callTimeout），这里是给**默认**
+            // 客户端补上，堵住其余两条路径（AMO 元数据 / GitHub 版本查询）。
+            // 取值 45s：刻意**大于** readTimeout，正常快响应完全不受影响，只在「整通调用迟迟不结束」
+            // 时兜底；同时与本仓安装链每一步的 45s 预算取齐，全仓口径一致。
+            // 已知覆盖关系：ExtInstallCoordinator 用 `newBuilder().callTimeout(45s)` 显式再设一次
+            // （语义相同，那里是为了不依赖默认值而写的）。
+            .callTimeout(45, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
