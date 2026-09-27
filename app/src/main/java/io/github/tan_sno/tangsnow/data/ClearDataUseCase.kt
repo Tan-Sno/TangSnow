@@ -57,13 +57,28 @@ object ClearDataUseCase {
         if (options.cache) {
             flags += StorageController.ClearFlags.ALL_CACHES
         }
-        if (runtime != null && flags.isNotEmpty()) {
-            val mask = flags.reduce(Long::or)
-            // awaitResult 正常返回即成功（GeckoResult<Void> 成功值为 null）；抛异常即失败
-            kernelOk = runCatching {
-                runtime.storageController.clearData(mask).awaitResult()
-                true
-            }.getOrDefault(false)
+        if (flags.isNotEmpty()) {
+            kernelOk = if (runtime == null) {
+                // 内核尚未初始化却勾了内核数据 ⇒ 这次清除**根本没有发生**。此前静默跳过、
+                // kernelOk 仍为 true，界面会报「已清除」—— 典型假反馈。如实计入失败。
+                // （runtime 为 null 只会出现在内核尚未 warmUp 的极早期；正常路径到不了这里。）
+                false
+            } else {
+                val mask = flags.reduce(Long::or)
+                // awaitResult 正常返回即成功（GeckoResult<Void> 成功值为 null）；抛异常即失败。
+                // ⚠️ 刻意不用 runCatching：它会把 CancellationException 一并吞掉 ⇒ 被取消的
+                // 协程不但不中止，还接着往下清本地数据 —— 与下方 locally{} 自己立的规矩
+                // （见那段注释）直接矛盾。这里显式 try/catch，取消原样传播。
+                try {
+                    runtime.storageController.clearData(mask).awaitResult()
+                    true
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    android.util.Log.w("ClearDataUseCase", "kernel clear failed", e)
+                    false
+                }
+            }
         }
 
         // 应用自管数据（独立于内核 storageController）：逐项清除并统计失败项，不静默吞掉。
