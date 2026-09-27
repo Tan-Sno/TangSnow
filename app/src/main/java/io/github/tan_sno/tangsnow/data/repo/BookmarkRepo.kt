@@ -11,15 +11,13 @@ object BookmarkRepo {
         BrowserDb.get(ApplicationScope.context).isBookmarked(url)
     }
 
+    /**
+     * 收藏 / 取消收藏（**原子**，见 [BrowserDb.toggleBookmark]）。
+     *
+     * @return 操作完成后是否处于「已收藏」状态
+     */
     suspend fun toggle(url: String, title: String): Boolean = withContext(Dispatchers.IO) {
-        val db = BrowserDb.get(ApplicationScope.context)
-        if (db.isBookmarked(url)) {
-            db.deleteBookmark(url)
-            false
-        } else {
-            db.insertBookmark(url, title)
-            true
-        }
+        BrowserDb.get(ApplicationScope.context).toggleBookmark(url, title)
     }
 
     /**
