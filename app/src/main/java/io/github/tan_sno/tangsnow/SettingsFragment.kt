@@ -20,6 +20,7 @@ import io.github.tan_sno.tangsnow.data.PreferenceStore
 import io.github.tan_sno.tangsnow.data.Theme
 import io.github.tan_sno.tangsnow.data.ThemeController
 import io.github.tan_sno.tangsnow.update.UpdateChecker
+import io.github.tan_sno.tangsnow.ui.DialogTracker
 import io.github.tan_sno.tangsnow.util.warmUpFirstRows
 import kotlinx.coroutines.launch
 
@@ -42,7 +43,19 @@ class SettingsFragment : PreferenceFragmentCompat() {
      */
     private var updateDialog: AlertDialog? = null
 
+    /**
+     * 本页展示中的对话框。
+     *
+     * [updateDialog] 之所以**另外**还持一个引用，是因为它的内容要在显示期间被改写
+     * （联网结果回来后换文案、显示"打开发布页"按钮），所以需要长期持有；但它同样登记在本表里，
+     * 两条收口路径互不冲突（[DialogTracker.cancelAll] 有 `isShowing()` 守卫，重复收口是空转）。
+     */
+    private val dialogs = DialogTracker()
+
     override fun onDestroyView() {
+        // 清除数据多选、桌面模式确认、开源协议全文……都可能在本页销毁时仍显示着 ——
+        // 不收掉就是 WindowLeaked（本页没有 configChanges，旋屏必重建）
+        dialogs.cancelAll()
         updateDialog?.dismiss()
         updateDialog = null
         super.onDestroyView()
@@ -257,16 +270,18 @@ class SettingsFragment : PreferenceFragmentCompat() {
     private fun bindDesktopMode() {
         findPreference<SwitchPreferenceCompat>(PreferenceStore.KEY_DESKTOP_MODE)?.setOnPreferenceChangeListener { pref, newValue ->
             val enable = newValue as? Boolean ?: return@setOnPreferenceChangeListener false
-            AlertDialog.Builder(requireContext())
-                .setTitle(R.string.pref_desktop_mode_title)
-                .setMessage(R.string.dlg_desktop_confirm)
-                .setNegativeButton(R.string.dlg_cancel, null)
-                .setPositiveButton(R.string.dlg_ok) { _, _ ->
-                    // 直接写偏好 + 回显开关态；真正重建由主界面下次 onResume 完成
-                    PreferenceStore(requireContext()).desktopMode = enable
-                    (pref as? SwitchPreferenceCompat)?.isChecked = enable
-                }
-                .show()
+            dialogs.track(
+                AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.pref_desktop_mode_title)
+                    .setMessage(R.string.dlg_desktop_confirm)
+                    .setNegativeButton(R.string.dlg_cancel, null)
+                    .setPositiveButton(R.string.dlg_ok) { _, _ ->
+                        // 直接写偏好 + 回显开关态；真正重建由主界面下次 onResume 完成
+                        PreferenceStore(requireContext()).desktopMode = enable
+                        (pref as? SwitchPreferenceCompat)?.isChecked = enable
+                    }
+                    .create()
+            )
             false
         }
     }
@@ -385,7 +400,10 @@ class SettingsFragment : PreferenceFragmentCompat() {
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.dlg_ok, null)
             .create()
-        dialog.show()
+        // 纳管（中5）：本对话框是**多选项**，用户会犹豫很久、也可能顺手旋屏 ——
+        // 此前本页只有 updateDialog 被专门持有，这个漏了 ⇒ 销毁时 WindowLeaked。
+        // 注意 track() 内部已 show()，故下面才取得到正按钮。
+        dialogs.track(dialog)
         // 拦截确定按钮：先校验"至少勾一项"，通过再真正关闭并执行
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val options = ClearDataUseCase.Options(
@@ -579,11 +597,14 @@ class SettingsFragment : PreferenceFragmentCompat() {
     }
 
     private fun showTextDialog(title: CharSequence, text: CharSequence) {
-        AlertDialog.Builder(requireContext())
-            .setTitle(title)
-            .setMessage(text)
-            .setPositiveButton(R.string.dlg_ok, null)
-            .show()
+        // 开源协议全文可能很长、用户会慢慢看 ⇒ 必须纳管（同 onDestroyView 的说明）
+        dialogs.track(
+            AlertDialog.Builder(requireContext())
+                .setTitle(title)
+                .setMessage(text)
+                .setPositiveButton(R.string.dlg_ok, null)
+                .create()
+        )
     }
 
     private companion object {

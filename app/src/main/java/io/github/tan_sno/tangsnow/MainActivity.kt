@@ -46,6 +46,7 @@ import io.github.tan_sno.tangsnow.data.ThemeController
 import io.github.tan_sno.tangsnow.BrowserOpener
 import io.github.tan_sno.tangsnow.databinding.ActivityMainBinding
 import io.github.tan_sno.tangsnow.extension.ExtensionPrompts
+import io.github.tan_sno.tangsnow.ui.DialogTracker
 import io.github.tan_sno.tangsnow.ui.HomeTilesAdapter
 import io.github.tan_sno.tangsnow.ui.TabsAdapter
 import io.github.tan_sno.tangsnow.ui.addSheetDivider
@@ -214,6 +215,16 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     private lateinit var webPrompts: io.github.tan_sno.tangsnow.ui.WebPrompts
 
+    /**
+     * 本页展示中的对话框（目前是扩展弹窗会话）。
+     *
+     * 为什么必须纳管：未在销毁前收掉的对话框会被框架**强摘窗口**并打 `WindowLeaked`，
+     * 而框架摘窗**不触发** `OnDismissListener` ⇒ [showPopup] 里关闭时要做的
+     * `releaseSession()` 永不执行，弹窗会话就此泄漏（见 DialogTracker 的类注释）。
+     * 收口在 [onDestroy]。
+     */
+    private val dialogs = DialogTracker()
+
     /** 主界面侧扩展安装确认委托（AMO 页面「添加到 Firefox」弹窗），与扩展页共用实现 */
     private var extPromptDelegate: org.mozilla.geckoview.WebExtensionController.PromptDelegate? = null
 
@@ -254,7 +265,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             .setOnDismissListener { runCatching { popupView.releaseSession() } }
             .create()
         dialog.setView(popupView)
-        dialog.show()
+        // 纳入纳管：**不能**只靠 OnDismissListener —— 宿主销毁时框架强摘窗口并不触发它，
+        // releaseSession() 就漏了。cancelAll() 走的是 cancel() → dismissDialog()，
+        // 上面的监听器会正常触发，会话得以及时释放。
+        dialogs.track(dialog)
     }
 
     /**
@@ -618,6 +632,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         dismissSelectionPopup()
         clipboardPermissionDialog?.dismiss()
         clipboardPermissionDialog = null
+        // 弹窗会话（showPopup 的对话框）必须在此收掉：框架摘窗不触发 OnDismissListener，
+        // 不收就等于既不释放会话又打 WindowLeaked
+        dialogs.cancelAll()
         if (::findBarController.isInitialized) findBarController.cancelPending()
         if (::suggestionsController.isInitialized) suggestionsController.cancelPending()
         // 只有真正退出应用才销毁会话；主题切换等重建场景下标签页得以保留
