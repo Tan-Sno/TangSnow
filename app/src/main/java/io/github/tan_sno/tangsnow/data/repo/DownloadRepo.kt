@@ -972,9 +972,14 @@ object DownloadRepo {
     suspend fun remove(context: Context, item: Item): Boolean = withContext(Dispatchers.IO) {
         if (!item.managed) {
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            // DownloadManager.remove 返回**真正删掉的条数**；0 / 抛异常都是"没删掉"，此时不动作。
-            // 记录不需要在这里摘：下次 list() 里该行已消失 ⇒ 判为 GONE 自然收掉（见 probeDownloadManager）
-            return@withContext runCatching { dm.remove(item.id) }.getOrDefault(0) > 0
+            val removed = runCatching { dm.remove(item.id) }.getOrDefault(0)
+            if (removed > 0) return@withContext true
+            // remove 返回 0 的两种可能：「本来就不在了」（用户已从系统下载 UI 删过，或
+            // 重复调用）与「真的没删掉」。复核一次事实再定（与 managed 分支同构）：
+            //  · GONE ⇒ 与「已删除」对用户是同一结果，如实返回成功——否则会弹
+            //    「删除失败」、条目却随即被 list() 收掉，反馈自相矛盾（审查 N23-①）；
+            //  · ALIVE ⇒ 真没删掉 ⇒ 如实返回失败；UNKNOWN ⇒ 不猜，按失败处理。
+            return@withContext probeDownloadManager(dm, item.id).second == Presence.GONE
         }
         val uri = runCatching { android.net.Uri.parse(item.localUri) }.getOrNull()
             ?: return@withContext false

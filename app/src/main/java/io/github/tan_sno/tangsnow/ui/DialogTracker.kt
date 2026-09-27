@@ -34,6 +34,14 @@ import android.app.Dialog
  * dialogs.track(AlertDialog.Builder(this)…create())   // 展示 + 纳管
  * dialogs.cancelAll()                            // onDestroy / onDestroyView 里调用
  * ```
+ *
+ * ## 范围（哪些对话框**不**纳管）
+ *
+ * 只纳管「会长时间驻留，或关闭时有应用语义要执行」的弹窗——扩展弹窗（关闭要
+ * releaseSession）、协议全文兜底、清空确认、书签工具菜单、新增引擎/快捷方式等表单。
+ * MainActivity 里的**短确认框**（退出确认、批量菜单、扫码结果、两个下载确认）刻意**不**纳管：
+ * 它们模态、用户点一下就消失，宿主销毁时框架强摘即可，纳管只会让本表无谓变长。
+ * 下轮复查若把「短确认框未收口」当新问题报，先读这一段（N15-③ 的复查即此类）。
  */
 class DialogTracker {
 
