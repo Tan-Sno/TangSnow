@@ -711,11 +711,11 @@ class BrowserSessionManager private constructor(
             post {
                 val handler = selectionHandler
                 if (handler == null) {
-                    result.complete(AllowOrDeny.DENY)
+                    settleResult(result, AllowOrDeny.DENY)
                     return@post
                 }
                 handler.onClipboardPermissionRequest(permission.uri.orEmpty()) { allow ->
-                    result.complete(if (allow) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+                    settleResult(result, if (allow) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
                 }
             }
             return result
@@ -844,7 +844,7 @@ class BrowserSessionManager private constructor(
                     // 查询失败按「全部未访问」应答：绝不能让 GeckoResult 悬空（页面会一直等这批结果）
                     BooleanArray(urls.size)
                 }
-                result.complete(visited)
+                settleResult(result, visited)
             }
             return result
         }
@@ -907,7 +907,7 @@ class BrowserSessionManager private constructor(
         prompt: GeckoSession.PromptDelegate.BasePrompt,
     ): Boolean {
         if (isAlive(tab) && tab === active) return false
-        result.complete(prompt.dismiss())
+        settleResult(result, prompt.dismiss())
         return true
     }
 
@@ -927,10 +927,10 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onAlert(prompt.title, prompt.message) {
                         // AlertPrompt 无公开 confirm()，看完后一律 dismiss 应答
-                        result.complete(prompt.dismiss())
+                        settleResult(result, prompt.dismiss())
                     }
                 }
                 return result
@@ -950,9 +950,9 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onConfirm(prompt.title, prompt.message) { ok ->
-                        result.complete(
+                        settleResult(result, 
                             if (ok) prompt.confirm(GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE)
                             else prompt.dismiss()
                         )
@@ -975,9 +975,9 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onTextPrompt(prompt.title, prompt.message, prompt.defaultValue.orEmpty()) { text ->
-                        result.complete(if (text == null) prompt.dismiss() else prompt.confirm(text))
+                        settleResult(result, if (text == null) prompt.dismiss() else prompt.confirm(text))
                     }
                 }
                 return result
@@ -999,18 +999,18 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onChoice(
                         prompt.title,
                         multiple,
                         choices.map { Triple(it.id.orEmpty(), it.label.orEmpty(), it.selected) },
                     ) { picked ->
                         when {
-                            picked == null -> result.complete(prompt.dismiss())
-                            multiple -> result.complete(
+                            picked == null -> settleResult(result, prompt.dismiss())
+                            multiple -> settleResult(result, 
                                 prompt.confirm(picked.toTypedArray())
                             )
-                            else -> result.complete(prompt.confirm(picked.firstOrNull().orEmpty()))
+                            else -> settleResult(result, prompt.confirm(picked.firstOrNull().orEmpty()))
                         }
                     }
                 }
@@ -1032,14 +1032,14 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onFilePrompt(prompt.mimeTypes ?: emptyArray(), multiple) { uris ->
                         when {
-                            uris == null -> result.complete(prompt.dismiss())
-                            multiple -> result.complete(
+                            uris == null -> settleResult(result, prompt.dismiss())
+                            multiple -> settleResult(result, 
                                 prompt.confirm(appContext, uris.toTypedArray())
                             )
-                            else -> result.complete(
+                            else -> settleResult(result, 
                                 uris.firstOrNull()?.let { prompt.confirm(appContext, it) }
                                     ?: prompt.dismiss()
                             )
@@ -1063,9 +1063,9 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onAuthPrompt(prompt.title, prompt.message) { cred ->
-                        result.complete(
+                        settleResult(result, 
                             if (cred == null) prompt.dismiss()
                             else prompt.confirm(cred.first, cred.second)
                         )
@@ -1088,9 +1088,9 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.confirm(AllowOrDeny.DENY))
+                    if (h == null) settleResult(result, prompt.confirm(AllowOrDeny.DENY))
                     else h.onBeforeUnload(prompt.title) { leave ->
-                        result.complete(
+                        settleResult(result, 
                             prompt.confirm(if (leave) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
                         )
                     }
@@ -1112,10 +1112,10 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onColorPrompt(prompt.defaultValue.orEmpty()) { value ->
                         // ColorPrompt.confirm(String) 无 type 参数：色值字符串即为内核所需全部信息
-                        result.complete(if (value == null) prompt.dismiss() else prompt.confirm(value))
+                        settleResult(result, if (value == null) prompt.dismiss() else prompt.confirm(value))
                     }
                 }
                 return result
@@ -1137,10 +1137,10 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onDateTimePrompt(type, prompt.defaultValue.orEmpty()) { value ->
                         // DateTimePrompt.confirm(String) 只收格式化串；type 仅供界面决定控件
-                        result.complete(if (value == null) prompt.dismiss() else prompt.confirm(value))
+                        settleResult(result, if (value == null) prompt.dismiss() else prompt.confirm(value))
                     }
                 }
                 return result
@@ -1160,10 +1160,10 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onPopupPrompt(prompt.targetUri.orEmpty()) { allow ->
                         // 三态：允许=ALLOW，拒绝=DENY，用户关闭=dismiss（语义有别，不能混为一谈）
-                        result.complete(
+                        settleResult(result, 
                             when (allow) {
                                 true -> prompt.confirm(AllowOrDeny.ALLOW)
                                 false -> prompt.confirm(AllowOrDeny.DENY)
@@ -1189,10 +1189,10 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onRepostConfirmPrompt { ok ->
                         // 内核 confirm 只收 AllowOrDeny（无空参重载）：确认=ALLOW，取消=dismiss
-                        result.complete(if (ok) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
+                        settleResult(result, if (ok) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
                     }
                 }
                 return result
@@ -1212,9 +1212,9 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onRedirectPrompt(prompt.targetUri.orEmpty()) { ok ->
-                        result.complete(if (ok) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
+                        settleResult(result, if (ok) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
                     }
                 }
                 return result
@@ -1234,10 +1234,10 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onSharePrompt(prompt.text.orEmpty(), prompt.uri.orEmpty()) {
                         // SharePrompt.confirm(int) 无「用户拒绝」语义：唤起系统选择器后即确认成功
-                        result.complete(
+                        settleResult(result, 
                             prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.SUCCESS)
                         )
                     }
@@ -1259,10 +1259,10 @@ class BrowserSessionManager private constructor(
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
-                    if (h == null) result.complete(prompt.dismiss())
+                    if (h == null) settleResult(result, prompt.dismiss())
                     else h.onFolderUploadPrompt { picked ->
                         // FolderUploadPrompt.confirm(AllowOrDeny) 无 confirm(Uri) 重载：选目录即确认允许
-                        result.complete(if (picked == true) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
+                        settleResult(result, if (picked == true) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
                     }
                 }
                 return result
@@ -1303,7 +1303,7 @@ class BrowserSessionManager private constructor(
                     GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE,
                     GeckoSession.PermissionDelegate.PERMISSION_PERSISTENT_STORAGE,
                     GeckoSession.PermissionDelegate.PERMISSION_MEDIA_KEY_SYSTEM_ACCESS -> {
-                        result.complete(allow)
+                        settleResult(result, allow)
                         return result
                     }
                     // ② 必然弹窗征询：涉及位置、通知、本机设备与局域网访问
@@ -1315,20 +1315,20 @@ class BrowserSessionManager private constructor(
                         // 直接按拒绝应答。①自动放行与③自动拒绝两支**刻意不加**这道闸 ——
                         // 给后台标签授存储 / DRM 属正常行为，顺带拒绝反而是功能回退。
                         if (!isAlive(tab) || tab !== active) {
-                            result.complete(deny)
+                            settleResult(result, deny)
                             return result
                         }
                         post {
                             // 投递到主线程后仍可能已切走 / 关掉该标签：执行瞬间复查
                             if (permissionStale(tab)) {
-                                result.complete(deny)
+                                settleResult(result, deny)
                                 return@post
                             }
                             val h = permissionHandler
                             if (h == null) {
-                                result.complete(deny)
+                                settleResult(result, deny)
                             } else h.onContentPermission(perm, perm.privateMode) { granted ->
-                                result.complete(if (granted) allow else deny)
+                                settleResult(result, if (granted) allow else deny)
                             }
                         }
                         return result
@@ -1354,7 +1354,7 @@ class BrowserSessionManager private constructor(
                                     "type=${perm.permission} host=${host ?: "(unknown)"}",
                             )
                         }
-                        result.complete(deny)
+                        settleResult(result, deny)
                         return result
                     }
                 }
@@ -1421,6 +1421,21 @@ class BrowserSessionManager private constructor(
 
     private fun post(block: () -> Unit) {
         mainHandler.post(block)
+    }
+
+    /**
+     * GeckoResult 应答的 ISE 兜底（ExtensionPrompts.Once 同款，N18/④）：内核可能在
+     * 活会话上自行结算 prompt/权限/剪贴板/历史的 GeckoResult（页面导航、会话关闭的
+     * 伴生取消），届时 result.complete 会抛 IllegalStateException 并从主线程回调里
+     * 逃逸成崩溃。各类委托的 promptStale/前置守卫已拦住大多数迟到应答，这里是
+     * 最后一道防线：吞**且只吞** ISE，debug 留痕（release 由 proguard 剥掉 Log.d）。
+     */
+    private fun <T> settleResult(result: GeckoResult<T>, value: T) {
+        try {
+            result.complete(value)
+        } catch (e: IllegalStateException) {
+            android.util.Log.d(TAG, "GeckoResult 已结算，本次应答被丢弃", e)
+        }
     }
 
     private fun runtime(): GeckoRuntime {

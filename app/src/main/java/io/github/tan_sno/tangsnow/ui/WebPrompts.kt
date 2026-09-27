@@ -372,7 +372,17 @@ class WebPrompts(
         COLOR_PALETTE.forEach { hex ->
             grid.addView(
                 Button(activity).apply {
-                    background = ColorDrawable(runCatching { Color.parseColor(hex) }.getOrDefault(Color.BLACK))
+                    // 色板选中态（审查②补全）：与内核当前色一致的色块加 2dp 深色描边，
+                    // 让用户看得出「正在改的是哪个颜色」；描边色近黑，浅色/深色块上皆可辨
+                    val isCurrent = hex.equals(current, ignoreCase = true)
+                    background = if (isCurrent) {
+                        android.graphics.drawable.GradientDrawable().apply {
+                            setColor(runCatching { Color.parseColor(hex) }.getOrDefault(Color.BLACK))
+                            setStroke(activity.dp(2), 0xFF1F1F1F.toInt())
+                        }
+                    } else {
+                        ColorDrawable(runCatching { Color.parseColor(hex) }.getOrDefault(Color.BLACK))
+                    }
                     layoutParams = GridLayout.LayoutParams().apply {
                         width = size
                         height = size

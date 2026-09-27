@@ -49,6 +49,21 @@ object DownloadRepo {
     private const val KEY_MANAGED = "tangsnow_download_managed"
 
     /**
+     * 「转正失败待重试」队列（N13 选项 A）：writeToDownloads 的转正阶段失败时，
+     * 内容已完整但对外不可见 —— 记到此处，由 [sweepStalePromotions] 在下次
+     * list() 时重试一次转正，成功即登记进下载列表。
+     * **刻意不进** [KEY_MANAGED]（自管下载列表）：队列里的行 IS_PENDING=1，
+     * 非 owner 应用打不开——登记进去只会制造「打开必失败」的条目。
+     */
+    private const val KEY_STALE_PROMOTIONS = "tangsnow_stale_promotions"
+
+    /**
+     * 待重试条目的保留时长：pending 行约 7 天后被系统按 DATE_EXPIRES 回收，
+     * 多留 1 天缓冲后出队（内容与行都已消失，继续保留没有意义）。
+     */
+    private const val STALE_KEEP_MS = 8L * 24 * 60 * 60 * 1000
+
+    /**
      * 下载记录（[PREFS_NAME] 里的两个 JSON）**读-改-写**序列的互斥锁。
      *
      * 为什么必须加锁：这些操作发生在线程池 IO 线程上，而**多个下载可以同时进行**。
@@ -294,11 +309,106 @@ object DownloadRepo {
         )?.use { c ->
             when {
                 !c.moveToFirst() -> PendingState.GONE
+                // 列值 NULL（个别 provider 缺列）**有意**按「仍占位」处理：
+                // 后果只是多试一次清零 update（无害），而"当作 GONE"会有误删风险
                 !c.isNull(0) && c.getInt(0) == 0 -> PendingState.CLEARED
                 else -> PendingState.STILL_PENDING
             }
         } ?: PendingState.UNKNOWN
     }.getOrDefault(PendingState.UNKNOWN)
+
+    /** 一条「转正失败待重试」记录：uri + 登记所需信息 + 入队时间 */
+    private data class StalePromotion(
+        val uri: String,
+        val name: String,
+        val mime: String,
+        val register: Boolean,
+        val at: Long,
+    )
+
+    /** 转正失败的行记入待重试队列（[recordsLock] 同锁；JSON 与既有记录同文件） */
+    private fun recordStalePromotion(context: Context, entry: StalePromotion) =
+        synchronized(recordsLock) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val arr = org.json.JSONArray(prefs.getString(KEY_STALE_PROMOTIONS, "[]"))
+            arr.put(
+                org.json.JSONObject()
+                    .put("uri", entry.uri)
+                    .put("name", entry.name)
+                    .put("mime", entry.mime)
+                    .put("register", entry.register)
+                    .put("at", entry.at)
+            )
+            prefs.edit().putString(KEY_STALE_PROMOTIONS, arr.toString()).apply()
+        }
+
+    /**
+     * 扫尾：对每条「转正失败」的记录重试一次转正（N13 选项 A）。
+     *
+     * 触发点：[list()]（下载页每次打开都会跑）。处置与 [writeToDownloads] 的
+     * 两段语义对齐：
+     *  · CLEARED（已被转正——可能是上一轮扫尾成功但写回丢失）⇒ 补登记并出队；
+     *  · STILL_PENDING ⇒ 再试一次清零，成功同上；仍失败 ⇒ 留在队列下次再试；
+     *  · GONE（行已被系统回收）⇒ 出队；
+     *  · UNKNOWN（查询失败）⇒ **不动**，留在队列下次再核。
+     * 超过 [STALE_KEEP_MS] 的条目出队（pending 行此刻也已被系统按 DATE_EXPIRES 回收）。
+     *
+     * 线程：只在 IO 上下文调用（[list] 已在 IO）；写回在 [recordsLock] 内、
+     * 且写前重读，与既有 read-modify-write 同口径。
+     */
+    private fun sweepStalePromotions(context: Context) {
+        // 整体持 recordsLock：读、重试、写回原子化 —— 否则扫尾期间并发「转正失败再登记」
+        // 的写入会被本次写回覆盖（与 downloadManagerItems 的锁内重读同一考量）。
+        // synchronized 可重入：扫尾内 registerPromoted → registerSavedFile → rememberId
+        // 再次拿同一把锁不会有问题。
+        synchronized(recordsLock) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val arr = runCatching { org.json.JSONArray(prefs.getString(KEY_STALE_PROMOTIONS, "[]")) }
+                .getOrElse { return }
+            if (arr.length() == 0) return
+            val resolver = context.contentResolver
+            val now = System.currentTimeMillis()
+            val survivors = org.json.JSONArray()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val uri = o.optString("uri")
+                // 超期：pending 行此刻也已被系统按 DATE_EXPIRES 回收 ⇒ 出队
+                if (uri.isBlank() || now - o.optLong("at") > STALE_KEEP_MS) continue
+                val parsed = runCatching { android.net.Uri.parse(uri) }.getOrNull() ?: continue
+                val values = ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                when (pendingState(resolver, parsed)) {
+                    PendingState.CLEARED -> registerPromoted(context, o, parsed)
+                    PendingState.STILL_PENDING -> {
+                        val promoted = runCatching {
+                            resolver.update(parsed, values, null, null) > 0
+                        }.getOrDefault(false)
+                        if (promoted) registerPromoted(context, o, parsed) else survivors.put(o)
+                    }
+                    // GONE：行已消失，内容无从谈起 ⇒ 出队
+                    PendingState.GONE -> Unit
+                    // UNKNOWN：查不出来 ⇒ 不动手，留在队列下次再核
+                    PendingState.UNKNOWN -> survivors.put(o)
+                }
+            }
+            prefs.edit().putString(KEY_STALE_PROMOTIONS, survivors.toString()).apply()
+        }
+    }
+
+    /** 扫尾转正成功后的登记（仅 register=true 的来源；与落盘成功路径同款） */
+    private fun registerPromoted(
+        context: Context,
+        o: org.json.JSONObject,
+        promoted: android.net.Uri,
+    ) {
+        if (!o.optBoolean("register")) return
+        registerSavedFile(
+            context, o.optString("name"), o.optString("mime"),
+            filePath = queryDataPath(context.contentResolver, promoted),
+            fallbackUri = promoted.toString(),
+        )
+    }
 
     /**
      * 交给系统下载器（`DownloadManager`）下载。
@@ -398,6 +508,7 @@ object DownloadRepo {
         context: Context,
         fileName: String,
         mime: String,
+        register: Boolean = false,
         write: (java.io.OutputStream) -> Unit,
     ): Placement? = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
@@ -457,14 +568,18 @@ object DownloadRepo {
                 false
             }
             if (!promoted) {
-                // 内容完整但没能转正 ⇒ 返回失败，但**保留**那一行与文件。依据（SDK 源码
-                // `android-37.2/android/provider/MediaStore.java` 的列文档）：
-                //  · IS_PENDING=1 期间**只有本应用能打开**该文件 ⇒ 内容没丢；
-                //  · pending 项默认约 **7 天**后过期，由系统在 idle 时自动删除（DATE_EXPIRES）
-                //    ⇒ 也不会长期堆垃圾。
-                // 代价：该行不进自管列表，应用内「下载」页看不到、也删不到 —— 刻意取舍，
-                // 与本仓库「错误内容比中断更糟」同一套排序：宁可留下一个不可见的行，
-                // 也不删掉可能已经写完整的内容。
+                // 内容完整但没能转正 ⇒ 返回失败，**保留**那一行与文件，并记入「转正失败
+                // 待重试」队列：[sweepStalePromotions] 在下次 list() 时重试一次清零，
+                // 成功即按来源登记、对用户可见。
+                // 平台依据（SDK 源码 MediaStore.java 列文档）：IS_PENDING=1 期间只有本应用
+                // 能打开该文件（内容没丢）；pending 项默认约 7 天后过期、由系统在 idle 时
+                // 自动删除 ⇒ 队列超期的条目由扫尾出队，不会无限堆积。
+                // 代价（N13-C 措辞对齐）：重试成功前，该行不进自管列表、应用内「下载」页
+                // 看不到 —— 是「暂时不可见」，不是「用户仍能拿到」。
+                recordStalePromotion(
+                    context,
+                    StalePromotion(uri.toString(), fileName, mime, register, System.currentTimeMillis()),
+                )
                 return@withContext null
             }
             Placement(filePath = queryDataPath(resolver, uri), fallbackUri = uri.toString())
@@ -532,7 +647,7 @@ object DownloadRepo {
             // input.use 保证内核给的响应体在任何早退路径上都会被关闭
             // （insert 失败时压根走不到 write 里，那里没有机会关它）。
             input.use { body ->
-                val placement = writeToDownloads(context, safeName, mime) { out ->
+                val placement = writeToDownloads(context, safeName, mime, register = true) { out ->
                     body.copyTo(out)
                 } ?: return@withContext SaveOutcome.FAILED
                 registerSavedFile(
@@ -621,6 +736,8 @@ object DownloadRepo {
     // ------------------------------------------------------------- 查询 / 打开 / 删除
 
     suspend fun list(context: Context): List<Item> = withContext(Dispatchers.IO) {
+        // 扫尾：上次「转正失败待重试」的条目先试一次转正（成功即登记进下载列表）
+        sweepStalePromotions(context)
         buildList {
             addAll(downloadManagerItems(context))
             addAll(managedItems(context))
