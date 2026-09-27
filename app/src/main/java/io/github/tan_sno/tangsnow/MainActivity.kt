@@ -599,6 +599,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     override fun onResume() {
         super.onResume()
+        // 界面重新可见：权限征询的守卫据此判定「用户此刻看不看得见」这一维（见 permissionStale）
+        if (::sessionManager.isInitialized) sessionManager.setHostVisible(true)
         // 从「设置」返回时同步防截屏开关（开关是即时生效的窗口级标志）
         SecureScreen.apply(this, prefs)
         sessionManager.applyLiveSettings()
@@ -625,6 +627,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     override fun onPause() {
         super.onPause()
+        // 界面不再可见：此后由后台标签触发的权限征询一律拒绝（不弹框、不抢焦点）
+        if (::sessionManager.isInitialized) sessionManager.setHostVisible(false)
         // 进入后台前立即保存会话快照：进程可能在后台被系统回收，这是最后的落盘时机
         if (::sessionManager.isInitialized) sessionManager.saveState()
         runCatching {
