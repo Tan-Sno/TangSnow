@@ -160,11 +160,21 @@ object ExtensionPrompts {
                         AlertDialog.Builder(activity)
                             .setTitle(R.string.extension_update_confirm)
                             .setMessage(
-                                activity.getString(
-                                    R.string.extension_update_confirm_message,
-                                    extension.metaData.name.orEmpty().ifBlank { extension.id },
-                                    extension.metaData.version,
-                                )
+                                buildString {
+                                    append(
+                                        activity.getString(
+                                            R.string.extension_update_confirm_message,
+                                            extension.metaData.name.orEmpty().ifBlank { extension.id },
+                                            extension.metaData.version,
+                                        )
+                                    )
+                                    // 此前只显名称 + 版本：permissions / origins / dataCollection
+                                    // 三个参数**收了却没用** ⇒ 用户对「这次更新要什么权限」
+                                    // 一无所知，点确定即 ALLOW。安装框早已用 permissionSummary
+                                    // 渲染同一件事，这里复用**同一个渲染** —— 同一语义不该有两套呈现。
+                                    append("\n\n")
+                                    append(permissionSummary(activity, permissions, origins, dataCollection))
+                                }
                             )
                             .setNegativeButton(R.string.dlg_cancel) { _, _ ->
                                 once.complete(AllowOrDeny.DENY)
