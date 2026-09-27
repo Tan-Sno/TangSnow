@@ -562,8 +562,10 @@ class SettingsFragment : PreferenceFragmentCompat() {
     /**
      * 打开下载。
      *
-     * 交给**系统**浏览器 / 下载器处理（`ACTION_VIEW`）：应用自身不下这份文件、
+     * 交给**别的应用**（系统浏览器 / 下载器）处理：应用自身不下这份文件、
      * 不碰安装流程，也就不需要存储或安装相关的任何权限。
+     * ⚠️ 「交给别的应用」不是自动成立的 —— 隐式 `ACTION_VIEW` **会把自己也算作候选**，
+     * 详见 [updateIntent] 里为什么必须用 chooser 排除自身。
      * 若没有与本机 ABI 匹配的包（[UpdateChecker.Release.apkUrl] 为 null），
      * 退回到打开发布页让用户自己选 —— 而不是给一个装不上的链接。
      */
@@ -575,11 +577,35 @@ class SettingsFragment : PreferenceFragmentCompat() {
         val ctx = context ?: return
         val url = release.apkUrl ?: UpdateChecker.RELEASES_URL
         runCatching {
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            ctx.startActivity(updateIntent(ctx, url))
         }.onFailure {
             ctx.toast(R.string.update_failed)
         }
     }
+
+    /**
+     * 构造「打开下载地址」的 Intent：**chooser + 显式排除自身**。
+     *
+     * 为什么必须排除自己：隐式 `ACTION_VIEW` 会把本应用也算作候选 ⇒ 用户把棠雪设为
+     * 默认浏览器后，这个请求会**回到棠雪自己**（自管下载 → 再打开 apk），而应用并不持有
+     * `REQUEST_INSTALL_PACKAGES` ⇒ 链条走不通，表现为「点了下载没反应 / 装不上」。
+     *
+     * 为什么不改成声明 `REQUEST_INSTALL_PACKAGES` 自行安装：那会打破本应用「权限极简」的
+     * 定位，还要在隐私政策里多一条披露；用 chooser 只修正**投递范围**，不动任何权限。
+     * （`EXTRA_EXCLUDE_COMPONENTS` 自 API 24 起可用，本工程 minSdk 26 全覆盖，无需版本分支。）
+     *
+     * 排除对象只需 `MainActivity`：全仓库只有它带 http/https 的 `ACTION_VIEW` filter。
+     */
+    private fun updateIntent(ctx: android.content.Context, url: String): Intent =
+        Intent
+            .createChooser(
+                Intent(Intent.ACTION_VIEW, Uri.parse(url)),
+                ctx.getString(R.string.update_open_with),
+            )
+            .putExtra(
+                Intent.EXTRA_EXCLUDE_COMPONENTS,
+                arrayOf(android.content.ComponentName(ctx, MainActivity::class.java)),
+            )
 
     // ------------------------------------------------------------- 关于文本
 
