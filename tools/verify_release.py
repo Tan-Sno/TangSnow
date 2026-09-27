@@ -231,7 +231,7 @@ def read_gradle_expectations(root):
 
     return {
         # 两者都做行锚定（^\s*）：re.search 取的是全文首个匹配 —— 不锚定的话，将来谁在
-        # 注释里写一句 `// versionCode = 37`（该文件的版本历史注释正是这种风格），
+        # 注释里写一句 `// versionCode = 38`（该文件的版本历史注释正是这种风格），
         # 这里就会静默取错值。只锚一个等于留一半隐患。
         "versionName": grab(r'^\s*versionName\s*=\s*"([^"]+)"', "versionName", re.M),
         "versionCode": int(grab(r"^\s*versionCode\s*=\s*(\d+)", "versionCode", re.M)),
