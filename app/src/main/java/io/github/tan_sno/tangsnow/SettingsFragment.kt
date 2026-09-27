@@ -479,7 +479,11 @@ class SettingsFragment : PreferenceFragmentCompat() {
             .setNeutralButton(R.string.update_open_releases, null)
             .create()
         updateDialog = dialog
-        dialog.show()
+        // 纳入纳管（与 dialogs 字段注释一致）：onDestroyView 的 cancelAll 会收掉它，
+        // 两条收口路径互不冲突（cancelAll 有 isShowing 守卫，重复收口是空转）。
+        // 此前这里裸 dialog.show() —— 字段注释写着「同样登记在本表里」，实现却没登记，
+        // 属注释强于实现；这次把实现补齐。
+        dialogs.track(dialog)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isVisible = false
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.isVisible = false
 
