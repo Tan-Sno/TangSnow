@@ -118,6 +118,13 @@ internal class PrintPdfAdapter(
                     }
                 }
                 callback.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 本域目前不会被取消（见 ioScope 的说明），但按本仓既定口径：**取消要原样抛出**，
+                // 不能被下面那个宽 catch 顺手吞掉。而框架又要求 onWriteFinished / onWriteFailed /
+                // onWriteCancelled **恰好回调一次**，否则打印任务会一直等 —— onWriteCancelled
+                // 正是为此留的出口。先应答再抛（与 ExtInstallCoordinator「settle() 后 rethrow」同一写法）。
+                callback.onWriteCancelled()
+                throw e
             } catch (t: Throwable) {
                 // 不吞异常：把原因交给框架，系统打印界面会据此提示失败
                 callback.onWriteFailed(t.message)
