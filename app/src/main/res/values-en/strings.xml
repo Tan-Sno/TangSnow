@@ -176,6 +176,9 @@
     <string name="extension_error_download">Download failed. Check your network and try again.</string>
     <string name="extension_installed_label">Installed</string>
     <string name="extension_install_success">Extension installed</string>
+    <!-- Installed, but the AMO slug could not be resolved (e.g. a locally imported
+         third-party package): not indexed, stated honestly -->
+    <string name="extension_install_success_unindexed">Extension installed, but not indexed in the featured catalog</string>
     <string name="extension_need_runtime">Browser engine not ready. Please return to the home page first.</string>
     <string name="extension_version">Version %1$s</string>
     <string name="extension_uninstall_confirm">Remove extension</string>
