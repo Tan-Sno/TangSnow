@@ -1273,14 +1273,34 @@ class BrowserSessionManager private constructor(
     // --------------------------------------------------------- 站点权限（A3）
 
     /**
+     * 本应用界面当前是否**对用户可见**（由 `MainActivity` 在 `onResume` / `onPause` 维护）。
+     *
+     * 为什么走显式通道而不是「没有来路的裸 val」：本类 [attachDelegates] 的 KDoc 明言
+     * 「经主线程转发给 events，**不捕获任何 Activity**」—— 让 Activity 直接写字段会破坏
+     * 这条约定（还得把 Activity 传进来）。[setHostVisible] 与既有的 events 转发同路数。
+     */
+    @Volatile
+    private var hostVisible = true
+
+    fun setHostVisible(visible: Boolean) {
+        hostVisible = visible
+    }
+
+    /**
      * 权限征询的**执行瞬间复查** —— 与 [promptStale] 同口径、同理由（那里写得最全）：
      * 入口判定发生在内核回调时刻，而真正的弹窗是 `post{}` 执行时才创建，两者之间用户完全可能
      * 切走 / 关掉这个标签。不复查的话，权限框照样弹到前台（**抢走用户焦点**），
      * 应答也会打到已经不在前台的会话上。
      *
-     * @return true 表示此刻已不该弹（调用方按「后台/已关标签」的同一口径自行应答并 `return@post`）
+     * **第三个条件 [hostVisible] 是补上缺的那一维**：前两个只回答「标签是否还是当前那个」，
+     * **答不了**「用户此刻看不看得见界面」。宿主在后台时 `active` 仍指向某个标签 ⇒
+     * 守卫照样放行、权限框弹到前台，而用户根本没在看。三道权限回调的**入口判定**同样改用它，
+     * 保证「回调时刻」与「执行瞬间」两处口径一致。
+     *
+     * @return true 表示此刻已不该弹（调用方按「后台/已关标签」的同一口径自行应答并 `return`）
      */
-    private fun permissionStale(tab: Tab): Boolean = !(isAlive(tab) && tab === active)
+    private fun permissionStale(tab: Tab): Boolean =
+        !(isAlive(tab) && tab === active && hostVisible)
 
     private fun attachPermissionDelegate(tab: Tab) {
         val session = tab.session
@@ -1314,7 +1334,7 @@ class BrowserSessionManager private constructor(
                         // 只有这一支会弹 UI：与 prompt 侧同口径，后台/已关标签**不弹**、不抢焦点，
                         // 直接按拒绝应答。①自动放行与③自动拒绝两支**刻意不加**这道闸 ——
                         // 给后台标签授存储 / DRM 属正常行为，顺带拒绝反而是功能回退。
-                        if (!isAlive(tab) || tab !== active) {
+                        if (permissionStale(tab)) {
                             settleResult(result, deny)
                             return result
                         }
@@ -1366,7 +1386,7 @@ class BrowserSessionManager private constructor(
                 callback: GeckoSession.PermissionDelegate.Callback
             ) {
                 // 会弹系统级权限 UI：后台/已关标签一律拒绝（不抢焦点），与 prompt 侧同口径
-                if (!isAlive(tab) || tab !== active) {
+                if (permissionStale(tab)) {
                     callback.reject()
                     return
                 }
@@ -1393,7 +1413,7 @@ class BrowserSessionManager private constructor(
                 callback: GeckoSession.PermissionDelegate.MediaCallback
             ) {
                 // 会弹系统级权限 UI：后台/已关标签一律拒绝（不抢焦点），与 prompt 侧同口径
-                if (!isAlive(tab) || tab !== active) {
+                if (permissionStale(tab)) {
                     callback.reject()
                     return
                 }
