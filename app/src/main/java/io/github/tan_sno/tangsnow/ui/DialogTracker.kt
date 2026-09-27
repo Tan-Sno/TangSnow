@@ -27,6 +27,10 @@ import android.app.Dialog
  *     而且它走的是 `dismissDialog()`，所以调用方的 `OnDismissListener` 同样会被触发 ——
  *     这正是"框架摘窗漏事、我们主动 cancel 补上"的关键差别。
  * 4. **仅主线程访问**（与 `WebPrompts` 的 `openDialogs` 同口径）：登记与收口都发生在生命周期回调里。
+ *  5. **条目惰性回收**：`track()` 每次登记前先摘掉所有 `!isShowing` 的条目 ⇒ 表恒等于
+ *     「当前显示中」的集合，天然有界。为什么不在 dismiss 时挂钩回收：`OnDismissListener`
+ *     不可链式（见第 2 点两条理由），而本类的收口（[cancelAll]）本就只需 isShowing 判定。
+ *
  *
  * ## 用法
  * ```
@@ -54,6 +58,11 @@ class DialogTracker {
      * `setOnCancelListener` / 按钮监听全部保持有效。
      */
     fun track(dialog: Dialog): Dialog {
+        // 惰性回收：每次登记前先摘掉已关闭的条目（N3）。
+        // 此前只增不减 ⇒ 长寿命宿主（MainActivity 的扩展弹窗）每开一次就多一条**永久**登记，
+        // 引用链 Dialog → popupView(GeckoView) → Activity 会一直拴到 onDestroy。
+        // 为什么不做 OnDismissListener 挂钩：见类 KDoc 第 2 点的两条硬约束。
+        tracked.removeAll { !it.isShowing }
         tracked += dialog
         dialog.show()
         return dialog
