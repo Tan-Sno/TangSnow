@@ -2316,9 +2316,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 块体压根不执行"是**更大**的窗口 —— 那种情况下本函数根本不会被调用，靠的是两个调用点
         // （saveAsPdf 的 accept 回调）在启动协程前自行判 isFinishing/isDestroyed 并当场 close。
         return input.use { body ->
-            DownloadRepo.writeToDownloads(this, name, "application/pdf", register = true) { out ->
+            // 用 saveAndRegister：writeToDownloads(register = true) **自己并不登记**，
+            // 只传它会让存下来的 PDF 从不出现在系统「下载」与应用内列表里（X1）。
+            DownloadRepo.saveAndRegister(this, name, "application/pdf") { out ->
                 body.copyTo(out)
-            } != null
+            }
         }
     }
 

@@ -641,6 +641,33 @@ object DownloadRepo {
     }
 
     /**
+     * 「落盘 + 按来源登记」的**唯一对外出口**（`register = true` 的那一类）。
+     *
+     * 为什么必须有它：`writeToDownloads` 收到 `register = true` 时**自己并不登记** ——
+     * 那个参数只决定「转正失败时入队后，将来重试成功要不要登记」。于是调用方若只调
+     * `writeToDownloads(register = true)` 就以为已登记，导出书签 / 存 PDF 的文件会**从不**
+     * 出现在系统「下载」与「应用内下载列表」里（只有文件落在公开下载目录，靠系统文件管理器才能找到）。
+     * 本函数把「落盘成功 ⇒ 登记」绑成一步，避免每个调用点各写一遍、也避免再漏。
+     *
+     * @return 落盘成功且已尝试登记返回 true；落盘失败返回 false
+     */
+    internal suspend fun saveAndRegister(
+        context: Context,
+        fileName: String,
+        mime: String,
+        write: (java.io.OutputStream) -> Unit,
+    ): Boolean {
+        val placement = writeToDownloads(context, fileName, mime, register = true, write = write)
+            ?: return false
+        registerSavedFile(
+            context, fileName, mime,
+            filePath = placement.filePath,
+            fallbackUri = placement.fallbackUri,
+        )
+        return true
+    }
+
+    /**
      * 直接消费 GeckoView 的内核响应流存盘：
      * Cookie/Referer/登录态都已包含在这次响应里，是登录态附件的唯一可靠路径。
      *
@@ -676,14 +703,8 @@ object DownloadRepo {
             // input.use 保证内核给的响应体在任何早退路径上都会被关闭
             // （insert 失败时压根走不到 write 里，那里没有机会关它）。
             input.use { body ->
-                val placement = writeToDownloads(context, safeName, mime, register = true) { out ->
-                    body.copyTo(out)
-                } ?: return@withContext SaveOutcome.FAILED
-                registerSavedFile(
-                    context, safeName, mime,
-                    filePath = placement.filePath,
-                    fallbackUri = placement.fallbackUri,
-                )
+                val saved = saveAndRegister(context, safeName, mime) { out -> body.copyTo(out) }
+                if (!saved) return@withContext SaveOutcome.FAILED
                 SaveOutcome.SAVED
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
