@@ -69,9 +69,14 @@
             android:exported="false"
             android:theme="@style/Theme.TangSnow" />
 
+        <!-- 设置页：旋屏不重建（与 MainActivity/ExtensionsActivity 同一份清单）。
+             必要性：清除浏览数据跑在 Fragment 的 lifecycleScope 上，旋屏重建会取消协程，
+             而清除用例刻意原样传播取消 ⇒ 出现「内核已清、本地未清、零提示」。
+             注意：清单不含 uiMode/locale ⇒ 切主题/切语言仍会重建，该残留见施工计划批 J。 -->
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@style/Theme.TangSnow" />
 
         <activity
