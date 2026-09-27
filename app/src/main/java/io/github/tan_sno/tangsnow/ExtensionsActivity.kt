@@ -576,8 +576,16 @@ class ExtensionsActivity : AppCompatActivity() {
     private fun copyImportedXpi(uri: android.net.Uri): File? {
         val dir = File(cacheDir, "exts")
         dir.mkdirs()
-        // 清掉历史遗留的导入残包（上次导入若中途被销毁会留下）
-        dir.listFiles { f -> f.name.startsWith("import-") }?.forEach { runCatching { it.delete() } }
+        // 清掉历史遗留的导入残包（上次导入若中途被销毁会留下）。
+        //
+        // ⚠️ 只清**陈旧**的（按修改时间），**不能**无条件删掉所有 `import-`：
+        // 包复制完成后会交给内核**异步安装**，若用户此时再发起一次导入，无条件清理
+        // 就会删掉上一次**正被内核读取**的那个包。这与 `ExtInstallCoordinator` 里
+        // `install-` 那处是**同款**（那里早已改为按时间筛，本处对齐）。
+        // 阈值与那边一致：远大于任何一次导入 / 安装会话，既清得掉残包，也碰不到在途文件。
+        val staleBefore = System.currentTimeMillis() - STALE_IMPORT_MS
+        dir.listFiles { f -> f.name.startsWith("import-") && f.lastModified() < staleBefore }
+            ?.forEach { runCatching { it.delete() } }
         val out = File(dir, "import-${System.currentTimeMillis()}.xpi")
         return try {
             // 手动流式复制并设体积上限：本地文件来源不受控，防超大文件/解压炸弹类填满缓存
@@ -1142,6 +1150,15 @@ class ExtensionsActivity : AppCompatActivity() {
         const val TAG = "ExtensionsActivity"
         const val TAB_RECOMMEND = 0
         const val TAB_INSTALLED = 1
+
+        /**
+         * 导入临时包的「陈旧」阈值：超过它才当作上次中断留下的残包清掉。
+         *
+         * 必须显著大于一次导入 + 安装的耗时，否则会误删**在途**文件：
+         * 包复制完会交给内核异步安装，这段时间里它正被内核读取。
+         * 取值与 `ExtInstallCoordinator.STALE_TMP_MS` 一致（30 分钟），便于两处同一口径。
+         */
+        const val STALE_IMPORT_MS = 30L * 60 * 1000
         /** 单个扩展包体积上限（约 200MB）：远超任何合法 AMO 扩展，纯为防滥用 */
         const val MAX_XPI_BYTES = 200L * 1024 * 1024
         /** 孤儿安装态自愈阈值（须大于协调器的总超时，留足余量） */
