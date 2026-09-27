@@ -236,7 +236,14 @@ class LibraryActivity : AppCompatActivity() {
         lifecycleScope.launch {
             // 同上：按 tag 类型分派，避免「切页签后点旧行」被强转成错误类型而崩溃
             when (val tag = row.tag) {
-                is DownloadRepo.Item -> DownloadRepo.remove(this@LibraryActivity, tag)
+                is DownloadRepo.Item -> {
+                    // 删除以「是否真的删掉」为准：失败时记录会**保留**（见 DownloadRepo.remove），
+                    // 必须如实告知 —— 不能让用户以为删掉了、条目却还在
+                    if (!DownloadRepo.remove(this@LibraryActivity, tag)) {
+                        toast(R.string.download_remove_failed)
+                        return@launch
+                    }
+                }
                 is Long -> HistoryRepo.delete(tag)
                 is String -> BookmarkRepo.remove(tag)
                 else -> return@launch

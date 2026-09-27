@@ -469,6 +469,7 @@
          至于"为什么没退回系统下载器"，属维护者信息，写在 MainActivity.startDownload 的注释里；
          它也不适用于无 Cookie 的公共下载，不该占用用户可见文案。 -->
     <string name="download_save_failed">保存失败：未能确认文件已写入存储</string>
+    <string name="download_remove_failed">删除失败：文件仍在，记录已保留</string>
     <!-- 站点权限弹窗的「记住我的选择」：仅普通会话展示（无痕不持久化授权决定） -->
     <string name="perm_remember">记住我的选择</string>
     <string name="arrow_open">▾</string>

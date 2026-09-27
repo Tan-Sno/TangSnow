@@ -542,6 +542,7 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
          system downloader is maintainer information (see MainActivity.startDownload) and does not
          apply to public, cookie-less downloads anyway. -->
     <string name="download_save_failed">Save failed: could not confirm the file was stored</string>
+    <string name="download_remove_failed">Delete failed: the file is still there, so the entry was kept</string>
     <!-- "Remember my choice" on the site-permission dialog: normal sessions only (never persisted for private) -->
     <string name="perm_remember">Remember my choice</string>
     <string name="arrow_open">▾</string>
