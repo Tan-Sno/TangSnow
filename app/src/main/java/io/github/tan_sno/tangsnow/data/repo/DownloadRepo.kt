@@ -845,20 +845,38 @@ object DownloadRepo {
      * `suspend` + IO：对系统下载器 / 内容提供器的删除与 `File.delete()` 都是磁盘级操作，
      * 不能留在主线程（此前由 LibraryActivity 在 lifecycleScope 主线程协程里直接调用，
      * StrictMode 会点名磁盘写）。
+     *
+     * ⚠️ 删除结果**必须确认**再摘记录：此前 `File.delete()` 的布尔返回值被忽略、`resolver.delete`
+     * 的异常被 `runCatching` 吞掉，之后**无条件** `dropManaged`，于是「记录删了、文件还在」
+     * —— 磁盘上的孤儿文件再也无法从应用内删掉（本文件 :476-483 的注释刚批评过这个失败模式）。
+     *
+     * @return 是否**确认已删掉**。false 表示文件仍在（或探测不到）⇒ **记录被保留**，调用方须如实提示。
      */
-    suspend fun remove(context: Context, item: Item) = withContext(Dispatchers.IO) {
+    suspend fun remove(context: Context, item: Item): Boolean = withContext(Dispatchers.IO) {
         if (!item.managed) {
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            runCatching { dm.remove(item.id) }
-            return@withContext
+            // DownloadManager.remove 返回**真正删掉的条数**；0 / 抛异常都是"没删掉"，此时不动作。
+            // 记录不需要在这里摘：下次 list() 里该行已消失 ⇒ 判为 GONE 自然收掉（见 probeDownloadManager）
+            return@withContext runCatching { dm.remove(item.id) }.getOrDefault(0) > 0
         }
         val uri = runCatching { android.net.Uri.parse(item.localUri) }.getOrNull()
-            ?: return@withContext
-        when (uri.scheme) {
-            "content" -> runCatching { context.contentResolver.delete(uri, null, null) }
-            "file" -> runCatching { java.io.File(uri.path.orEmpty()).delete() }
+            ?: return@withContext false
+        val deleted = when (uri.scheme) {
+            // 返回删掉的行数：0 意味着这一行本来就不在（可能已被系统清掉）
+            "content" -> runCatching { context.contentResolver.delete(uri, null, null) }.getOrDefault(0) > 0
+            // delete() 失败**不抛异常**、只返回 false —— 此前忽略它，于是删不掉也照样摘记录
+            "file" -> java.io.File(uri.path.orEmpty()).delete()
+            else -> false
+        }
+        // 删除调用没成功时**再复核一次事实**（与 writeToDownloads 里"再查一次"同一口径）：
+        //  · 文件确实已经不在了（用户从系统文件管理器删掉、或 MediaStore 行已消失）⇒ 算删成功，
+        //    记录该摘就摘，否则会留下一条**永远删不掉**的幽灵记录；
+        //  · 文件仍在 / 探测不到 ⇒ **保留记录**并如实回报失败。
+        if (!deleted && managedPresence(context.contentResolver, uri) != Presence.GONE) {
+            return@withContext false
         }
         dropManaged(context, uri.toString())
+        true
     }
 
     /**
