@@ -102,7 +102,10 @@ object ClearDataUseCase {
 
         if (options.history) locally { HistoryRepo.clear() }
         if (options.sessionSnapshot) locally {
-            SessionStore.clear(context)
+            // 用可等待版本：删除失败要计入 localFailedCount，不能假报「已清除」（D2）
+            if (!SessionStore.clearAwait(context)) {
+                throw java.io.IOException("session snapshot could not be deleted")
+            }
             // 置位后，下一次 saveState 会跳过——否则"清掉快照"紧接着 onPause 又写回
             SessionStore.markPurged()
         }

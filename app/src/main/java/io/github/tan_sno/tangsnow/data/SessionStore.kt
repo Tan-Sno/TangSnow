@@ -1,6 +1,8 @@
 package io.github.tan_sno.tangsnow.data
 
 import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -113,7 +115,10 @@ object SessionStore {
                 tmp.writeText(json)
                 // 原子替换：读方要么看到旧文件，要么看到完整的新文件
                 if (!tmp.renameTo(target)) {
-                    target.writeText(json)
+                    // rename 失败（跨文件系统、目标被占用等）⇒ **不能**用 target.writeText()
+                    // 兜底：那是 truncate→write，读方可能读到半截 JSON，恰好破坏上一行注释
+                    // 承诺的原子性。会话恢复本就是尽力而为的增强，宁可丢这一次快照，
+                    // 也绝不在磁盘上留一个「看起来存在、内容却是半截」的文件。
                     tmp.delete()
                 }
             }
@@ -195,17 +200,49 @@ object SessionStore {
     /**
      * 清除已保存的会话快照（关闭全部标签 / 关闭「恢复上次的标签页」/ 清除浏览数据）。
      * 与 [write] 共用同一条串行队列，保证"清除"不会被在途写任务覆盖。
+     *
+     * fire-and-forget：不回报删除结果。需要**知道结果**的调用方（「清除浏览数据」要如实提示
+     * 「部分未清除」）请改用 [clearAwait]。
      */
     fun clear(context: Context) {
+        io.execute { clearNow(context.applicationContext.filesDir) }
+    }
+
+    /**
+     * [clear] 的可等待版本：**挂起直到串行队列真正执行完**，并回报删除是否成功。
+     *
+     * 为什么需要它：`clear()` 不回报结果，删除失败（磁盘满 / 文件被占用）对外不可见 ——
+     * 而「清除浏览数据」若假报「已清除」，快照就违背本类 KDoc 的隐私承诺了。
+     * 仅「清除浏览数据」用例使用本函数；其余三处调用方（saveState 两处、设置页关闭开关）
+     * 不向用户汇报结果，继续用 [clear]。
+     *
+     * 等待动作发生在 [Dispatchers.IO]（不占调用线程）；**被等待的任务仍在同一条串行队列上
+     * 执行**，与 [write] 的先后顺序不变。
+     */
+    suspend fun clearAwait(context: Context): Boolean = withContext(Dispatchers.IO) {
         val dir = context.applicationContext.filesDir
-        io.execute {
-            runCatching {
-                File(dir, FILE_NAME).delete()
-                File(dir, FILE_NAME + TMP_SUFFIX).delete()
-            }
-            // 同时作废预读缓存：否则「清除」之后内存里那份旧快照仍可能被 consume 取走
-            invalidatePreload()
+        val future = io.submit(java.util.concurrent.Callable { clearNow(dir) })
+        runCatching { future.get() }.getOrDefault(false)
+    }
+
+    /**
+     * 在**串行队列线程**上真正执行删除。
+     * [invalidatePreload] 必须与删除同队执行（否则「清除」之后内存里的旧快照仍可能被取走），
+     * 故不能挪到调用方。
+     *
+     * @return 目标文件已不存在（含原本就没有）也算 true —— 目标状态已达成
+     */
+    private fun clearNow(dir: File): Boolean {
+        var ok = true
+        runCatching {
+            val target = File(dir, FILE_NAME)
+            ok = target.delete() || !target.exists()
+            File(dir, FILE_NAME + TMP_SUFFIX).delete()
+        }.onFailure {
+            ok = false
         }
+        invalidatePreload()
+        return ok
     }
 
     // internal 供 JVM 单元测试直接覆盖（SessionStoreJsonTest）：这两个函数承载
