@@ -100,6 +100,36 @@ class BrowserDb private constructor(context: Context) :
         }
     }
 
+    /**
+     * 收藏 / 取消收藏（**原子**）。
+     *
+     * 为什么必须整体包在写事务里：`toggle` 的「先查后改」在**同一条连接**上仍可能被两个线程
+     * 交错 —— 两个并发 toggle 都判为「未收藏」⇒ 双双插入（第二个被 CONFLICT_IGNORE 吞掉，
+     * 却也返回"已收藏"）；或都判为「已收藏」⇒ 双双删除。前者会让两个调用方的图标状态
+     * 从此与库对不上。事务里第二个写者会等第一个提交后再重判，语义恢复成"两次 toggle
+     * 就是两次切换"。
+     *
+     * @return 操作完成后是否处于「已收藏」状态
+     */
+    fun toggleBookmark(url: String, title: String): Boolean {
+        val db = db()
+        db.beginTransaction()
+        try {
+            val exists = isBookmarked(url)
+            return if (exists) {
+                deleteBookmark(url)
+                db.setTransactionSuccessful()
+                false
+            } else {
+                insertBookmark(url, title)
+                db.setTransactionSuccessful()
+                true
+            }
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun deleteBookmark(url: String) {
         db().delete("bookmarks", "url = ?", arrayOf(url))
     }
