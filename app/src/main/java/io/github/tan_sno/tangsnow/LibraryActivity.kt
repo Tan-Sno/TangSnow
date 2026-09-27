@@ -88,15 +88,24 @@ class LibraryActivity : AppCompatActivity() {
         binding.tabDownloads.setOnClickListener { switchTo(TAB_DOWNLOADS) }
 
         // 键名唯一定义在 BrowserOpener.EXTRA_LIBRARY_TAB（值为 "library_tab"）
+        // 恢复优先级：**Activity 重建（有 savedInstanceState）时以存档为准**，否则才用启动
+        // intent 里的 extra。此前只判 `fromIntent in 0..2` —— 而三条入口
+        // （BrowserOpener.openLibrary 恒 putExtra；MainActivity 的两处转发都以 `libTab in 0..2`
+        // 为前置）都保证 extra ∈ 0..2，该判据**恒真**，`fromState` 成了死分支：
+        // 于是旋屏 / 进程重建后总会弹回「启动时那个页签」，用户刚切到的页签被丢弃。
         val fromIntent = intent?.getIntExtra(BrowserOpener.EXTRA_LIBRARY_TAB, -1) ?: -1
         val fromState = savedInstanceState?.getInt(KEY_TAB, TAB_HISTORY) ?: TAB_HISTORY
-        switchTo(if (fromIntent in 0..2) fromIntent else fromState)
+        val restored = if (savedInstanceState != null) fromState else fromIntent
+        switchTo(if (restored in 0..2) restored else TAB_HISTORY)
         // 恢复搜索词 —— 必须在 switchTo 之后：switchTo 里的「清空关键词」是给
         // 「用户主动切页签」用的语义，而这里是 Activity 重建，不是用户切页签。
-        // 同步 keyword 才能与系统已恢复的搜索框文本保持一致（见 onSaveInstanceState）。
+        //
+        // ⚠️ 这里**不能**先写 `keyword = saved` 再 setText：输入监听（本方法上方注册、早于此处
+        // 执行）里有 `if (next == keyword) return` 的早退，先同步 keyword 会让这次程序性赋值
+        // 被当成「没变化」而早退 ⇒ 列表不按词过滤，恰好制造本类自己声称要防的那种
+        // 「搜索框里有字、列表却没过滤」。**交给监听去同步并触发刷新**即可。
         savedInstanceState?.getString(KEY_SEARCH)?.takeIf { it.isNotEmpty() }?.let { saved ->
-            keyword = saved
-            binding.searchInput.setText(saved) // 触发输入监听 → 按恢复的词过滤
+            binding.searchInput.setText(saved) // 监听里会同步 keyword 并 scheduleSearch()
         }
     }
 
