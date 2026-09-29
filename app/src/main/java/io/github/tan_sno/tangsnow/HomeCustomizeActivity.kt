@@ -168,8 +168,11 @@ class HomeCustomizeActivity : AppCompatActivity() {
     private fun copyImageToInternal(uri: Uri): Uri? {
         val dir = HomeImageFile.dir(this)
         dir.mkdirs()
-        // 原子唯一名交给文件系统（旧写法 `bg-<毫秒>.jpg` 同毫秒会撞同一路径）
-        val out = File.createTempFile("bg-", ".jpg", dir)
+        // 原子唯一名交给文件系统（旧写法 `bg-<毫秒>.jpg` 同毫秒会撞同一路径）。
+        // ⚠️ 必须取空而不是直接调：createTempFile **会抛** IOException（磁盘满 / 目录不可写），
+        //    而这里是协程体里唯一没有 try 兜住的调用 —— 抛出会穿出 withContext 落进
+        //    lifecycleScope.launch（无 CoroutineExceptionHandler）⇒ 应用崩溃。
+        val out = runCatching { File.createTempFile("bg-", ".jpg", dir) }.getOrNull() ?: return null
         return try {
             contentResolver.openInputStream(uri)?.use { input ->
                 out.outputStream().buffered().use { sink ->

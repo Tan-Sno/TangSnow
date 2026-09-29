@@ -627,7 +627,8 @@ object DownloadRepo {
                 ?: return@withContext null
             // uniqueFile 用 createNewFile 原子占位；写失败必须把占位文件删掉，否则 Downloads
             // 目录里留下 0 字节 / 半截文件，而且从未登记 ⇒ 应用内「下载」页看不到、也删不掉。
-            val out = uniqueFile(dir, fileName)
+            // 建不出文件（磁盘满 / 目录不可写）= 本次落盘失败，按既有的「null = 失败」契约返回。
+            val out = uniqueFile(dir, fileName) ?: return@withContext null
             try {
                 out.outputStream().use(write)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -770,8 +771,24 @@ object DownloadRepo {
                 ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
         }.getOrNull()
 
-    /** 同目录下不重复的文件名（a.ext → a (1).ext）。原子占位式：并发下载不会互相截断 */
-    private fun uniqueFile(dir: java.io.File, name: String): java.io.File {
+    /**
+     * 同目录下不重复的文件名（a.ext → a (1).ext）。**建不出文件时返回 null**（磁盘满 / 目录不可写）。
+     *
+     * 兜底必须包在**函数边界**，不能让循环里的 `createNewFile` 逐次吞异常：那样磁盘满时
+     * 每轮都抛、都被吞成 false ⇒ `i++` 无限重试 ⇒ **死循环**。故拆成两个函数：
+     * [createUnique] 保持原逻辑、失败照抛；这里只负责把「抛」翻译成「本次落盘失败」。
+     */
+    private fun uniqueFile(dir: java.io.File, name: String): java.io.File? =
+        try {
+            createUnique(dir, name)
+        } catch (e: java.io.IOException) {
+            null
+        } catch (e: SecurityException) {
+            null
+        }
+
+    /** [uniqueFile] 的实现主体：建不出文件时抛 IOException / SecurityException（由调用方翻译成 null） */
+    private fun createUnique(dir: java.io.File, name: String): java.io.File {
         // createNewFile 是原子操作：先占位者得。旧的「exists() 检查 → 创建」两步间
         // 有 TOCTOU 窗口 —— API 26-28 两个并发同名下载会选中同一路径，后者截断
         // 前者正在写的文件造成损坏（API 29+ 走 MediaStore 由系统去重，无此问题）。

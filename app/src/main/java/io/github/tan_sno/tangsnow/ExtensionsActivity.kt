@@ -590,7 +590,9 @@ class ExtensionsActivity : AppCompatActivity() {
         // 原子唯一名（与 ExtInstallCoordinator 的 `install-` 同款）：旧写法 `import-<毫秒>`
         // 在同毫秒两次导入时会算出同一路径，后者截断前者正在写的包。
         // 前缀 `import-` 是上面陈旧残包清理的判据，必须保留。
-        val out = File.createTempFile("import-", ".xpi", dir)
+        // ⚠️ 必须取空而不是直接调：createTempFile **会抛** IOException（磁盘满 / 目录不可写），
+        //    而调用链上没有 try 兜住它 —— 抛出会穿出协程变成崩溃；建不出来等价于「这次导入失败」。
+        val out = runCatching { File.createTempFile("import-", ".xpi", dir) }.getOrNull() ?: return null
         return try {
             // 手动流式复制并设体积上限：本地文件来源不受控，防超大文件/解压炸弹类填满缓存
             val copied = contentResolver.openInputStream(uri)?.use { input ->
