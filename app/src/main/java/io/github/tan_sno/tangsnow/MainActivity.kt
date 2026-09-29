@@ -56,6 +56,7 @@ import io.github.tan_sno.tangsnow.ui.makeSheetRow
 import io.github.tan_sno.tangsnow.ui.makeSheetTextRow
 import io.github.tan_sno.tangsnow.ui.makeThinDivider
 import io.github.tan_sno.tangsnow.ui.showSelectionPopup
+import io.github.tan_sno.tangsnow.util.HomeImageFile
 import io.github.tan_sno.tangsnow.util.SecureScreen
 import io.github.tan_sno.tangsnow.util.UrlUtils
 import io.github.tan_sno.tangsnow.util.dp
@@ -960,9 +961,13 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 // 失效（含「无异常但拿不到位图」= 该 URI 不是图片）：清配置并回退极简。
                 // 直接重跑 applyHomeStyle()，让品牌区显隐与瓦片标签底色一并回到极简的一致状态
                 // （此前只改背景色，品牌区仍按 onImage 隐藏着，属另一处不一致）。
+                val stale = prefs.homeImageUri
                 prefs.homeImageUri = null
                 prefs.homeStyle = PreferenceStore.STYLE_PLAIN
                 applyHomeStyle()
+                // 副本也要删：只清偏好会把文件永久留在 filesDir/home_bg（用户以为已经没了）。
+                // 走与定制页**同一个**出口 —— 否则归属守卫会出现第二份实现，迟早漏一处。
+                HomeImageFile.deleteOnBackgroundThread(this@MainActivity, stale)
                 toast(R.string.home_image_unavailable)
                 return@launch
             }
