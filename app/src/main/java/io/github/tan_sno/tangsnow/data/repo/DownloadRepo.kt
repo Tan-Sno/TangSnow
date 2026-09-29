@@ -112,6 +112,11 @@ object DownloadRepo {
     private const val STATE_FAILED = "fail"
 
     /**
+     * 文件名长度上限（字符数）。超限时由 [truncateKeepingExtension] 保留扩展名并截断主名。
+     */
+    private const val MAX_FILE_NAME_LENGTH = 150
+
+    /**
      * 状态 → 本地化文案资源 id（含 [Item.progressPercent] 占位参数）。
      *
      * 状态字符串是**本对象私有**的实现细节，界面层不该自己复制一份 `"suc"` / `"run"` 去判断
@@ -336,7 +341,11 @@ object DownloadRepo {
     private fun recordStalePromotion(context: Context, entry: StalePromotion) =
         synchronized(recordsLock) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val arr = org.json.JSONArray(prefs.getString(KEY_STALE_PROMOTIONS, "[]"))
+            // 内容损坏时以空队列兜底（与 [sweepStalePromotions] 同口径）：丢弃坏值、追加新条目、
+            // 覆盖写回自愈，绝不因一次解析失败抛穿当前登记流程。
+            val arr = runCatching {
+                org.json.JSONArray(prefs.getString(KEY_STALE_PROMOTIONS, "[]"))
+            }.getOrElse { org.json.JSONArray() }
             arr.put(
                 org.json.JSONObject()
                     .put("uri", entry.uri)
@@ -621,9 +630,15 @@ object DownloadRepo {
             val out = uniqueFile(dir, fileName)
             try {
                 out.outputStream().use(write)
-            } catch (e: Throwable) {
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 取消：清理已占位的半截文件后**原样抛出**（协作式取消语义，与 API 29+ 分支一致）
                 runCatching { out.delete() }
                 throw e
+            } catch (_: Exception) {
+                // 写入失败：文件半截、且从未登记 ⇒ 清掉占位文件并返回「失败」，
+                // **不**把异常抛穿调用方（与上方 API 29+ 分支的 catch(_: Exception) 逐字对齐）
+                runCatching { out.delete() }
+                return@withContext null
             }
             // 记录里存 **file://**，而不是 FileProvider 的 content://。
             //
@@ -779,8 +794,28 @@ object DownloadRepo {
             // 结尾的点与空格在部分文件系统（exFAT/SD 卡）上非法，一并去掉
             .replace(TRAILING_SPACE_OR_DOT, "")
             .trim()
-            .let { if (it.length > 150) it.take(150) else it }
+            .let { truncateKeepingExtension(it, MAX_FILE_NAME_LENGTH) }
         return cleaned.ifBlank { DEFAULT_FILE_NAME }
+    }
+
+    /**
+     * 限长但**保留扩展名**：超限且能识别出合法扩展名时，完整保留 `.ext`、把主名截到剩余可用长度；
+     * 无扩展名、或扩展名本身塞不进上限时，退化为整段截断。
+     *
+     * 为什么必须保留扩展名：下游「可执行文件警示」按**最终文件名**的扩展名判定
+     * （[isExecutableName]），若把 `.apk` / `.exe` 随主名一起截掉，超长名的安装包
+     * 就会被当成普通文件放行 —— 这正是本函数要堵的绕过面。
+     * 清洗（非法字符替换、去结尾点/空格、trim）已在调用点先完成，故此处只在「限长」环节生效。
+     */
+    private fun truncateKeepingExtension(name: String, max: Int): String {
+        if (name.length <= max) return name
+        val dot = name.lastIndexOf('.')
+        // 合法扩展名：存在 '.'、不在首尾、且含 '.' 的扩展名仍小于上限（至少留 1 个主名字符）
+        if (dot > 0 && dot < name.length - 1) {
+            val ext = name.substring(dot)
+            if (ext.length < max) return name.substring(0, max - ext.length) + ext
+        }
+        return name.take(max)
     }
 
     // ------------------------------------------------------------- 查询 / 打开 / 删除
@@ -873,7 +908,7 @@ object DownloadRepo {
                 // 记录就永久消失（文件还在系统下载目录里）。宁可多显示一次，也不要丢记录。
                 Presence.ALIVE, Presence.UNKNOWN -> {
                     kept += m
-                    Item(-1L, m.title, "suc", 100, m.uri, m.mime, managed = true)
+                    Item(-1L, m.title, STATE_SUCCESS, 100, m.uri, m.mime, managed = true)
                 }
                 Presence.GONE -> null
             }
