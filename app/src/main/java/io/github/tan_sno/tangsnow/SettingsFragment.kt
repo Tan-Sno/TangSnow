@@ -54,7 +54,9 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
     override fun onDestroyView() {
         // 清除数据多选、桌面模式确认、开源协议全文……都可能在本页销毁时仍显示着 ——
-        // 不收掉就是 WindowLeaked（本页没有 configChanges，旋屏必重建）
+        // 不收掉就是 WindowLeaked。注意本页**有** configChanges（见 AndroidManifest.xml
+        // 的 SettingsActivity）：旋屏不重建，所以这里兜底的不是旋屏，而是返回、
+        // 被系统回收等真正会销毁视图的路径。
         dialogs.cancelAll()
         updateDialog?.dismiss()
         updateDialog = null
