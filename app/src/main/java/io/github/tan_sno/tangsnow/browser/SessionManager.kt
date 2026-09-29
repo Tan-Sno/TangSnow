@@ -437,20 +437,6 @@ class BrowserSessionManager private constructor(
     }
 
     /**
-     * 安静地移除一个“非活动”标签并延迟关闭其会话（桌面/移动重建时的旧会话收尾）。
-     * 与 [closeTab] 的区别：不做活动标签回退、不触碰 UI；只在该标签确实存在且
-     * 仍非活动时才执行，避免误关新会话或重复关闭。
-     */
-    fun closeTabQuiet(tab: Tab) {
-        if (tab === active) return
-        if (tab !in tabs) return
-        tabs.remove(tab)
-        stateCache.remove(tab.id)
-        releasePreview(tab)
-        post { runCatching { tab.session.close() } }
-    }
-
-    /**
      * 关闭全部无痕标签。
      * @return 关闭后的活动标签（普通标签）；若已无任何标签则返回 null
      */

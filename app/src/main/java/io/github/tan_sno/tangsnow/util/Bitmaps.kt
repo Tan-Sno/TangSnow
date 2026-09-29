@@ -62,6 +62,10 @@ object Bitmaps {
         maxPixels: Long = MAX_PIXELS,
     ): Int {
         if (outWidth <= 0 || outHeight <= 0) return 1
+        // 下界守卫：reqW / reqH 非正时「不小于目标尺寸」恒真，采样会一路翻倍到 Int 溢出，
+        // 下一轮 `sample * 2 == 0` 触发除零（ArithmeticException）。当前三个调用点都传正值，
+        // 这里防的是将来新增调用点时踩到。
+        if (reqW <= 0 || reqH <= 0) return 1
         var sample = 1
         while (outWidth / (sample * 2) >= reqW && outHeight / (sample * 2) >= reqH) {
             sample *= 2
