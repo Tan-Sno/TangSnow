@@ -131,6 +131,29 @@ object UpdateChecker {
     }
 
     /**
+     * 校验跳转 URL 是否为可信目标：scheme 为 https（忽略大小写）且 host 为 github.com。
+     * 用于拦截 `browser_download_url` 中可能夹带的恶意跳转。
+     *
+     * 只解析、不判定：解析交给框架的 `android.net.Uri`（本就只在真实运行时被调用），判定收在
+     * [isTrustedApkTarget] 这个纯函数里 —— `android.net.Uri` 在 JVM 单测里是抛异常的桩
+     * （同 `DownloadRepo.percentDecode` 处写下的约定），判定若留在这个方法体内就永远测不到。
+     */
+    internal fun isTrustedApkUrl(url: String): Boolean {
+        if (url.isBlank()) return false
+        val uri = runCatching { android.net.Uri.parse(url) }.getOrNull() ?: return false
+        return isTrustedApkTarget(uri.scheme, uri.host)
+    }
+
+    /**
+     * [isTrustedApkUrl] 的纯判定核心：https（忽略大小写）且 host **严格等于** github.com。
+     *
+     * 必须严格等值而不是 `startsWith` / `contains`：`github.com.evil.example` 与
+     * `github.com.cn` 都能骗过前缀/包含式判断。
+     */
+    internal fun isTrustedApkTarget(scheme: String?, host: String?): Boolean =
+        scheme.equals("https", ignoreCase = true) && host.equals("github.com", ignoreCase = true)
+
+    /**
      * 远端版本是否比本机新。
      *
      * 逐段按**整数**比较（`2.10.0` > `2.9.0`；若按字符串比会得出相反结论）。

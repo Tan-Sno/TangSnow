@@ -577,7 +577,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
         // `requireContext()` 会再抛一个 IllegalStateException，等于把一次「打不开下载」
         // 升级成崩溃。取到 null 就静默返回，不再制造第二个问题。
         val ctx = context ?: return
-        val url = release.apkUrl ?: UpdateChecker.RELEASES_URL
+        val url = release.apkUrl?.takeIf { UpdateChecker.isTrustedApkUrl(it) } ?: UpdateChecker.RELEASES_URL
         runCatching {
             ctx.startActivity(updateIntent(ctx, url))
         }.onFailure {
