@@ -63,18 +63,23 @@ class BrowserDb private constructor(context: Context) :
     }
 
     /**
-     * 收藏：URL 已存在时只刷新标题并保留原收藏时间（重复收藏不重置 created_at，
-     * 也不会因 CONFLICT_REPLACE 重建 _id 而跳到列表最前）；不存在才新建。
+     * 收藏：URL 已存在且**新标题非空**时只刷新标题并保留原收藏时间（重复收藏不重置
+     * created_at，也不会因 CONFLICT_REPLACE 重建 _id 而跳到列表最前）；标题为空时不动
+     * 已有标题 —— 导入路径会送来空标题，无条件 update 会把已有标题静默清空；不存在才新建。
      * 更新/插入间采用先 UPDATE 后 INSERT，即使并发也只会落一行。
      */
     fun insertBookmark(url: String, title: String) {
         val db = db()
-        val cvTitle = ContentValues().apply { put("title", title) }
-        val updated = db.update("bookmarks", cvTitle, "url = ?", arrayOf(url))
+        // 空标题不覆盖已有标题：导入路径会送来空标题（缺 </a> 时 sanitize 保留 ""），
+        // 此前「URL 存在就无条件 update title」会把已有标题静默清空 —— 这是有损的。
+        val updated = if (title.isNotBlank()) {
+            val cvTitle = ContentValues().apply { put("title", title) }
+            db.update("bookmarks", cvTitle, "url = ?", arrayOf(url))
+        } else 0
         if (updated == 0) {
             val cv = ContentValues().apply {
                 put("url", url)
-                put("title", title)
+                put("title", title.takeIf { it.isNotBlank() } ?: "")
                 put("created_at", System.currentTimeMillis())
             }
             // IGNORE：与其它并发写入竞争时宁可跳过，也不覆盖已存在的原收藏
