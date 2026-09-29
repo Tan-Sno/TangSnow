@@ -24,16 +24,18 @@
 
 # 调试级日志（v/d/i）在 release 一律剥离 —— **防回归闸门**。
 #
-# 当前事实口径（2026-09-26 全仓清点，别把这段当成「已经剥了什么」）：
-#  · 全仓**没有任何** Log.v / Log.d 调用点；唯一的 Log.i（SessionManager 的权限
-#    拒绝留痕）在 `if (BuildConfig.DEBUG)` 内 —— R8 常量折叠后连同字符串一起消失。
-#    因此本规则在当前代码上是 **no-op**，保留它是为了防回归：将来新增 v/d/i 调用点
-#    时无需再想起这条纪律。
-#  · release 里实际保留的是 Log.w ×5（MainActivity 三处：主页图解码两处 +
-#    局域网权限请求启动失败一处；ClearDataUseCase 两处：kernel clear failed /
-#    local clear failed）与 Log.e ×2（LegalActivity），消息均不含 URL / 搜索词；
-#    ExtensionCatalog 与 ExtensionsActivity 的 Log.w 共 3 处都在 BuildConfig.DEBUG
-#    门内，release 不存在。
+# 当前事实口径（2026-09-26 首次清点，2026-09-29 复核更正；别把这段当成「已经剥了什么」）：
+#  · release 里实际保留的是 Log.w ×5（MainActivity 三处：主页图解码两处 + 局域网权限
+#    请求启动失败一处；ClearDataUseCase 两处：kernel clear failed / local clear failed）
+#    与 Log.e ×2（LegalActivity），消息均不含 URL / 搜索词。
+#  · 另有 Log.d ×2（SessionManager 与 ExtensionPrompts 各一处，都是「GeckoResult 已被内核
+#    结算、本次应答丢弃」的留痕）与 Log.i ×1（SessionManager 的权限拒绝留痕，它另在
+#    BuildConfig.DEBUG 门内）：d / i / v 三级一律靠下面的剥离规则移除，release 不存在。
+#    Log.v 全仓 0 处。
+#  · 全仓 Log.w 调用点共 8 处 —— 上面会进 release 的 5 处之外，ExtensionCatalog 与
+#    ExtensionsActivity 的 3 处都在 BuildConfig.DEBUG 门内，release 不存在。
+#  · 以上数字由 ProguardLogRuleConsistencyTest 钉住：改了日志调用点却忘同步本段，
+#    testDebugUnitTest 会直接红。
 #  · **约定**：网络类异常的 message（常带完整下载 URL）不得进 w/e —— 网络失败
 #    统一走「分类 → 人话」的路径（见 ExtensionsActivity.describeInstallError），
 #    原始异常只在 debug 构建落日志。
