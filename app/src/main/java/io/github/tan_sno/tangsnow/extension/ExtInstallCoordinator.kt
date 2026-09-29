@@ -214,11 +214,17 @@ class ExtInstallCoordinator(
         val client = AppHttp.client.newBuilder()
             .callTimeout(DOWNLOAD_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
             .build()
-        for ((index, url) in urls.withIndex()) {
+        for (url in urls) {
             if (!url.startsWith("${ExtensionCatalog.AMO_ORIGIN}/", ignoreCase = true)) {
                 continue
             }
-            val out = File(dir, "$TMP_PREFIX${System.currentTimeMillis()}-$index.xpi")
+            // 临时包名交给文件系统保证唯一：旧写法 `currentTimeMillis()-index` 在两个并发作业
+            // **同毫秒、同下标**时会算出同一路径，双方 outputStream() 互相截断写坏
+            // （作业表按 key 去重 ⇒ 不同 slug 的作业本就允许并发，见上方陈旧残包清理的注释）。
+            // 前缀必须保留 TMP_PREFIX —— 上方清理按 startsWith(TMP_PREFIX) 识别残包。
+            // 建不出文件（磁盘满 / 无权限）等价于本候选不可用，跳过继续试下一个候选。
+            val out = runCatching { File.createTempFile(TMP_PREFIX, ".xpi", dir) }.getOrNull()
+                ?: continue
             try {
                 client.newCall(AppHttp.get(url).build()).execute().use { resp ->
                     if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
