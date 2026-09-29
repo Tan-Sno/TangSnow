@@ -155,31 +155,44 @@ class ExtInstallCoordinator(
                 }
             } catch (e: TimeoutCancellationException) {
                 // 总预算耗尽 = **兜底**（每一步都有独立上限，正常情况下跑不到这里）
-                settle(source.key)
+                settle(source.key, coroutineContext[Job])
                 withContext(Dispatchers.Main) { cb.onFailure(source, InstallTimeoutException(Stage.TOTAL)) }
             } catch (e: CancellationException) {
                 // 宿主销毁：静默收尾（孤儿态由列表页 onResume 的自愈逻辑清理）
-                settle(source.key)
+                settle(source.key, coroutineContext[Job])
                 throw e
             } catch (e: Throwable) {
-                settle(source.key)
+                settle(source.key, coroutineContext[Job])
                 withContext(Dispatchers.Main) { cb.onFailure(source, e) }
             }
         }
+        // ⚠️ 上面三处传的是 `coroutineContext[Job]`（即本协程自身的 Job），**不能**写成
+        // 外层的 `job` —— `job` 正在由这条 launch 的返回值初始化，在它自己的 lambda 里
+        // 引用不到（Unresolved reference）。而 `launch` 的 block 接收者是 CoroutineScope，
+        // 其 coroutineContext 里的 Job 就是这个协程的 Job，与 `job` 是同一个对象。
         jobs[source.key] = job
         job.start()
         return true
     }
 
+    /** 一次安装的终态收口：摘除作业记录 + 投递结果。带**一次性投递闸**保证 onSuccess/onFailure 恰好一次。 */
     private suspend fun onDone(source: Source, cb: Callback, ext: WebExtension?) {
+        // 在协程体内调用，job 即「本作业自身」，走无身份比对的兜底收口
         settle(source.key)
-        withContext(Dispatchers.Main) { cb.onSuccess(source, ext) }
+        // 一次性投递闸：UI 回调自身异常不得改变安装结果、不得触发外层 catch
+        withContext(Dispatchers.Main) {
+            runCatching { cb.onSuccess(source, ext) }
+        }
     }
 
     /** 宿主销毁时调用：取消全部在途安装 */
     fun cancelAll() {
         jobs.values.forEach { it.cancel() }
-        jobs.keys.toList().forEach { settle(it) }
+        // 逐个比对后摘除：旧作业迟到的 settle 不会误摘同键新作业
+        jobs.keys.toList().forEach { key ->
+            val job = jobs[key]
+            if (job != null) settle(key, job)
+        }
     }
 
     /**
@@ -347,9 +360,14 @@ class ExtInstallCoordinator(
         return ext
     }
 
-    /** 一次安装的终态收口：摘除作业记录 */
+    /** 一次安装的终态收口：摘除作业记录（无身份比对的兜底收口，用于协程体内） */
     private fun settle(key: String) {
         jobs.remove(key)
+    }
+
+    /** 一次安装的终态收口：摘除作业记录。仅当 [job] 与当前登记为同一作业时才摘除（避免旧作业迟到误摘同键新作业）。 */
+    private fun settle(key: String, job: Job?) {
+        if (job == null) jobs.remove(key) else jobs.remove(key, job)
     }
 
     companion object {

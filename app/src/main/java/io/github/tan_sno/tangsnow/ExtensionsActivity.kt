@@ -142,13 +142,13 @@ class ExtensionsActivity : AppCompatActivity() {
         runCatching { installCoordinatorRef?.cancelAll() }
         importingFile = false
         urlInstalling = false
-        // lifecycleScope 在 onDestroy 时已取消，清理挪到一次性后台线程；
-        // 先在主线程取好 File 再进线程 —— 避免后台闭包短暂持有已销毁的 Activity。
-        // 只删缓存里的导入残包，失败无碍（下次导入前还会再清一遍）
+        // 只删缓存里的**陈旧**导入残包（与 copyImportedXpi 同款时间筛），失败无碍
+        // 此前无条件删所有 import- 包，会误删内核正在读取的在途包（见 copyImportedXpi:581-585 注释）
         val extsCacheDir = File(cacheDir, "exts")
+        val staleBefore = System.currentTimeMillis() - STALE_IMPORT_MS
         Thread({
             runCatching {
-                extsCacheDir.listFiles { f -> f.name.startsWith("import-") }
+                extsCacheDir.listFiles { f -> f.name.startsWith("import-") && f.lastModified() < staleBefore }
                     ?.forEach { it.delete() }
             }
         }, "exts-cleanup").apply { isDaemon = true }.start()
@@ -508,7 +508,8 @@ class ExtensionsActivity : AppCompatActivity() {
         val url = binding.urlInput.text.toString().trim()
         // 与产品口径一致：扩展只走 Mozilla 官方源（AMO），不接受任意第三方地址
         val host = android.net.Uri.parse(url).host.orEmpty()
-        if (!url.startsWith("https://") || !host.equals(ExtensionCatalog.AMO_HOST, ignoreCase = true)) {
+        // scheme 校验必须 ignoreCase：HTTPS://addons.mozilla.org/... 也应放行
+        if (!url.startsWith("https://", ignoreCase = true) || !host.equals(ExtensionCatalog.AMO_HOST, ignoreCase = true)) {
             toast(R.string.extension_url_invalid)
             return
         }
