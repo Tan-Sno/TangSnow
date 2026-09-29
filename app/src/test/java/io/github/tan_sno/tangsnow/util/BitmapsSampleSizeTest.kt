@@ -61,6 +61,16 @@ class BitmapsSampleSizeTest {
     }
 
     @Test
+    fun `目标尺寸非正时返回 1 而不是除零崩溃`() {
+        // reqW / reqH <= 0 会让第一层 while 恒真：采样翻倍到 Int 溢出后 sample * 2 == 0，
+        // 下一轮 outWidth / 0 抛 ArithmeticException。三个调用点当前都传正值，
+        // 本用例防的是将来新增调用点时踩到。
+        assertEquals(1, Bitmaps.requiredSampleSize(4000, 3000, 0, 0, fourMp))
+        assertEquals(1, Bitmaps.requiredSampleSize(4000, 3000, -1, 100, fourMp))
+        assertEquals(1, Bitmaps.requiredSampleSize(4000, 3000, 100, -1, fourMp))
+    }
+
+    @Test
     fun `上限极大时退化为纯按尺寸采样`() {
         assertEquals(4, Bitmaps.requiredSampleSize(4096, 4096, 1024, 1024, Long.MAX_VALUE))
     }
