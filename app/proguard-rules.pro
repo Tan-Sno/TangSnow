@@ -29,10 +29,11 @@
 #    拒绝留痕）在 `if (BuildConfig.DEBUG)` 内 —— R8 常量折叠后连同字符串一起消失。
 #    因此本规则在当前代码上是 **no-op**，保留它是为了防回归：将来新增 v/d/i 调用点
 #    时无需再想起这条纪律。
-#  · release 里实际保留的是 Log.w ×4（MainActivity 主页图解码两处 + ClearDataUseCase 两处：
-#    kernel clear failed / local clear failed）与 Log.e ×2（LegalActivity），消息均不含
-#    URL / 搜索词；ExtensionCatalog 与 ExtensionsActivity 的 Log.w 共 3 处都在
-#    BuildConfig.DEBUG 门内，release 不存在。
+#  · release 里实际保留的是 Log.w ×5（MainActivity 三处：主页图解码两处 +
+#    局域网权限请求启动失败一处；ClearDataUseCase 两处：kernel clear failed /
+#    local clear failed）与 Log.e ×2（LegalActivity），消息均不含 URL / 搜索词；
+#    ExtensionCatalog 与 ExtensionsActivity 的 Log.w 共 3 处都在 BuildConfig.DEBUG
+#    门内，release 不存在。
 #  · **约定**：网络类异常的 message（常带完整下载 URL）不得进 w/e —— 网络失败
 #    统一走「分类 → 人话」的路径（见 ExtensionsActivity.describeInstallError），
 #    原始异常只在 debug 构建落日志。
