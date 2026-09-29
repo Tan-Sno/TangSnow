@@ -587,7 +587,10 @@ class ExtensionsActivity : AppCompatActivity() {
         val staleBefore = System.currentTimeMillis() - STALE_IMPORT_MS
         dir.listFiles { f -> f.name.startsWith("import-") && f.lastModified() < staleBefore }
             ?.forEach { runCatching { it.delete() } }
-        val out = File(dir, "import-${System.currentTimeMillis()}.xpi")
+        // 原子唯一名（与 ExtInstallCoordinator 的 `install-` 同款）：旧写法 `import-<毫秒>`
+        // 在同毫秒两次导入时会算出同一路径，后者截断前者正在写的包。
+        // 前缀 `import-` 是上面陈旧残包清理的判据，必须保留。
+        val out = File.createTempFile("import-", ".xpi", dir)
         return try {
             // 手动流式复制并设体积上限：本地文件来源不受控，防超大文件/解压炸弹类填满缓存
             val copied = contentResolver.openInputStream(uri)?.use { input ->

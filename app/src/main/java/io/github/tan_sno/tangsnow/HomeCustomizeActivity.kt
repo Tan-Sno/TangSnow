@@ -175,11 +175,18 @@ class HomeCustomizeActivity : AppCompatActivity() {
         runCatching { File(path).delete() }
     }
 
-    /** 把所选图片复制到应用内 filesDir 子目录；失败返回 null。 */
+    /**
+     * 把所选图片复制到应用内 filesDir 子目录；失败返回 null。
+     *
+     * 刻意**不设体积上限**：这是用户自己挑的背景图，加阈值就等于「某些大图设不上背景」——
+     * 而本改动之前（只存相册 URI、不复制）它是能用的，属**新增的可见回退**。
+     * 导入 `.xpi` 那条路设上限是因为来源不受控（防解压炸弹 / 填满缓存），这里来源是系统照片选择器。
+     */
     private fun copyImageToInternal(uri: Uri): Uri? {
         val dir = File(filesDir, HOME_IMAGE_DIR)
         dir.mkdirs()
-        val out = File(dir, "bg-${System.currentTimeMillis()}.jpg")
+        // 原子唯一名交给文件系统（旧写法 `bg-<毫秒>.jpg` 同毫秒会撞同一路径）
+        val out = File.createTempFile("bg-", ".jpg", dir)
         return try {
             contentResolver.openInputStream(uri)?.use { input ->
                 out.outputStream().buffered().use { sink ->
