@@ -154,4 +154,33 @@ class UpdateCheckerTest {
         )
         assertNull(UpdateChecker.pickAsset(listOf("mapping.txt", "notes.md"), listOf("arm64-v8a")))
     }
+
+    // ------------------------------------------------------- isTrustedApkTarget
+
+    @Test
+    fun `只信任 https 且 host 严格等于 github 主域`() {
+        assertTrue(UpdateChecker.isTrustedApkTarget("https", "github.com"))
+        // scheme 与 host 都按大小写不敏感处理（DNS 与 URL scheme 本就如此）
+        assertTrue(UpdateChecker.isTrustedApkTarget("HTTPS", "GitHub.com"))
+        assertTrue(UpdateChecker.isTrustedApkTarget("https", "GITHUB.COM"))
+    }
+
+    @Test
+    fun `非 https 与域名伪装一律拒绝`() {
+        // 严格等值：下面这些都能骗过 startsWith / contains 式判断，必须被拒。
+        // 注：URL → (scheme, host) 这一步由框架的 android.net.Uri 完成（在 JVM 单测里是
+        // 抛异常的桩，故不在本用例范围内）；这里钉的是**判定逻辑**本身。
+        listOf(
+            "http" to "github.com",                     // 非 https
+            null to "github.com",                       // 解析不出 scheme
+            "https" to null,                            // 解析不出 host
+            "https" to "github.com.evil.example",       // 后缀伪装
+            "https" to "github.com.cn",                 // 同前缀、不同域
+            "https" to "evil.example",                  // 完全无关
+            "https" to "objects.githubusercontent.com", // release 资产的上层入口不是它，一律不信
+            "javascript" to null,
+        ).forEach { (scheme, host) ->
+            assertFalse("不应信任 scheme=$scheme host=$host", UpdateChecker.isTrustedApkTarget(scheme, host))
+        }
+    }
 }
