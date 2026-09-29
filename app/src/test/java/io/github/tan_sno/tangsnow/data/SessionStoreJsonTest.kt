@@ -19,6 +19,16 @@ class SessionStoreJsonTest {
         activeIndex: Int = 0,
     ) = SessionStore.Snapshot(activeIndex, tabs.toList())
 
+    /**
+     * 往返解析：`buildJson` 的输出必须能被 `parse` 读回。
+     *
+     * 用 `?: error(...)` 而不是非空断言 —— 本仓不用非空断言（见 `ScanImageActivity` 里那句说明），
+     * 而且这条消息能直接指出「被破坏的是往返前提」，比一个裸 NPE 好定位得多。
+     */
+    private fun roundTrip(s: SessionStore.Snapshot): SessionStore.Snapshot =
+        SessionStore.parse(SessionStore.buildJson(s))
+            ?: error("buildJson 的输出必须能被 parse 读回（往返前提被破坏）")
+
     @Test
     fun `往返保留全部字段`() {
         val s = snap(
@@ -26,7 +36,7 @@ class SessionStoreJsonTest {
             SessionStore.TabSnapshot(null, "空白标签", null),
             activeIndex = 1,
         )
-        val parsed = SessionStore.parse(SessionStore.buildJson(s))!!
+        val parsed = roundTrip(s)
         assertEquals(1, parsed.activeIndex)
         assertEquals(2, parsed.tabs.size)
         assertEquals("https://example.com/a", parsed.tabs[0].url)
@@ -41,7 +51,7 @@ class SessionStoreJsonTest {
         val s = snap(
             SessionStore.TabSnapshot("https://例子.测试/路径?q=中文", "标题带\"引号<尖>", "{}"),
         )
-        val parsed = SessionStore.parse(SessionStore.buildJson(s))!!
+        val parsed = roundTrip(s)
         assertEquals("https://例子.测试/路径?q=中文", parsed.tabs[0].url)
         assertEquals("标题带\"引号<尖>", parsed.tabs[0].title)
     }
@@ -49,7 +59,7 @@ class SessionStoreJsonTest {
     @Test
     fun `空串字段归一为 null`() {
         // buildJson 落盘时空串 → parse 读回 null 的归一是「空白标签恢复时回退 loadUri」的前提
-        val parsed = SessionStore.parse(SessionStore.buildJson(snap(SessionStore.TabSnapshot("", "", ""))))!!
+        val parsed = roundTrip(snap(SessionStore.TabSnapshot("", "", "")))
         assertNull(parsed.tabs[0].url)
         assertEquals("", parsed.tabs[0].title)
         assertNull(parsed.tabs[0].sessionState)
@@ -57,7 +67,7 @@ class SessionStoreJsonTest {
 
     @Test
     fun `空标签列表合法`() {
-        val parsed = SessionStore.parse(SessionStore.buildJson(snap()))!!
+        val parsed = roundTrip(snap())
         assertEquals(0, parsed.tabs.size)
         assertEquals(0, parsed.activeIndex)
     }
