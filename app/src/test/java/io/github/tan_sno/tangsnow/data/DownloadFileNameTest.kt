@@ -132,6 +132,21 @@ class DownloadFileNameTest {
     }
 
     @Test
+    fun `超长文件名截断后仍保留扩展名（否则可执行警示会被绕过）`() {
+        // 「可执行 / 安装类文件」警示按**最终文件名**的扩展名判定（见 isExecutableName）。
+        // 若限长时把扩展名连同主名一起截掉，一个 400 字符长的 .apk 就会被当成普通文件放行
+        // —— 这正是 truncateKeepingExtension 要堵的绕过面。
+        val name = DownloadRepo.parseFileName("attachment; filename=\"${"x".repeat(400)}.apk\"", null)
+        assertEquals(150, name.length)
+        assertTrue("扩展名必须保留，实际 $name", name.endsWith(".apk"))
+        assertTrue("截断后必须仍判为可执行", DownloadRepo.isExecutableName(name))
+
+        // 无扩展名时退化为整段截断（不得抛异常、不得超长）
+        val noExt = DownloadRepo.parseFileName("attachment; filename=\"${"y".repeat(400)}\"", null)
+        assertEquals(150, noExt.length)
+    }
+
+    @Test
     fun `清洗后为空则回到兜底名`() {
         assertEquals("download", DownloadRepo.parseFileName("attachment; filename=\"...\"", null))
     }
