@@ -1,6 +1,7 @@
 package io.github.tan_sno.tangsnow.data
 
 import android.content.Context
+import android.os.Build
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 
@@ -9,15 +10,19 @@ import androidx.core.os.LocaleListCompat
  * 通过 AppCompatDelegate 的 per-app locales 接口落地，
  * 不写 manifest 也能在所有 Activity 上即时刷新。
  *
- * ## 为什么需要"已应用标记"
- * Android 13+ 允许用户在**系统设置**里单独为本应用指定语言（per-app language），
- * 该选择由系统保存。其存储位置与应用内偏好是两套东西，于是出现冲突：
- * 用户在系统里把棠雪设为英文，而应用内偏好仍是「跟随系统」（空值）；
- * 若每次冷启动都无条件 `setApplicationLocales(空列表)`，系统里的选择会被抹掉。
+ * ## 为什么需要"已应用标记"，以及它为什么**只**对 API 33+ 生效
+ * Android 13（API 33）允许用户在**系统设置**里单独为本应用指定语言（per-app language），
+ * 该选择由**系统**保存，与应用内偏好是两套东西：用户在系统里把棠雪设为英文，
+ * 而应用内偏好仍是「跟随系统」（空值）；若每次冷启动都无条件
+ * `setApplicationLocales(空列表)`，系统里的选择会被抹掉。因此这里记录
+ * "上次由本应用应用过的语言值"（独立的 SharedPreferences，不占应用设置项），
+ * 只有偏好值与它不同才真正调用系统接口 —— 用户在系统设置里的选择因此得以保留。
  *
- * 因此这里记录"上次由本应用应用过的语言值"（存在独立的 SharedPreferences 里，
- * 不占用应用设置项）：只有偏好值与它不同才真正调用系统接口。
- * 用户在系统设置里的选择因此得以保留，直到用户在应用内重新选择语言为止。
+ * ⚠️ API 32 及以下**没有**可被覆盖的系统级存储：`setApplicationLocales` 只对当前进程生效，
+ * 而 AppCompat 仅在清单声明了 `AppLocalesMetadataHolderService` + `autoStoreLocales` 时
+ * 才代为落盘（本应用未声明）⇒ 这一区间"已应用标记"必须被忽略、每次都重放，
+ * 否则重启后不再调用系统接口，用户选的 zh/en 会静默回退成系统语言且不自愈。
+ * 判定收在 [needReapply] 一处。
  */
 object LocaleManager {
 
@@ -36,14 +41,26 @@ object LocaleManager {
 
     /**
      * 冷启动应用偏好里的语言。
-     * 仅在偏好值与上次已应用值不同时才调用系统接口，避免覆盖用户在系统设置里的
-     * per-app 语言选择（详见类注释）。
+     * 是否真的调用系统接口由 [needReapply] 判定（详见类注释与该方法）。
      */
     fun apply(context: Context, prefs: PreferenceStore) {
         val tag = normalize(prefs.appLocale)
-        if (tag == appliedTag(context)) return
+        if (!needReapply(Build.VERSION.SDK_INT, tag, appliedTag(context))) return
         applyTag(context, tag)
     }
+
+    /**
+     * 冷启动时是否必须重新调用 `AppCompatDelegate.setApplicationLocales`。
+     *
+     * - **API 33+**：该接口落到**系统级** per-app language，用户可能在系统设置里改过；
+     *   仅当偏好值与上次已应用值不同才重放，以免抹掉用户的选择。
+     * - **API ≤ 32**：没有系统级存储（见类注释），必须**每次冷启动**重放；
+     *   若沿用"与已应用值相同就跳过"，用户显式选过的语言会在进程重启后静默回退。
+     *
+     * 抽成纯函数（sdkInt 由调用方传入而非直接读 Build）以便 JVM 单测钉住真值表。
+     */
+    internal fun needReapply(sdkInt: Int, tag: String, appliedTag: String?): Boolean =
+        sdkInt < Build.VERSION_CODES.TIRAMISU || tag != appliedTag
 
     /**
      * 直接按 [tag] 应用语言（用户在应用内显式选择时调用）。

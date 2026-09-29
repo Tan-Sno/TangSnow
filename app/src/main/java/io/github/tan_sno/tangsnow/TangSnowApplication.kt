@@ -33,8 +33,9 @@ class TangSnowApplication : Application() {
         // 本地崩溃日志（仅落盘留存，供「关于 → 崩溃报告」查看/分享；不上传）
         io.github.tan_sno.tangsnow.util.CrashLogger.install(this)
         // 应用用户上次选择的语言（系统 / 中文 / English）。
-        // 仅在偏好与"上次已应用值"不同时才调用系统接口，避免覆盖用户在
-        // 系统设置里为本应用单独指定的语言（Android 13+ per-app language）。
+        // API 33+ 仅在偏好与"上次已应用值"不同时才调用系统接口，避免覆盖用户在系统设置里为本
+        // 应用单独指定的语言（per-app language）；API ≤ 32 没有该系统级存储，每次冷启动都重放，
+        // 否则用户选过的语言会在进程重启后静默回退（判定见 LocaleManager.needReapply）。
         val prefs = PreferenceStore(this)
         LocaleManager.apply(this, prefs)
         // 会话快照后台预读：供 MainActivity 冷启动时同步取用，

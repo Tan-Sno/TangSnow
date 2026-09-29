@@ -70,4 +70,44 @@ class LocaleManagerTest {
             )
         }
     }
+
+    // ------------------------------------------- 冷启动是否必须重放语言设置（needReapply）
+
+    @Test
+    fun `API 32 及以下每次冷启动都必须重放，忽略已应用标记`() {
+        // 该区间没有系统级 per-app language：跳过重放 => 用户选的 zh/en 在进程重启后
+        // 静默回退成系统语言，且不会自愈（单测钉的就是这条回归）。
+        for (sdk in listOf(26, 28, 30, 31, 32)) {
+            assertTrue(
+                "API $sdk 上偏好与已应用值相同也**必须**重放",
+                LocaleManager.needReapply(sdk, tag = "en", appliedTag = "en"),
+            )
+            assertTrue(
+                "API $sdk 上从未应用过必须重放",
+                LocaleManager.needReapply(sdk, tag = "en", appliedTag = null),
+            )
+            assertTrue(
+                "API $sdk 上跟随系统（空值）也必须重放",
+                LocaleManager.needReapply(sdk, tag = "", appliedTag = ""),
+            )
+        }
+    }
+
+    @Test
+    fun `API 33 及以上只在偏好与已应用值不同时才重放`() {
+        for (sdk in listOf(33, 34, 37)) {
+            assertFalse(
+                "API $sdk 上不该重放 —— 否则会抹掉用户在系统设置里的 per-app 语言选择",
+                LocaleManager.needReapply(sdk, tag = "en", appliedTag = "en"),
+            )
+            assertTrue(
+                "API $sdk 上用户改了应用内偏好，必须重放",
+                LocaleManager.needReapply(sdk, tag = "zh", appliedTag = "en"),
+            )
+            assertTrue(
+                "API $sdk 上从未应用过，必须重放",
+                LocaleManager.needReapply(sdk, tag = "en", appliedTag = null),
+            )
+        }
+    }
 }
