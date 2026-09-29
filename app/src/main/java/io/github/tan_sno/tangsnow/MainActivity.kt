@@ -1607,7 +1607,17 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private fun requestLocalNetworkPromptIfIdle() {
         if (localNetworkPromptInFlight) return
         localNetworkPromptInFlight = true
-        requestLocalNetworkAccess.launch(PERM_ACCESS_LOCAL_NETWORK)
+        try {
+            requestLocalNetworkAccess.launch(PERM_ACCESS_LOCAL_NETWORK)
+        } catch (e: Throwable) {
+            // 启动失败（launcher 已销毁 / 并发 launch）：必须在此复位去重标志，否则标志卡死、
+            // 之后再也发起不了请求。
+            // ⚠️ 刻意**不**用 finally 复位：launch() 只负责派发，结果走 requestLocalNetworkAccess
+            //    的回调 —— 在 launch() 返回时就复位会把「去重」窗口缩到 0，弹窗还挂着时的第二次
+            //    调用会真的并发 launch，正是本守卫要挡的那件事（见上方 KDoc）。成功路径一律由回调复位。
+            localNetworkPromptInFlight = false
+            android.util.Log.w("MainActivity", "local network permission launch failed", e)
+        }
     }
 
     private fun showBrowser() {

@@ -369,15 +369,32 @@ class BrowserSessionManager private constructor(
             val rebuilt = newTabInternal(isPrivate = old.isPrivate)
             rebuilt.title = old.title
             val url = old.url?.takeIf { it.isNotBlank() && !it.startsWith("about:") }
-            if (url != null) {
-                rebuilt.url = url
+            // 迁移旧标签的历史快照：先读后清（与 restoreSession 同范式，避免「刚重建即被杀」写出空快照）
+            val stateJson = stateCache[old.id]
+            if (stateJson != null && url != null) {
+                val ok = runCatching {
+                    val state = GeckoSession.SessionState.fromString(stateJson)
+                        ?: throw IllegalArgumentException("empty session state")
+                    rebuilt.session.restoreState(state)
+                }.isSuccess
+                if (ok) {
+                    rebuilt.url = url
+                    stateCache[rebuilt.id] = stateJson // 回填，避免快照丢失
+                } else {
+                    // 快照损坏时退回 loadUri，与 restoreSession 的失败降级一致
+                    rebuilt.session.loadUri(url)
+                    rebuilt.url = url
+                }
+            } else if (url != null) {
                 rebuilt.session.loadUri(url)
+                rebuilt.url = url
             }
             if (old === oldActive) newActive = rebuilt
         }
         active = newActive
         // 旧会话延迟关闭：它们的文档可能仍在加载/合成中，立刻 close 会触发
         // 引擎迟到事件断言；给一个收尾窗口（即 closeSessionLater 的 400ms）。
+        // 历史快照已在上面迁移完成并回填，此时才移除旧映射（避免「刚重建即被杀」写出空快照）。
         oldTabs.forEach { old ->
             stateCache.remove(old.id)
             releasePreview(old)
@@ -1531,7 +1548,7 @@ class BrowserSessionManager private constructor(
                 .cookiePurging(true)
 
             else -> {
-                // 自定义：只放行用户勾选的分类；至少无任何分类时按关闭处理
+                // 自定义：只放行用户勾选的分类；**无任何分类时按关闭处理**
                 var mask = 0
                 if (prefs.trackingCustomContent) {
                     mask = mask or ContentBlocking.AntiTracking.CONTENT
@@ -1544,7 +1561,10 @@ class BrowserSessionManager private constructor(
                     mask = mask or ContentBlocking.AntiTracking.CRYPTOMINING
                 }
                 builder.antiTracking(mask)
-                val cookie = if (prefs.trackingCustomCookieIsolate) {
+                // 无任何分类（mask == 0）时按「关闭」语义：Cookie 接受全部
+                val cookie = if (mask == 0) {
+                    ContentBlocking.CookieBehavior.ACCEPT_ALL
+                } else if (prefs.trackingCustomCookieIsolate) {
                     ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS
                 } else {
                     ContentBlocking.CookieBehavior.ACCEPT_NON_TRACKERS
