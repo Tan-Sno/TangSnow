@@ -1606,6 +1606,9 @@ class BrowserSessionManager private constructor(
     /** 延迟关闭某个已脱离 tabs 的旧会话（批量重建收尾；不做成员/活动校验） */
     private fun closeSessionLater(session: GeckoSession, delayMs: Long = 400L) {
         mainHandler.postDelayed({
+            // 关过机就不再触碰内核：shutdown() 会把 runtime 也关掉，此时再 close 会话是在
+            // 对已销毁的 runtime 下手（与 shutdown 里摘掉 saveTask 是同一条理由）。
+            if (shutDown) return@postDelayed
             runCatching { session.close() }
         }, delayMs)
     }
