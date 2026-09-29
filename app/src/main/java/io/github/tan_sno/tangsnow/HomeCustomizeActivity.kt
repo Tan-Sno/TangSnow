@@ -25,7 +25,10 @@ import io.github.tan_sno.tangsnow.data.PreferenceStore
 import io.github.tan_sno.tangsnow.databinding.ActivityHomeCustomizeBinding
 import io.github.tan_sno.tangsnow.util.ImageLoader
 import io.github.tan_sno.tangsnow.util.dp
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 定制主页：
@@ -127,22 +130,76 @@ class HomeCustomizeActivity : AppCompatActivity() {
     }
 
     private fun applyPickedImage(uri: Uri) {
-        try {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
-            )
-        } catch (_: Throwable) {
-            // 部分 provider 不支持持久权限（如沙盒选择器临时授权），
-            // 当前进程能读取就行，下次启动若失败会落到 PLAIN 风格（MainActivity 已处理）。
+        // 改为「复制为应用内副本」：与照片选择器的授权模型无关，100% 跨重启有效。
+        // 仅复制成功才写偏好；失败时保持原风格并有失败提示。
+        lifecycleScope.launch {
+            val copied = withContext(Dispatchers.IO) { copyImageToInternal(uri) }
+            if (isFinishing || isDestroyed) {
+                // 宿主已销毁：这份副本无人认领（偏好不会写、之后也没人会再删它）⇒ 就地删除
+                deleteHomeImageCopy(copied?.toString())
+                return@launch
+            }
+            if (copied != null) {
+                // 清理旧副本（防堆积）—— 只删本应用私有目录里的副本，其余路径一律不动（见下方守卫）
+                deleteHomeImageCopy(prefs.homeImageUri)
+                prefs.homeImageUri = copied.toString()
+                prefs.homeStyle = PreferenceStore.STYLE_IMAGE
+                refreshStyleSelection(PreferenceStore.STYLE_IMAGE)
+                refreshImagePreview()
+            } else {
+                toast(R.string.home_image_copy_failed)
+            }
         }
-        prefs.homeImageUri = uri.toString()
-        prefs.homeStyle = PreferenceStore.STYLE_IMAGE
-        refreshStyleSelection(PreferenceStore.STYLE_IMAGE)
-        refreshImagePreview()
+    }
+
+    /**
+     * 删除 [HOME_IMAGE_DIR] 里的主页图副本。
+     *
+     * 存在的理由：偏好被清掉或替换后，**文件本身不会自己消失** —— 少了统一出口就会在
+     * `filesDir` 里持续累积无主副本（用户以为「清除图片」已经把它删了，其实还在盘上）。
+     * 故清除、替换、宿主已销毁三条路径都收口到这里。
+     *
+     * 只接受 `file://` 且路径确实落在本应用 `filesDir/[HOME_IMAGE_DIR]` 下：存量偏好里可能
+     * 是相册的 `content://`（旧版本写法），也可能是被外部写入的任意路径，一律不动。
+     * 失败静默 —— 删除是尽力而为，不该影响选图流程。
+     */
+    private fun deleteHomeImageCopy(uriString: String?) {
+        val path = uriString?.takeIf { it.startsWith("file://") }
+            ?.let { runCatching { Uri.parse(it).path }.getOrNull() }
+            ?: return
+        val dir = File(filesDir, HOME_IMAGE_DIR)
+        val insideDir = runCatching {
+            File(path).canonicalPath.startsWith(dir.canonicalPath + File.separator)
+        }.getOrDefault(false)
+        if (!insideDir) return
+        runCatching { File(path).delete() }
+    }
+
+    /** 把所选图片复制到应用内 filesDir 子目录；失败返回 null。 */
+    private fun copyImageToInternal(uri: Uri): Uri? {
+        val dir = File(filesDir, HOME_IMAGE_DIR)
+        dir.mkdirs()
+        val out = File(dir, "bg-${System.currentTimeMillis()}.jpg")
+        return try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                out.outputStream().buffered().use { sink ->
+                    input.copyTo(sink)
+                }
+            } ?: return null
+            if (out.length() == 0L) {
+                out.delete()
+                return null
+            }
+            Uri.fromFile(out)
+        } catch (e: Throwable) {
+            runCatching { out.delete() }
+            null
+        }
     }
 
     private fun clearPickedImage() {
+        // 先删副本再清偏好：顺序反过来的话路径就丢了，副本会永远留在 filesDir 里
+        deleteHomeImageCopy(prefs.homeImageUri)
         prefs.homeImageUri = null
         if (prefs.homeStyle == PreferenceStore.STYLE_IMAGE) {
             prefs.homeStyle = PreferenceStore.STYLE_PLAIN
@@ -168,10 +225,16 @@ class HomeCustomizeActivity : AppCompatActivity() {
             showPreview(null)
             return
         }
+        // 记录本次请求的 URI，用于竞态复查：解码返回后若偏好已被清除则丢弃结果。
+        val requestedUri = uriString
         lifecycleScope.launch {
             val bmp = ImageLoader.loadScaled(this@HomeCustomizeActivity, uri, PREVIEW_MAX_W, PREVIEW_MAX_H)
             if (isFinishing || isDestroyed) return@launch
-            showPreview(bmp)
+            // 复查：偏好未被清除（用户未点「清除图片」）且当前风格仍为 IMAGE 才写回
+            if (prefs.homeImageUri == requestedUri && prefs.homeStyle == PreferenceStore.STYLE_IMAGE) {
+                showPreview(bmp)
+            }
+            // 否则丢弃结果（避免旧图回显）
         }
     }
 
@@ -274,5 +337,8 @@ class HomeCustomizeActivity : AppCompatActivity() {
         /** 预览解码目标尺寸：控件高度仅 120dp，超过此尺寸的解码纯属浪费内存 */
         const val PREVIEW_MAX_W = 1080
         const val PREVIEW_MAX_H = 720
+
+        /** 主页图副本所在子目录（`filesDir/<此名>`）；删除副本时用它做归属校验 */
+        const val HOME_IMAGE_DIR = "home_bg"
     }
 }
