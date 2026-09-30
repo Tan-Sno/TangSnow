@@ -1899,6 +1899,10 @@ pref("media.gmp-manager.url", "");"""
             if (i == snapshot.activeIndex) restoredActive = tab
         }
         active = restoredActive ?: tabs.firstOrNull()
+        // 恢复期间循环里每个 newTab 都写过 lastNormalActiveId（停在了最后创建的标签上）——
+        // 必须回写成**真正的**活动标签，否则 saveState 优先取它 ⇒ 下次冷启动恢复错标签
+        // （外部审查 M2，2026-10-01 修）。恢复的标签全是普通标签，无需判 isPrivate。
+        lastNormalActiveId = active?.id
         return active
     }
 
