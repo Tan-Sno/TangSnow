@@ -43,7 +43,8 @@ import java.io.File
  *  - 已实现 WebExtensionController.PromptDelegate：从官方网页发起的安装/权限请求
  *    会弹出确认框，不会被静默拒绝；
  *  - 下载阶段：首选把官方直链交给内核；内核这一步没出结果才回退「应用自建 OkHttp 流式
- *    下载」，回退期间 UI 实时显示「下载中 n%」；全链路 150s 总时长兜底
+ *    下载」，回退期间 UI 实时显示「下载中 n%」；全链路 170s 总时长兜底
+ *    （与 `ExtInstallCoordinator.TOTAL_TIMEOUT_MS` 一致 —— 只写数字会漂移，改这里前先对一眼常量）
  *    （ExtInstallCoordinator 的 TOTAL_TIMEOUT_MS），失败/超时 100% 通过看门狗反馈，
  *    绝不卡在「安装中」。
  */
