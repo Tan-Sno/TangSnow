@@ -170,14 +170,18 @@ class ExtInstallCoordinator(
             } catch (e: TimeoutCancellationException) {
                 // 总预算耗尽 = **兜底**（每一步都有独立上限，正常情况下跑不到这里）
                 settle(source.key, coroutineContext[Job])
-                withContext(Dispatchers.Main) { cb.onFailure(source, InstallTimeoutException(Stage.TOTAL)) }
+                // 与 onDone 同口径（runCatching）：UI 回调自身异常不得逃逸出协程 ——
+                // 宿主 Activity 若恰在销毁，回调里碰 view 会抛，逃逸出 launch 就是崩溃
+                withContext(Dispatchers.Main) {
+                    runCatching { cb.onFailure(source, InstallTimeoutException(Stage.TOTAL)) }
+                }
             } catch (e: CancellationException) {
                 // 宿主销毁：静默收尾（孤儿态由列表页 onResume 的自愈逻辑清理）
                 settle(source.key, coroutineContext[Job])
                 throw e
             } catch (e: Throwable) {
                 settle(source.key, coroutineContext[Job])
-                withContext(Dispatchers.Main) { cb.onFailure(source, e) }
+                withContext(Dispatchers.Main) { runCatching { cb.onFailure(source, e) } }
             }
         }
         // ⚠️ 上面三处传的是 `coroutineContext[Job]`（即本协程自身的 Job），**不能**写成
@@ -242,7 +246,8 @@ class ExtInstallCoordinator(
             .callTimeout(DOWNLOAD_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
             .build()
         for (url in urls) {
-            if (!url.startsWith("${ExtensionCatalog.AMO_ORIGIN}/", ignoreCase = true)) {
+            // 与构造断言/界面校验同一判据（ExtensionCatalog.isAmoUrl），三处口径单点
+            if (!ExtensionCatalog.isAmoUrl(url)) {
                 continue
             }
             // 临时包名交给文件系统保证唯一：旧写法 `currentTimeMillis()-index` 在两个并发作业
@@ -253,8 +258,23 @@ class ExtInstallCoordinator(
             val out = runCatching { File.createTempFile(TMP_PREFIX, ".xpi", dir) }.getOrNull()
                 ?: continue
             try {
-                client.newCall(AppHttp.get(url).build()).execute().use { resp ->
+                val call = client.newCall(AppHttp.get(url).build())
+                // 把协程取消接上 OkHttp 的 Call：cancelAll()/总超时只 cancel 协程，打不断
+                // 阻塞式 execute() —— 宿主销毁后下载仍会跑满 callTimeout，回调闭包把已销毁的
+                // Activity 一直拴到网络超时才放。invokeOnCompletion 在完成/取消/失败时都会
+                // 触发；正常完成后 cancel() 是无害空转。
+                coroutineContext[Job]?.invokeOnCompletion { call.cancel() }
+                call.execute().use { resp ->
                     if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
+                    // 验**最终**请求的归属：AppHttp 跟随重定向，只验初始 URL 等于没验 ——
+                    // 302 可以把下载引到任意主机甚至降级 http。真正的签名校验仍在内核，
+                    // 这里拦的是「根本没走到内核就把来路不明的字节写盘」。
+                    val finalUrl = resp.request.url
+                    if (!finalUrl.isHttps ||
+                        !finalUrl.host.equals(ExtensionCatalog.AMO_HOST, ignoreCase = true)
+                    ) {
+                        throw IllegalStateException("重定向离开了官方域名")
+                    }
                     val total = resp.body.contentLength()
                     resp.body.byteStream().use { input ->
                         out.outputStream().buffered().use { sink ->
@@ -288,6 +308,11 @@ class ExtInstallCoordinator(
                 throw e
             } catch (e: Throwable) {
                 runCatching { out.delete() }
+                // call.cancel()（来自 cancelAll/总超时）会让 execute() 抛 IOException ——
+                // 若协程已取消，这不是「候选失败」，必须传播取消，而不是继续试下一个候选
+                if (coroutineContext[Job]?.isActive == false) {
+                    throw CancellationException("安装已取消").initCause(e)
+                }
             }
         }
         null
