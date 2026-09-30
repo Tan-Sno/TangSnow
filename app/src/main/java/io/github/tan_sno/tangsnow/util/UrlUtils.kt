@@ -229,6 +229,21 @@ object UrlUtils {
     internal fun isNeverWebContentScheme(scheme: String?): Boolean =
         scheme == "file" || scheme == "moz-extension" || scheme == "javascript"
 
+    /**
+     * 适合**分享 / 复制 / 写入会话快照**的 URL。
+     *
+     * 为什么单独一个判据：`tab.url` 保留真实值（地址栏要如实显示当前地址），但 `data:` 动辄几十 KB、
+     * `blob:` 只在当前会话内有效 —— 拿去分享/复制是给用户一坨没法用的文本，写进快照则是白占磁盘、
+     * 恢复时还要把这一大坨喂回内核。历史落库本来就有 `HistoryRepo.SKIP_PREFIXES` 兜底，
+     * 这里把**分享 / 复制 / 快照**三处口径拉齐到同一判据，免得各写各的（2026-09-30 外部审查即指出
+     * 「历史有兜底、分享与快照没有」这种口径不一致）。
+     */
+    internal fun isShareableUrl(url: String?): Boolean =
+        !url.isNullOrBlank() && schemeOf(url) !in NON_SHAREABLE_SCHEMES
+
+    /** 内部页与"超长/临时"URL：分享/复制/快照都不该带上它们 */
+    private val NON_SHAREABLE_SCHEMES = setOf("about", "data", "blob")
+
     fun resolveInfo(input: String, engine: SearchEngine): Resolved? {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return null

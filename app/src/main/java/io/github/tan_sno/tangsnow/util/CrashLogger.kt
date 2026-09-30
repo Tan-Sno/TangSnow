@@ -69,11 +69,15 @@ object CrashLogger {
     internal fun lastHostOrNull(): String? = lastHost
 
     /**
-     * 写盘前的 URL 脱敏：把文本里的 http(s) URL 收敛成 `scheme://host[:port]/…`。
+     * 写盘前的 URL 脱敏：把文本里的 **`scheme://` 形式的 URL** 收敛成 `scheme://host[:port]/…`。
      *
      * 政策第 7 条对崩溃日志给的是**封闭式**承诺——「可能记录最近访问站点的域名（仅域名、
      * 不含完整网址）」。而异常 message 里可能带完整 URL（`FileNotFoundException: https://…`），
      * 原样落盘就打破了该承诺。类名/行号等非 URL 文本一律不动（脱敏不能破坏排障价值）。
+     *
+     * ⚠️ 覆盖范围刻意**不限于 http(s)**（2026-09-30 外部审查指出）：`file:///data/user/0/<pkg>/…`
+     * 这类本地路径同样是"完整位置"，一并收敛；`data:` 这类**不带 `//`** 的形式不会被匹配（无副作用）。
+     * 而**裸路径**（`/data/user/0/…`，无 scheme）刻意保留 —— 它不是 URL，且对排障价值更高。
      *
      * 纯字符串函数（不碰 Android 类型），故可直接被 JVM 单测覆盖。
      */
@@ -86,8 +90,8 @@ object CrashLogger {
             "$scheme://$hostPort/…"
         }
 
-    /** 文本里的 http(s) URL；`\S+` 到空白为止，userinfo 一并吃掉后由 [redactUrls] 剥掉 */
-    private val URL_IN_TEXT = Regex("""(https?)://(\S+)""", RegexOption.IGNORE_CASE)
+    /** 文本里任意 `scheme://…` 形式的 URL（`\S+` 到空白为止；userinfo 由 [redactUrls] 剥掉） */
+    private val URL_IN_TEXT = Regex("""([a-z][a-z0-9+.\-]*)://(\S+)""", RegexOption.IGNORE_CASE)
 
     fun install(context: Context) {
         if (installed) return
@@ -112,7 +116,9 @@ object CrashLogger {
         val dir = File(context.filesDir, DIR_NAME)
         dir.mkdirs()
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
-        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        // 文件名精确到**毫秒**：原先只到秒，同一秒内的第二次崩溃会覆盖掉第一条（崩溃日志恰恰是
+        // 连崩时最需要的那条）。列表排序按文件名，仍保持时间序。
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())
         val sb = StringBuilder().apply {
             appendLine("棠雪 / TangSnow")
             appendLine("时间: $time")

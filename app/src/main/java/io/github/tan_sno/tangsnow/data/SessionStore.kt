@@ -102,14 +102,16 @@ object SessionStore {
         File(context.applicationContext.filesDir, FILE_NAME)
 
     /**
-     * 把快照写盘。JSON 序列化在调用线程（轻量），落盘在串行后台线程，
-     * 避免阻塞主线程；写失败静默（会话持久化是尽力而为的增强，不能影响浏览）。
+     * 把快照写盘。**序列化与落盘都在后台串行线程**：快照含几十个标签时单个 `SessionState` 的 JSON
+     * 可达几十 KB，在主线程（本函数的调用点是 `onPause`）序列化会直接吃掉掉帧预算。
+     * 写失败静默（会话持久化是尽力而为的增强，不能影响浏览）。
+     * ⚠️ `snapshot` 是**值对象快照**（调用方已把要保存的内容拷出来），故移到后台线程读它是安全的。
      */
     fun write(context: Context, snapshot: Snapshot) {
-        val json = buildJson(snapshot)
         val dir = context.applicationContext.filesDir
         io.execute {
             runCatching {
+                val json = buildJson(snapshot)
                 val target = File(dir, FILE_NAME)
                 val tmp = File(dir, FILE_NAME + TMP_SUFFIX)
                 tmp.writeText(json)
