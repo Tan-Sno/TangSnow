@@ -241,6 +241,46 @@ class BrowserSessionManager private constructor(
         /** 日志标记（权限决策等需要留痕的路径使用） */
         private const val TAG = "TangSnow.Session"
 
+        /**
+         * 覆盖文件的落盘名（filesDir 下）。内容见 [GECKO_EGRESS_OVERRIDE_PREFS]。
+         */
+        internal const val GECKO_EGRESS_OVERRIDE_FILE = "gecko-egress-overrides.js"
+
+        /**
+         * 内核默认出网点的**最小覆盖**：仅关「隐私政策 §4 未披露」的自动出网。
+         *
+         * ## 取证（geckoview 157，`assets/omni.ja` 的 `arm64-v8a/greprefs.js`
+         *    与 `defaults/pref/arm64-v8a/geckoview-prefs.js` 逐条核对）
+         *
+         * 政策 §4 的封闭式枚举只覆盖了 addons.mozilla.org（含其子域 versioncheck）、
+         * firefox.settings.services.mozilla.com（跟踪保护名单）、api.github.com（检查更新）。
+         * 默认值里还有三类**会自动发起**且未披露的出网，逐条关掉：
+         *  1. `network.connectivity-service.enabled` 默认 **true**，对
+         *     `http://firefox-portal-detection.com/success.txt` 做**明文 HTTP** 连通性探测
+         *     （`captivedetect.canonicalURL` 同为一个明文 generate_204 探测）——
+         *     旧名 detectportal.firefox.com 在 157 的全部制品里已不存在，勿再引用；
+         *  2. `browser.region.network.url` 指向 location.services.mozilla.com 的区域探测；
+         *  3. `extensions.systemAddon.update.url` / `media.gmp-manager.url` 指向
+         *     aus5.mozilla.org（本应用不内置任何系统扩展与 GMP，这两条检查没有意义）。
+         *
+         * **刻意不动**：`extensions.update(.background).url`（versioncheck.addons.mozilla.org）
+         * —— 属政策已披露的 AMO 域；安全浏览（contentBlocking 已整体关闭）；崩溃上报
+         * （需嵌入方显式启用，本应用从未启用）。全部为「关掉即无流量」的收窄，无功能损失，
+         * 故**不需要**为此动 `POLICY_VERSION`（枚举本来就该成立）。
+         *
+         * 经 `GeckoRuntimeSettings.Builder.configFilePath` 注入（javap 实测 157 存在该 API；
+         * 此前「应用侧关不掉内核默认」的结论不成立）。真机抓包核验项见施工笔记 ⑥。
+         */
+        internal const val GECKO_EGRESS_OVERRIDE_PREFS = """// TangSnow: kernel default egress override (forensics: geckoview 157 greprefs.js)
+pref("network.connectivity-service.enabled", false);
+pref("captivedetect.canonicalURL", "");
+pref("network.connectivity-service.IPv4.url", "");
+pref("network.connectivity-service.IPv6.url", "");
+pref("browser.region.network.url", "");
+pref("extensions.systemAddon.update.enabled", false);
+pref("extensions.systemAddon.update.url", "");
+pref("media.gmp-manager.url", "");"""
+
         @Volatile
         private var instance: BrowserSessionManager? = null
 
@@ -1562,6 +1602,11 @@ class BrowserSessionManager private constructor(
                     // 内核自带的「全球隐私控制(GPC)」信号：向支持的网站声明“请勿出售/分享我的数据”。
                     // 默认开启，可在 设置→隐私与安全 关闭；仅发送声明，网站可自行决定是否尊重。
                     .globalPrivacyControlEnabled(prefs.gpcEnabled)
+                    // 内核默认出网点覆盖（取证与取舍见常量注释）：写入失败则不注入，
+                    // 行为退回内核默认 —— 收窄失败不该挡住浏览器启动。
+                    .also { b ->
+                        writeEgressOverrideFile()?.let { b.configFilePath(it.absolutePath) }
+                    }
                     .build()
                 // 运行时级「指纹保护」(javap 实测：GeckoRuntimeSettings
                 // .setFingerprintingProtection(boolean)，非 Builder 方法)。
@@ -1583,6 +1628,18 @@ class BrowserSessionManager private constructor(
             }
         }
     }
+
+    /**
+     * 把内核默认出网点覆盖写到盘上（内容见 [GECKO_EGRESS_OVERRIDE_PREFS]）。
+     * 内容与上次一致时跳过写入；任何 IO 失败返回 null（= 本次不注入，退回内核默认）。
+     */
+    private fun writeEgressOverrideFile(): java.io.File? = runCatching {
+        val f = java.io.File(appContext.filesDir, GECKO_EGRESS_OVERRIDE_FILE)
+        if (!f.isFile || f.readText() != GECKO_EGRESS_OVERRIDE_PREFS) {
+            f.writeText(GECKO_EGRESS_OVERRIDE_PREFS)
+        }
+        f
+    }.getOrNull()
 
     /**
      * 运行时级指纹保护是否开启（跟随跟踪保护档位，见 [runtime] 中的说明）。
