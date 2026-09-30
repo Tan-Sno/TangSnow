@@ -179,6 +179,7 @@
     <string name="extension_get">Get</string>
     <string name="extension_installing">Installing…</string>
     <string name="extension_error_download">Download failed. Check your network and try again.</string>
+    <string name="extension_error_rejected">The browser engine did not accept this extension package (the signature check may have failed, or it is incompatible with this engine build).</string>
     <string name="extension_installed_label">Installed</string>
     <string name="extension_install_success">Extension installed</string>
     <!-- Installed, but the AMO slug could not be resolved (e.g. a locally imported

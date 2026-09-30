@@ -481,7 +481,13 @@ object DownloadRepo {
                     )
                 // 尽力带上页面上下文（Cookie 拿不到——Gecko 不暴露；Referer/UA 可带）
                 req.addRequestHeader("User-Agent", AppHttp.userAgent)
-                referer?.let { req.addRequestHeader("Referer", it) }
+                // Referer 必须是**网页地址**：调用方传的是"发起下载的页面"，但页面可能是
+                // data:/blob: 这类（内核不会把它们写进 tab.url 的 about:，却会留下 data:/blob:），
+                // 发这种 Referer 对服务端无意义、还可能被判成非法请求头 ⇒ 只放 http(s)。
+                referer?.takeIf {
+                    it.startsWith("http://", ignoreCase = true) ||
+                        it.startsWith("https://", ignoreCase = true)
+                }?.let { req.addRequestHeader("Referer", it) }
                 val id = dm.enqueue(req)
                 rememberId(context, id)
                 id
