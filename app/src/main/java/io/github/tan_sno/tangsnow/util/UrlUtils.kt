@@ -75,6 +75,10 @@ object UrlUtils {
         if (input.any { it.isWhitespace() }) return null
         // 不含点就不是域名形态（「例子」这类单词仍应走搜索）
         val host = input.substringBefore('/')
+        // ⚠️ authority 段含 @ 即 userinfo（如 trusted.com@evil.com）——钓鱼面，主流浏览器
+        // 对这种裸输入按搜索处理，这里同步。只查 authority：路径里的 @（twitter.com/@jack）
+        // 是合法用法，不能误伤（外部审查 2026-10-01 修）。
+        if ('@' in host) return null
         if (!host.contains('.')) return null
         val rest = input.removePrefix(host)
         val hostOnly = host.substringBefore(':')
