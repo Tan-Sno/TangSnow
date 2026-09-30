@@ -445,6 +445,11 @@ class ExtensionsActivity : AppCompatActivity() {
             // （原先它是「总超时」的唯一出口，但被上面那支抢先拦死、从未生效 —— 现已接通。）
             return getString(R.string.extension_error_timeout)
         }
+        if (err is ExtInstallCoordinator.InstallRejectedException) {
+            // 内核以 null 结算：既不是成功也超时，且它没给原因 ⇒ 如实说「内核未接受」。
+            // 必须排在下面那条通用兜底**之前** —— 否则会落进「网络 / IO」，把归因指错方向。
+            return getString(R.string.extension_error_rejected)
+        }
         if (err !is WebExtension.InstallException) {
             // 网络栈 / IO 等非内核异常，message 多为英文技术串，直接摊给中文用户没有意义
             return getString(R.string.extension_error_download)

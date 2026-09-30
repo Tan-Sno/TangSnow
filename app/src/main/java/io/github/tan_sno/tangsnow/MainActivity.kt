@@ -602,8 +602,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             this, pickSingleFile, pickMultiFile, requestAndroidPermissions,
         )
         bindSessionHandlers()
-        // 记一个前台宿主：关停判据是「本进程已无任何 MainActivity 实例」，见 hostDetached 的说明
-        sessionManager.hostAttached()
+        // 记一个前台宿主：关停判据是「本进程已无任何 MainActivity 实例」，见 hostDetached 的说明。
+        // 返回 true = 「此前已有别的宿主」⇒ 本实例是**后来者**，活动会话的显示现在归我；
+        // 被压在栈下的那个实例恢复前台时要据此重挂（判据见 SessionManager.displayTakenOver）。
+        if (sessionManager.hostAttached()) sessionManager.noteDisplayTakenOver()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -698,13 +700,17 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 无条件夺回处理器（幂等）：本实例可能刚被另一个实例压在栈下又恢复前台
         bindSessionHandlers()
         // 同一件事的另一半：后创建的实例会把活动会话挂到它自己的 GeckoView 上，本实例恢复前台时
-        // 必须把画面重新挂回来 —— 否则内核在跑、屏幕却是白的（上次退出时被它解绑了）
+        // 必须把画面重新挂回来 —— 否则内核在跑、屏幕却是空的。
+        // ⚠️ 判据**不能只看引用**：GeckoView 的会话是逐视图字段、类里没有视图注册表（javap 实测，
+        // 见 SessionManager.displayTakenOver）—— 后来者改的是它自己的字段，本视图的 `session`
+        // 仍指向同一会话，`!==` 恒假。故以「显示已被接管」标志为主、引用比对作兜底。
         if (::sessionManager.isInitialized) {
-            sessionManager.activeTab?.let { active ->
-                if (::binding.isInitialized && binding.geckoView.session !== active.session) {
-                    binding.geckoView.setSession(active.session)
-                    syncViewWithTab(active)
-                }
+            val active = sessionManager.activeTab
+            val reattach = sessionManager.consumeDisplayTakenOver() ||
+                (active != null && ::binding.isInitialized && binding.geckoView.session !== active.session)
+            if (reattach && active != null && ::binding.isInitialized) {
+                binding.geckoView.setSession(active.session)
+                syncViewWithTab(active)
             }
         }
         // 从「设置」返回时同步防截屏开关（开关是即时生效的窗口级标志）
@@ -784,6 +790,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // MainActivity 实例**时才销毁会话 —— 双实例场景下先创建的实例只是被压到栈下，
         // 用户返回时还要继续用它，不能因为另一个实例结束就被连带关停。
         val lastHost = if (::sessionManager.isInitialized) sessionManager.hostDetached() else false
+        // 因配置变更而销毁：那种情况下的"另一个实例"其实是自己的继任者，它在 onCreate 里已挂过
+        // 一次会话 ⇒ 撤销「显示已被接管」标志，免得继任者第一次 onResume 多一次重挂（黑帧）。
+        if (isChangingConfigurations && ::sessionManager.isInitialized) {
+            sessionManager.forgetDisplayTakenOver()
+        }
         if (isFinishing && lastHost) {
             detachActiveSession()
             sessionManager.shutdown()
@@ -1184,15 +1195,18 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             runCatching {
                 Intent.parseUri(url, Intent.URI_INTENT_SCHEME).apply {
                     fallbackUrl = getStringExtra(INTENT_FALLBACK_EXTRA)
-                    // 加固三连：`intent://` 整串是**页面可控**的，凡是页面能指定"打给谁"的字段都不能留 ——
-                    //  component / selector：直接指向某应用内部组件（该 scheme 的经典滥用面）；
-                    //  package：把 Intent 限死在某个包上，可用来探测"某应用是否安装"或强行导向该应用。
-                    // ⚠️ 刻意**不清 extras**：`intent://` 规范里的 `S.` / `i.` 前缀 extra 是**目标应用的载荷**
-                    //（合法入口会依赖它），而"打给谁"已由上面三个字段置空 + 只保留 BROWSABLE 分类挡住。
+                    // 加固（只清「指定组件」这一类）：`intent://` 整串是**页面可控**的，
+                    // component / selector 能直接指向某应用的内部组件 —— 该 scheme 的经典滥用面，必须清。
+                    // ⚠️ 刻意**不清** `package` 与 extras：
+                    //  · `package` 是该 scheme 规范里的**合法提示**（`…/market…#Intent;package=…` 这类
+                    //    页面正是靠它直达目标应用）；清掉会让「两个应用都能处理」的链接退化成选择器，
+                    //    而「探测某应用是否安装」的收益极低 —— 目标不存在时 startActivity 抛的
+                    //    ActivityNotFoundException 本就由下方回退分支如实处理；
+                    //  · extras（`S.` / `i.` 前缀）是**目标应用的载荷**，合法入口会依赖它。
                     // 一律清空属过度收口 —— 与「只放 http/https 会误挡 mailto」是同一类错误。
+                    // （2026-09-30：`package` 曾按外部报告建议一并清掉，复核后**回退**，理由即上。）
                     component = null
                     selector = null
-                    setPackage(null)
                     addCategory(Intent.CATEGORY_BROWSABLE)
                 }
             }.getOrNull()

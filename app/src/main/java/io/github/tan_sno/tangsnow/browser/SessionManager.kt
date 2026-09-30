@@ -334,7 +334,9 @@ class BrowserSessionManager private constructor(
     fun newTab(isPrivate: Boolean = prefs.privateMode): Tab {
         val tab = newTabInternal(isPrivate)
         active = tab
-        SessionStore.clearPurged()  // 新浏览活动：恢复正常的会话落盘
+        // 只有**普通**标签才算「新的浏览活动」：无痕标签不该替普通标签撤销「清除后暂停落盘」——
+        // 否则在无痕里点一下「+」就把刚清掉的普通标签快照放行了（与 onLocationChange 那处同口径）。
+        if (!isPrivate) SessionStore.clearPurged()
         return tab
     }
 
@@ -1314,14 +1316,53 @@ class BrowserSessionManager private constructor(
      */
     private var hostCount = 0
 
-    fun hostAttached() {
+    /** @return 此前是否已有别的宿主（true 表示本实例是后来者，见 [displayTakenOver]） */
+    fun hostAttached(): Boolean {
+        // 返回值 = 「此前已有别的宿主」⇒ 本实例是**后来者**，活动会话的显示归它了
+        val hadOther = hostCount > 0
         hostCount++
+        return hadOther
     }
 
     /** @return 摘除后是否已无宿主（true 表示此刻可以安全关停） */
     fun hostDetached(): Boolean {
         hostCount = (hostCount - 1).coerceAtLeast(0)
         return hostCount == 0
+    }
+
+    /**
+     * 「活动会话的显示已被另一个宿主接管」标志（对应 [hostAttached] 说明里的双实例场景）。
+     *
+     * 为什么需要它（`javap -p` 实测 geckoview 155 制品）：`GeckoView` 的会话是**逐视图字段**
+     * `protected GeckoSession mSession`，类里**没有任何静态视图注册表**；`setSession` 的字节码是
+     * 「先 `releaseSession()` → `putfield mSession` → `acquireDisplay()`」。
+     * ⇒ 后来者只设置了**自己**视图的字段，先创建的那个视图的 `mSession` **仍指向同一会话** ——
+     * 光比对 `geckoView.session !== active.session` 看不出「显示已经易主」，于是被压在栈下的宿主
+     * 恢复前台时不会重挂，可能出现「内核在跑、屏幕是空的」。
+     * 置位：后来者在 onCreate 发现「已有别的宿主」时；消费：任何一次重挂之后（取即清）。
+     */
+    @Volatile
+    private var displayTakenOver = false
+
+    /** 后来者声明「活动会话的显示现在归我」 */
+    fun noteDisplayTakenOver() {
+        displayTakenOver = true
+    }
+
+    /** 取走并清空该标志（被接管过的宿主恢复前台时调用一次） */
+    fun consumeDisplayTakenOver(): Boolean {
+        val v = displayTakenOver
+        displayTakenOver = false
+        return v
+    }
+
+    /**
+     * 撤销标志：宿主**因配置变更**销毁时调用 —— 那种情况下的"另一个实例"其实是自己的继任者，
+     * 继任者在 onCreate 里已经挂过一次会话 ⇒ 不必再补一次（补了就是每次切主题 / 切语言之后
+     * 多一次 release+acquire 的黑帧）。
+     */
+    fun forgetDisplayTakenOver() {
+        displayTakenOver = false
     }
 
     /**

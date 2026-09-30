@@ -362,9 +362,18 @@ class ExtInstallCoordinator(
         //（`performInstall` → `onDone` → `cb.onSuccess(source, null)`）会**报「安装成功」**
         // 而实际上什么都没装上 —— 用户看到成功提示却找不到扩展，且完全无从判断。
         // 归因只能到这一步：内核没给原因，故用一句如实的失败信息，而不是假装成功。
-        if (ext == null) throw IllegalStateException("内核已结算但未返回扩展实例")
+        if (ext == null) throw InstallRejectedException()
         return ext
     }
+
+    /**
+     * 内核把安装结果以 **null** 结算：既不是成功、也不是超时，而内核没给任何原因。
+     *
+     * 单独成类（而不是复用 `IllegalStateException`）是为了让界面**如实归因**：`describeInstallError`
+     * 对非 `WebExtension.InstallException` 的异常一律按「网络 / IO」兜底，于是用户会看到
+     * 「下载失败，请检查网络后重试」这种**指错方向**的原因 —— 那与本仓「失败要如实反馈」的口径相悖。
+     */
+    class InstallRejectedException : Exception("kernel completed install with null")
 
     /** 一次安装的终态收口：摘除作业记录（无身份比对的兜底收口，用于协程体内） */
     private fun settle(key: String) {
