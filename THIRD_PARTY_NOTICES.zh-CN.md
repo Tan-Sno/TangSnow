@@ -9,7 +9,7 @@
 
 | 组件 | 版本 | 许可证 | 用途 |
 |---|---|---|---|
-| Mozilla GeckoView | 155.0.20260903215306 | Mozilla Public License 2.0 | 网页渲染内核（基于 Gecko 引擎） |
+| Mozilla GeckoView | 157.0.20260924084938 | Mozilla Public License 2.0 | 网页渲染内核（基于 Gecko 引擎） |
 | OkHttp | 5.5.0 | Apache License 2.0 | 扩展目录 / 元数据 / 应用内更新检查等 HTTP 请求 |
 | ZXing core | 3.5.4 | Apache License 2.0 | 二维码解码 |
 | ZXing Android Embedded | 4.3.0 | Apache License 2.0 | 扫码取景与相机权限处理 |
@@ -25,7 +25,7 @@
 
 - **GeckoView 源码**：<https://github.com/mozilla/gecko-dev>（亦可从 Mozilla 发布的
   [maven 仓库](https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/) 取到与本应用所用版本
-  `155.0.20260903215306` 完全对应的构件）。
+  `157.0.20260924084938` 完全对应的构件）。
 - 本应用**未修改** GeckoView 的源码（仅以依赖形式调用其公开 API），因此不产生 MPL 第 3.1 条意义上
   的 Modifications；应用自身代码作为 Larger Work 采用 Apache License 2.0，不受 MPL 2.0 传染性约束。
 - GeckoView 源码中的许可证与版权声明（MPL 2.0 §3.4）均未被移除或改动。

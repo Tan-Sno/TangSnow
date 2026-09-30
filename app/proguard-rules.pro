@@ -1,4 +1,4 @@
-# R8 / ProGuard 保留规则（GeckoView 155）
+# R8 / ProGuard 保留规则（GeckoView 157）
 
 # GeckoView 通过 JNI/反射加载自身大量类，须整体保留。
 # 注：AAR 自带 consumer 规则（解包其 proguard.txt，约 5.6KB、39 条 keep，其中就

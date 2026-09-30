@@ -290,7 +290,21 @@ android {
         //     —— 标题若早于导航提交到达，那时 `tab.url` 还是**上一页**，照它回写会张冠李戴。
         //  ⑥ 【自查新增】`Bitmaps.cover` 只受「填满」比例支配、不受像素闸门约束 ⇒ 极端长宽比下会先放大出
         //     数千万像素的中间图（8000×500 配 1080×2400 ≈ 9200 万像素 / 92MB）。改为**先裁后缩**。
-        //   测试 181 → **203**（+3 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest`），
+        //  ⑦ 【依赖升级】GeckoView **155 → 157**：Mozilla 官方 product-details 显示当前 Release 通道 =
+        //     157.0（FIREFOX_NIGHTLY=159.0a1、DEVEL/Beta=158.0b1），155 已落后两个 release；按「只跟官方
+        //     Release 通道」的口径取 157 的最新构建。core-ktx 1.19.0 → 1.19.1；其余依赖逐一查过已是各自
+        //     最新**稳定**版（AGP 9.4.1、activity-ktx 1.13.0、appcompat 1.8.0、material 1.14.0、
+        //     okhttp 5.5.0、zxing 3.5.4 / 4.3.0、coroutines 1.11.0、constraintlayout 2.2.2、
+        //     preference-ktx 1.2.1、compileSdk 37.2 为 stable 最高档、JDK 25）。
+        //     **升级后逐条复核了原先在 155 上的取证结论**（javap：`mSession` 仍是逐视图字段且类里无静态
+        //     视图注册表、`LoadRequest.isDirectNavigation` 仍在、`SessionState` 仍实现 `HistoryList`、
+        //     `GeckoResult.complete` 仍抛 "result is already complete"、`open` 首指令仍是
+        //     `assertOnUiThread`；omni.ja：安全浏览四条 pref 与名单服务主机
+        //     `firefox.settings.services.mozilla.com` 与 155 **完全一致**）⇒ 政策 §4 的措辞与
+        //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
+        //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
+        //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
+        //   测试 181 → **204**（+3 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest`），
         //   两条新哨兵已主动验证会红（临时改坏 ⇒ 6 条 FAILED）；lint 全警告口径仍 `No issues found`。
         versionCode = 39
         versionName = "2.1.6"

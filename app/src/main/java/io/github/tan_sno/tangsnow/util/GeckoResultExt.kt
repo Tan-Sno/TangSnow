@@ -8,7 +8,7 @@ import kotlin.coroutines.resumeWithException
 /**
  * [GeckoResult] 的挂起桥。
  *
- * GeckoView 155 的 AAR 内不含 Kotlin 扩展（javap 已核验无 `*Kt.class`，即没有官方的
+ * GeckoView 157 的 AAR 内不含 Kotlin 扩展（javap 已核验无 `*Kt.class`，即没有官方的
  * `GeckoResult.await()`）。故自建：成功回调 resume 值、异常回调 resumeWithException、
  * 协程取消时连带 cancel 内核任务。
  *

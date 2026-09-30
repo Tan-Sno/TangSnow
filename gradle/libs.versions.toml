@@ -1,11 +1,13 @@
 [versions]
 agp = "9.4.1"
-geckoView = "155.0.20260903215306"
+# GeckoView 只跟 **Release 通道**：Mozilla 官方 product-details 显示当前 Release = 157.0
+#（FIREFOX_NIGHTLY=159.0a1、DEVEL/Beta=158.0b1），155 已落后两个 release ⇒ 取 157 的最新构建。
+geckoView = "157.0.20260924084938"
 preferenceKtx = "1.2.1"
 coroutinesAndroid = "1.11.0"
 zxingCore = "3.5.4"
 zxingEmbed = "4.3.0"
-coreKtx = "1.19.0"
+coreKtx = "1.19.1"
 junit = "4.13.2"
 appcompat = "1.8.0"
 material = "1.14.0"

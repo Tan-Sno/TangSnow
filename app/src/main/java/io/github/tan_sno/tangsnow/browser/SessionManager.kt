@@ -657,7 +657,7 @@ class BrowserSessionManager private constructor(
             // 特权 scheme：只放行**应用自己发起**的导航。
             //
             // 判据用内核**文档化**的 `LoadRequest.isDirectNavigation`（javap 实测
-            // geckoview 155 已具备该 public final 字段），其官方语义为
+            // geckoview 157 已具备该 public final 字段），其官方语义为
             //   "This load request was initiated by a direct navigation from the
             //    application. E.g. when calling GeckoSession.load(...)"
             // —— 正是本处要表达的意思。
@@ -774,7 +774,7 @@ class BrowserSessionManager private constructor(
             if (!isAlive(tab)) return
             // 这里**当场**取 JSON 字符串（值拷贝），不是留引用。
             //
-            // 依据（javap 实测 geckoview 155 的 classes.jar，非推测）：
+            // 依据（javap 实测 geckoview 157 的 classes.jar，非推测）：
             //   HistoryList 只是一个接口，其实现就是 `GeckoSession.SessionState`
             //   —— 声明的类型层次为
             //   `SessionState extends AbstractSequentialList<HistoryItem>
@@ -1333,7 +1333,7 @@ class BrowserSessionManager private constructor(
     /**
      * 「活动会话的显示已被另一个宿主接管」标志（对应 [hostAttached] 说明里的双实例场景）。
      *
-     * 为什么需要它（`javap -p` 实测 geckoview 155 制品）：`GeckoView` 的会话是**逐视图字段**
+     * 为什么需要它（`javap -p` 实测 geckoview 157 制品）：`GeckoView` 的会话是**逐视图字段**
      * `protected GeckoSession mSession`，类里**没有任何静态视图注册表**；`setSession` 的字节码是
      * 「先 `releaseSession()` → `putfield mSession` → `acquireDisplay()`」。
      * ⇒ 后来者只设置了**自己**视图的字段，先创建的那个视图的 `mSession` **仍指向同一会话** ——
@@ -1646,7 +1646,8 @@ class BrowserSessionManager private constructor(
         // 安全浏览（钓鱼 / 恶意软件 / 潜在有害程序）：**刻意关闭**。
         //
         // 为什么关：该能力不是本地判断 —— 内核会向第三方服务发起请求。已通过解包
-        // geckoview-155 的 assets/omni.ja 取出 greprefs.js 实测确认：
+        // geckoview-157 的 assets/omni.ja 取出 greprefs.js 实测确认（升级前在 155 上做过同一套取证，
+        // 155 → 157 逐条比对：下面这几条**完全一致**）：
         //   browser.safebrowsing.id = "navclient-auto-ffox"
         //   urlclassifier.malwareTable = "goog-harmful-proto,goog-unwanted-proto,…"
         //   browser.safebrowsing.provider.mozilla.gethashURL = "https://shavar.services.mozilla.com/gethash?…"

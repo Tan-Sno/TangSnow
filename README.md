@@ -16,7 +16,7 @@ The app interface is available in English and Simplified Chinese.
 - **Privacy protections** — tracking protection (Standard / Strict / Custom / Off), cross-site cookie isolation, bounce-tracking protection, fingerprinting protection, tracking-parameter stripping, Global Privacy Control (GPC), private browsing.
 - **You stay in control** — site-permission prompts offer a "remember my choice" checkbox (regular sessions only; private sessions never persist a permission decision). An optional "clear browsing data on exit" wipes cookies and site data, cache, history and the tab snapshot in one go; bookmarks and download records are unaffected.
 - **Minimal permissions** — only Network and Camera (requested on demand, when you scan a QR code). On Android 17 and later, Nearby devices (`ACCESS_LOCAL_NETWORK`) is also needed: it is requested only when you open a local network address, so you can reach devices such as your router, NAS or printer.
-- **Mozilla engine** — GeckoView 155, the same Gecko engine that powers Firefox.
+- **Mozilla engine** — GeckoView 157, the same Gecko engine that powers Firefox.
 - **Extensions** — browse Mozilla's official add-on directory (AMO) and install officially signed `.xpi` packages.
 - **Bookmarks you can take with you** — import and export in the Netscape bookmark format, so switching browsers does not mean starting over.
 - **Everyday browsing** — tab grid (private tabs are badged), picture-in-picture, find in page, save as PDF, print, QR scanning, custom search engines, IDN domains.
