@@ -412,6 +412,7 @@
     <string name="prompt_share_chooser">Share to…</string>
     <string name="perm_allow">Allow</string>
     <string name="perm_deny">Deny</string>
+    <string name="perm_deny_always">Block and don\'t ask again (this tab)</string>
     <string name="perm_location_message">%1$s wants to access your location</string>
     <string name="perm_notification_message">%1$s wants to send you notifications</string>
     <string name="perm_local_device_message">%1$s wants to access local devices</string>
@@ -570,6 +571,12 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
     <string name="dl_executable_title">This is an installer or executable file</string>
     <string name="dl_executable_message">"%1$s" may be an installer or program that can modify your device once installed or run. Continue only if you fully trust the source.</string>
     <string name="dl_executable_continue">I understand the risk, continue</string>
+
+    <!-- ==== Download confirmations dropped while in background (honest count) ==== -->
+    <plurals name="dl_background_dropped">
+        <item quantity="one">%1$d download request was skipped while the app was in the background</item>
+        <item quantity="other">%1$d download requests were skipped while the app was in the background</item>
+    </plurals>
 
     <!-- ==== Block screenshots (P4) ==== -->
     <string name="pref_secure_screen_title">Block screenshots</string>

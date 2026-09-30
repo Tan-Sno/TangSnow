@@ -124,9 +124,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      */
     private fun syncHostVisible() {
         if (::sessionManager.isInitialized) {
-            sessionManager.setHostVisible(resumedVisible || pipActive)
+            sessionManager.setHostVisible(hostVisibleNow())
         }
     }
+
+    /** 此刻窗口是否在屏幕上（常规可见或 PiP）。弹窗类副作用（下载确认等）据此决定建不建窗 */
+    private fun hostVisibleNow(): Boolean = resumedVisible || pipActive
 
     /** 本应用主动写剪贴板的时间戳（用于区分「外部静默写入」与「用户主动复制」） */
     private var selfClipboardWriteAt = 0L
@@ -768,6 +771,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         updateTabsBadge()
         updatePrivateButton()
         updateNavCells()
+        // 补弹后台挂起的下载确认（handleDownload 在不可见时不建窗，见其注释）
+        flushPendingDownloadConfirms()
         // 前台监听剪贴板变化，捕捉页面静默写入（提示频率与归因见 onClipboardChanged）
         clipboardNotifiedThisForeground = false
         runCatching {
@@ -831,6 +836,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         dismissSelectionPopup()
         clipboardPermissionDialog?.dismiss()
         clipboardPermissionDialog = null
+        exitConfirmDialog?.dismiss()
+        exitConfirmDialog = null
         // 弹窗会话（showPopup 的对话框）必须在此收掉：框架摘窗不触发 OnDismissListener，
         // 不收就等于既不释放会话又打 WindowLeaked
         dialogs.cancelAll()
@@ -1930,6 +1937,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     // ------------------------------------------------------------- 收藏 / 分享
 
+    /** 收藏切换进行中：防双击重入（两次 toggle 净效果=没收藏，还会甩出两条互相矛盾的 toast） */
+    private var bookmarkToggling = false
+
     private fun toggleBookmark() {
         val tab = sessionManager.activeTab ?: return
         val url = tab.url ?: return
@@ -1938,10 +1948,17 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             toast(R.string.more_need_page)
             return
         }
+        if (bookmarkToggling) return
+        bookmarkToggling = true
         lifecycleScope.launch {
-            val added = BookmarkRepo.toggle(url, tab.title)
-            toast(if (added) R.string.toast_bookmarked else R.string.toast_bookmark_removed)
-            updateBookmarkIcon()
+            try {
+                val added = BookmarkRepo.toggle(url, tab.title)
+                toast(if (added) R.string.toast_bookmarked else R.string.toast_bookmark_removed)
+                updateBookmarkIcon()
+            } finally {
+                // 取消（销毁）也要复位：latch 只防抖，不能把收藏键锁死
+                bookmarkToggling = false
+            }
         }
     }
 
@@ -1979,6 +1996,24 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     // ------------------------------------------------------------- 下载
 
+    /** 需要确认但宿主不可见时挂起的下载请求（onResume 补弹）。上限见 [MAX_PENDING_DOWNLOADS] */
+    private data class PendingDownloadConfirm(val response: WebResponse, val pageUrl: String?)
+
+    private val pendingDownloadConfirms = ArrayDeque<PendingDownloadConfirm>()
+
+    /** 挂起上限：超出即放弃最旧的（连接长挂到恢复前台多半已死，攒再多也没意义） */
+    private companion object {
+        const val MAX_PENDING_DOWNLOADS = 4
+    }
+
+    private var pendingDownloadDropped = 0
+
+    /**
+     * 网页触发的下载。**宿主不可见时不建确认窗**（与权限征询同口径）：
+     * 需要询问的请求挂起，onResume 补弹；静默下载（已关「下载前询问」）不受影响。
+     * 代价：挂起期间内核连接可能超时断开，补弹后开始下载会**如实**报失败 ——
+     * 好过对不可见窗口建 AlertDialog（部分 ROM 会给「后台弹窗」提示，且用户毫无上下文）。
+     */
     private fun handleDownload(response: WebResponse, pageUrl: String?) {
         // HTTP 头名大小写不敏感，统一查找 Content-Disposition，避免对两种大小写各查一次
         val disposition = response.headers.entries
@@ -1986,10 +2021,24 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 文件名统一由仓库解析：Content-Disposition（含 RFC 5987）优先，
         // 兜底取 URL 末段并自动剥离查询串 / 百分号解码 / 非法字符清洗
         val fileName = DownloadRepo.parseFileName(disposition, response.uri)
-        val url = response.uri
         // ⚠️ 可执行 / 安装类文件：**无条件**先确认，且刻意不提供「不再询问」选项。
         // 理由：这类文件运行后会改变设备状态（安装应用、执行脚本），一句永久开关
         // 不应把它的确认一并免掉；而普通文档仍尊重用户的「不再询问」偏好。
+        val needsConfirm = DownloadRepo.isExecutableName(fileName) || prefs.askBeforeDownload
+        if (needsConfirm && !hostVisibleNow()) {
+            if (pendingDownloadConfirms.size >= MAX_PENDING_DOWNLOADS) {
+                pendingDownloadConfirms.removeFirst()
+                pendingDownloadDropped++
+            }
+            pendingDownloadConfirms.addLast(PendingDownloadConfirm(response, pageUrl))
+            return
+        }
+        confirmDownload(response, fileName, pageUrl)
+    }
+
+    /** [handleDownload] 的后半段：真正弹确认框或直接开始（此时已判定不需要挂起） */
+    private fun confirmDownload(response: WebResponse, fileName: String, pageUrl: String?) {
+        val url = response.uri
         if (DownloadRepo.isExecutableName(fileName)) {
             AlertDialog.Builder(this)
                 .setTitle(R.string.dl_executable_title)
@@ -2021,6 +2070,26 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 startDownload(response, url, fileName, pageUrl)
             }
             .show()
+    }
+
+    /** onResume 补弹挂起的下载确认；被挤掉的请求按条数如实告知（不说「都还在」） */
+    private fun flushPendingDownloadConfirms() {
+        if (pendingDownloadConfirms.isEmpty() && pendingDownloadDropped == 0) return
+        val queued = pendingDownloadConfirms.toList()
+        pendingDownloadConfirms.clear()
+        val dropped = pendingDownloadDropped
+        pendingDownloadDropped = 0
+        for (p in queued) confirmDownload(p.response, fileNameOf(p.response), p.pageUrl)
+        if (dropped > 0) {
+            toast(resources.getQuantityString(R.plurals.dl_background_dropped, dropped, dropped))
+        }
+    }
+
+    /** 从响应重算文件名（补弹时不再持有挂起时的解析结果，保持单一解析入口） */
+    private fun fileNameOf(response: WebResponse): String {
+        val disposition = response.headers.entries
+            .firstOrNull { it.key.equals("content-disposition", ignoreCase = true) }?.value
+        return DownloadRepo.parseFileName(disposition, response.uri)
     }
 
     /**
@@ -2598,8 +2667,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             .start()
     }
 
+    /** 退出确认框引用：面板收起动画有 160ms 窗口，快速双击「退出」行会叠出两个确认框 */
+    private var exitConfirmDialog: androidx.appcompat.app.AlertDialog? = null
+
     private fun confirmExit() {
-        AlertDialog.Builder(this)
+        if (exitConfirmDialog?.isShowing == true) return
+        exitConfirmDialog = AlertDialog.Builder(this)
             .setTitle(R.string.dlg_exit_title)
             .setMessage(R.string.dlg_exit_message)
             .setNegativeButton(R.string.dlg_cancel, null)
