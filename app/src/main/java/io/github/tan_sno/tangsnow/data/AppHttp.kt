@@ -27,8 +27,13 @@ object AppHttp {
             // （语义相同，那里是为了不依赖默认值而写的）。
             .callTimeout(45, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            // 跟随重定向是默认行为，但保留以便显式说明；**关闭 SSL 降级**（followSslRedirects=false）：
+            // 更新检查 / AMO 元数据 / xpi 下载都不应该出现 https→http 的 302——那意味着 MITM
+            // 或配置错误。此前 followSslRedirects=true 是 OkHttp 默认值，对浏览器型的「任意网页
+            // 跳转」是对的，但对本项目**更新与扩展安装**这类有明确来源的渠道，降级即异常。
+            // 与 ExtInstallCoordinator.downloadPackage 的「最终请求归属验证」形成双保险。
             .followRedirects(true)
-            .followSslRedirects(true)
+            .followSslRedirects(false)
             .build()
     }
 
