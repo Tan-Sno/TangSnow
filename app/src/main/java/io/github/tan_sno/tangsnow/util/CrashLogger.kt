@@ -50,6 +50,45 @@ object CrashLogger {
         if (!host.isNullOrBlank()) lastHost = host
     }
 
+    /**
+     * 清空「最近访问站点」。
+     *
+     * 为什么必须有清除出口：这个值住在**进程内存**里，一旦写下就留到进程结束 ——
+     * 用户退出无痕、甚至执行「清除浏览数据」之后它仍在内存中，此后任何一次崩溃都会把
+     * 一个**早已结束的会话**的域名写进持久化日志，与「无痕不留痕」直接冲突。
+     * 调用点两处：退出无痕浏览、清除浏览数据（勾选历史）。
+     */
+    fun clearHost() {
+        lastHost = null
+    }
+
+    /**
+     * 「最近访问站点」的当前值。**仅供单测读取**（业务路径上没有任何读取点，
+     * 唯一消费者是 [write] 里的那一行）。
+     */
+    internal fun lastHostOrNull(): String? = lastHost
+
+    /**
+     * 写盘前的 URL 脱敏：把文本里的 http(s) URL 收敛成 `scheme://host[:port]/…`。
+     *
+     * 政策第 7 条对崩溃日志给的是**封闭式**承诺——「可能记录最近访问站点的域名（仅域名、
+     * 不含完整网址）」。而异常 message 里可能带完整 URL（`FileNotFoundException: https://…`），
+     * 原样落盘就打破了该承诺。类名/行号等非 URL 文本一律不动（脱敏不能破坏排障价值）。
+     *
+     * 纯字符串函数（不碰 Android 类型），故可直接被 JVM 单测覆盖。
+     */
+    internal fun redactUrls(text: String): String =
+        URL_IN_TEXT.replace(text) { m ->
+            val scheme = m.groupValues[1]
+            // 去掉 userinfo（可能是凭据）与路径/查询/片段，只留 host[:port]
+            val hostPort = m.groupValues[2].substringAfterLast('@')
+                .takeWhile { it != '/' && it != '?' && it != '#' }
+            "$scheme://$hostPort/…"
+        }
+
+    /** 文本里的 http(s) URL；`\S+` 到空白为止，userinfo 一并吃掉后由 [redactUrls] 剥掉 */
+    private val URL_IN_TEXT = Regex("""(https?)://(\S+)""", RegexOption.IGNORE_CASE)
+
     fun install(context: Context) {
         if (installed) return
         synchronized(this) {
@@ -90,8 +129,8 @@ object CrashLogger {
             appendLine("---- 堆栈 ----")
             val sw = StringWriter()
             throwable.printStackTrace(PrintWriter(sw))
-            // 限制单条日志体积，防止超大堆栈撑爆
-            val stack = sw.toString()
+            // 限制单条日志体积，防止超大堆栈撑爆；同时做 URL 脱敏（见 redactUrls 的说明）
+            val stack = redactUrls(sw.toString())
             append(if (stack.length > 40_000) stack.take(40_000) + "\n…(堆栈过长已截断)" else stack)
         }
         val out = File(dir, "crash-$stamp.txt")

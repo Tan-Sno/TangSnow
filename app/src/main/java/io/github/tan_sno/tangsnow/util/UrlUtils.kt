@@ -182,6 +182,48 @@ object UrlUtils {
     /** 地址栏输入解析结果：url = 可加载地址；isSearch = 是否走了搜索引擎 */
     data class Resolved(val url: String, val isSearch: Boolean)
 
+    /**
+     * 取 URL 的 scheme（小写、不含 `:`）；没有合法 scheme 时返回空串。
+     *
+     * 纯字符串实现（不碰 `android.net.Uri`）：本文件的既有取舍 —— Uri 在 JVM 单测里是抛异常的桩，
+     * 而这段判定正是最该被单测钉住的（见 [isWebNavigationScheme]）。
+     * 合法 scheme 的字符集按 RFC 3986 §3.1：ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )。
+     */
+    internal fun schemeOf(input: String): String {
+        val colon = input.indexOf(':')
+        if (colon <= 0) return ""
+        val raw = input.substring(0, colon)
+        if (!raw[0].isLetter()) return ""
+        val legal = raw.all { it.isLetterOrDigit() || it == '+' || it == '-' || it == '.' }
+        return if (legal) raw.lowercase() else ""
+    }
+
+    /**
+     * 内核能自行处理的「网页导航」scheme 白名单。
+     *
+     * **`SessionManager.onLoadRequest` 与 `MainActivity.onOpenInCurrentTab` 必须共用本判定**：
+     * 两处各维护一份必然漂移 —— 漂成「一处放行」就是安全缺口（`window.open('file://…')`
+     * 直达应用私有文件），漂成「一处多挡」就是功能回归（`window.open('data:text/html,…')`
+     * 明明合规却打不开）。判据只有一处，改也只改一处。
+     */
+    internal fun isWebNavigationScheme(scheme: String?): Boolean =
+        scheme == "http" || scheme == "https" || scheme == "about" ||
+            scheme == "data" || scheme == "blob"
+
+    /**
+     * 网页内容**绝不该驱动**的 scheme（与 [isWebNavigationScheme] 互补，二者构成完整三分法）。
+     *
+     *  - `file:` / `moz-extension:` —— 应用私有文件与扩展内部页。内核侧靠 `isDirectNavigation` 区分，
+     *    而 `window.open` 这条链最终走的是**应用自己的** `loadUri`，会被判成"应用发起"而放行；
+     *  - `javascript:` —— 等于把脚本注入当前文档上下文（绕过同源与导航约束）。
+     *
+     * ⚠️ 刻意**不含** mailto / tel / market / intent / geo 等：它们该交给系统打开，
+     * 被误挡就是功能回归（`window.open('mailto:…')` / `target="_blank"` 的 "邮件我们" 按钮
+     * 原本能唤起邮件应用）。故这里只列「交给系统也没有正当用途」的那三类。
+     */
+    internal fun isNeverWebContentScheme(scheme: String?): Boolean =
+        scheme == "file" || scheme == "moz-extension" || scheme == "javascript"
+
     fun resolveInfo(input: String, engine: SearchEngine): Resolved? {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return null

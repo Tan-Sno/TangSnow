@@ -642,11 +642,11 @@ class BrowserSessionManager private constructor(
             request: GeckoSession.NavigationDelegate.LoadRequest
         ): GeckoResult<AllowOrDeny>? {
             val uri = request.uri
-            val scheme = runCatching { android.net.Uri.parse(uri).scheme }
-                .getOrNull().orEmpty().lowercase()
+            val scheme = io.github.tan_sno.tangsnow.util.UrlUtils.schemeOf(uri)
             // 白名单：内核自身能处理的**网页导航**一律放行（返回 null 让内核继续），不拦截。
-            val webScheme = scheme == "http" || scheme == "https" || scheme == "about" ||
-                scheme == "data" || scheme == "blob"
+            // ⚠️ 判定与 `MainActivity.onOpenInCurrentTab` 的收口**共用同一个函数**（见其 KDoc）：
+            //    那条链最终走应用自己的 loadUri（isDirectNavigation=true），内核侧会放行特权 scheme。
+            val webScheme = io.github.tan_sno.tangsnow.util.UrlUtils.isWebNavigationScheme(scheme)
             // 特权 scheme：只放行**应用自己发起**的导航。
             //
             // 判据用内核**文档化**的 `LoadRequest.isDirectNavigation`（javap 实测
@@ -1292,6 +1292,31 @@ class BrowserSessionManager private constructor(
 
     fun setHostVisible(visible: Boolean) {
         hostVisible = visible
+    }
+
+    /**
+     * 前台宿主（MainActivity 实例）计数。
+     *
+     * 为什么需要它：MainActivity 是 `singleTop`，用户停在「资料库 / 设置」这类子页面时从**其它应用**
+     * 点链接或分享进来，系统会再压出一个 MainActivity 实例 —— 两个实例共享同一个会话管理器。
+     * 此时若任一实例销毁就 `shutdown()`，先创建的那个实例还活着却已失去内核与全部回调
+     * （地址栏 / 进度 / 权限回调全失联，网页 prompt 还会因处理器为 null 被自动拒绝），只能杀进程恢复。
+     * 故关停判据是「**本进程已无任何 MainActivity 实例**」，而不是「我这个实例要结束了」。
+     *
+     * 线程：只在主线程读写（onCreate / onDestroy 都在主线程）。
+     * ⚠️ 计数与 `isFinishing` **必须解耦**：配置变更（切主题 / 切语言）销毁旧实例时 `isFinishing`
+     * 为 false，但计数仍要减 —— 否则计数只增不减，一次主题切换之后正常的「划掉任务」就不再关停内核。
+     */
+    private var hostCount = 0
+
+    fun hostAttached() {
+        hostCount++
+    }
+
+    /** @return 摘除后是否已无宿主（true 表示此刻可以安全关停） */
+    fun hostDetached(): Boolean {
+        hostCount = (hostCount - 1).coerceAtLeast(0)
+        return hostCount == 0
     }
 
     /**

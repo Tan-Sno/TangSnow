@@ -268,8 +268,32 @@ android {
         //     资料库页签与搜索词的重建恢复、语言初选页重建后保留已选语言、取色对话框回填与
         //     无障碍描述、硬编码失败原因改资源串、崩溃日志过滤口径、对话框内边距 px→dp。
         //   ABI 分包 versionCode 随之派生为 381 / 382 / 383。
-        versionCode = 38
-        versionName = "2.1.5"
+        // 2.1.6：**第三方全盘报告的核实与修复收口**（8 文件 + 3 个新测试类 / +387 −47）。无新功能、
+        //   无新对外端点、政策文本未变 ⇒ `POLICY_VERSION` 保持 **22**。六条都是「回代码取证」后的结论：
+        //  ① 【P1】双实例 MainActivity 互相关停：`singleTop` 下从外部深链 / 分享进来会压出第二个实例，
+        //     而任一实例销毁都会无条件置空四个处理器并 `shutdown()` 进程级会话管理器 ⇒ 先创建的那个
+        //     实例还活着却已失去内核与全部回调（地址栏 / 进度 / 权限回调失联、prompt 被自动拒绝）。
+        //     改为「**按引用比对**解绑 + **宿主计数归零**才关停（计数与 isFinishing 解耦）+
+        //     `onResume` 幂等重挂（含把会话画面重新挂回本实例）」。
+        //  ② 【P1】无痕痕迹进崩溃日志：`noteVisit` 缺无痕守卫（同一函数里写历史那处却有），且该值住在
+        //     内存里、**没有任何清除出口** ⇒ 补与写历史同口径的守卫、新增 `clearHost()`（退出无痕 /
+        //     清除浏览数据各挂一处）、写盘前对堆栈做 URL 脱敏（只留 `scheme://host`，userinfo 一并剥掉）。
+        //  ③ 【P2】`window.open` 可绕过 `file:` 闸门：该链最终走应用自己的 `loadUri`
+        //     （isDirectNavigation=true）⇒ 内核侧的特权 scheme 闸门必然放行。抽出
+        //     `UrlUtils.schemeOf / isWebNavigationScheme` 供 `onLoadRequest` 与 `onOpenInCurrentTab`
+        //     **共用同一份白名单**（含 data/blob —— 只放 http/https/about 会让 `window.open('data:…')` 回归）。
+        //  ④ 【P2】下载文件名按**字符**限长（150），而文件系统单段上限是 255 **字节**：
+        //     150 个汉字 = 450 字节，会原样穿过限长并在 `createNewFile` 抛 `File name too long`，
+        //     整单下载失败。改按 UTF-8 字节（上限 200）且**按码点整块收**（不劈开汉字 / emoji）。
+        //  ⑤ 【P2】历史标题取自导航提交时刻的 `tab.title`（标题事件未必已到）⇒ 标题错一页且无处回写。
+        //     改为在 `onPageStop` 补写（此时 URL 与标题都已定型、天然配对）；**不用** `onTitleChanged`
+        //     —— 标题若早于导航提交到达，那时 `tab.url` 还是**上一页**，照它回写会张冠李戴。
+        //  ⑥ 【自查新增】`Bitmaps.cover` 只受「填满」比例支配、不受像素闸门约束 ⇒ 极端长宽比下会先放大出
+        //     数千万像素的中间图（8000×500 配 1080×2400 ≈ 9200 万像素 / 92MB）。改为**先裁后缩**。
+        //   测试 181 → **203**（+3 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest`），
+        //   两条新哨兵已主动验证会红（临时改坏 ⇒ 6 条 FAILED）；lint 全警告口径仍 `No issues found`。
+        versionCode = 39
+        versionName = "2.1.6"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
         // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
         // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。

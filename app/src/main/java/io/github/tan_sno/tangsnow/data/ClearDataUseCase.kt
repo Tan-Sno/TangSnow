@@ -4,6 +4,7 @@ import android.content.Context
 import io.github.tan_sno.tangsnow.GeckoHolder
 import io.github.tan_sno.tangsnow.data.repo.DownloadRepo
 import io.github.tan_sno.tangsnow.data.repo.HistoryRepo
+import io.github.tan_sno.tangsnow.util.CrashLogger
 import io.github.tan_sno.tangsnow.util.awaitResult
 import org.mozilla.geckoview.StorageController
 
@@ -100,7 +101,14 @@ object ClearDataUseCase {
             }
         }
 
-        if (options.history) locally { HistoryRepo.clear() }
+        if (options.history) {
+            locally { HistoryRepo.clear() }
+            // 「最近访问站点」属浏览记录的一部分（崩溃日志会写它，政策第 7 条已披露）：
+            // 历史被清掉后它就不该再留在内存里 —— 否则下一次崩溃会把「已被清除的访问记录」
+            // 重新落进持久化的日志文件，与用户刚做出的清除动作相悖。
+            // 放在 locally{} **外面**：历史清理失败时也要清（内存值不该因一次 DB 失败而保留）。
+            CrashLogger.clearHost()
+        }
         if (options.sessionSnapshot) locally {
             // 用可等待版本：删除失败要计入 localFailedCount，不能假报「已清除」（D2）
             if (!SessionStore.clearAwait(context)) {
