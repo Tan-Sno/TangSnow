@@ -54,7 +54,17 @@ class Tab(val id: Int, val session: GeckoSession, val isPrivate: Boolean) {
  */
 interface TabEvents {
     fun onTitleChanged(tab: Tab, title: String)
-    fun onLocationChanged(tab: Tab, url: String?, isReload: Boolean)
+    /**
+     * 地址变化（导航已提交，是写历史/更新地址栏的时机）。
+     *
+     * ⚠️ 刻意**不**带「是否刷新 / 是否用户手势」这类参数：内核在 **157** 把该回调的第 4 参从
+     * `isReload` 改成了 `hasUserGesture`（Mozilla 官方 javadoc 原文 `@NonNull Boolean hasUserGesture`
+     * —— "Whether or not there was an active user gesture when the location change was requested"）。
+     * 于是「靠它判断是不是刷新」这件事**前提已经没了**：继续当 `isReload` 用，等价于「只记录
+     * 由用户手势发起的导航」—— 地址栏输入、应用内跳转（书签/历史/分享）、服务端重定向都会被静默漏记。
+     * 历史去重改由「同 URL + 1.5s 时间窗」承担（那套节流本来就在），刷新与重定向都不会重复落行。
+     */
+    fun onLocationChanged(tab: Tab, url: String?)
     fun onFullScreen(tab: Tab, full: Boolean)
     fun onPageStart(tab: Tab)
     fun onPageProgress(tab: Tab, progress: Int)
@@ -600,7 +610,9 @@ class BrowserSessionManager private constructor(
             session: GeckoSession,
             url: String?,
             permissions: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
-            isReload: Boolean
+            // 157 起语义为 hasUserGesture（155 时是 isReload）。**本应用不使用它**，理由见
+            // TabEvents.onLocationChanged 的注释；名字照内核口径写，免得下一个人又当成 isReload。
+            hasUserGesture: Boolean
         ) {
             // about:blank 等内部地址视为「无页面」，避免分享/收藏/恢复逻辑踩到假 URL
             tab.url = url?.takeUnless { it.startsWith("about:") }
@@ -613,7 +625,7 @@ class BrowserSessionManager private constructor(
             if (isAlive(tab) && !tab.isPrivate && !url.isNullOrBlank() && !url.startsWith("about:")) {
                 SessionStore.clearPurged()
             }
-            post { events?.onLocationChanged(tab, url, isReload) }
+            post { events?.onLocationChanged(tab, url) }
         }
 
         override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {

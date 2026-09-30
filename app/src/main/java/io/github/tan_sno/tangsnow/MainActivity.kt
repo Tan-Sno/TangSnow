@@ -401,7 +401,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             if (alive() && sessionManager.activeTab === tab) updateBookmarkIcon()
         }
 
-        override fun onLocationChanged(tab: Tab, url: String?, isReload: Boolean) {
+        override fun onLocationChanged(tab: Tab, url: String?) {
             if (!alive()) return
             // 已释放标签的迟到事件：不再影响地址栏、历史与崩溃日志的"最近访问站点"
             if (!sessionManager.isAlive(tab)) return
@@ -430,8 +430,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 updateBookmarkIcon()
                 updateNavCells()
             }
-            if (!isReload && !url.isNullOrBlank() && !prefs.privateMode && !tab.isPrivate) {
-                // 合并密集的重定向/同 URL 跳转：极短时间内同一地址只落库一次
+            if (!url.isNullOrBlank() && !prefs.privateMode && !tab.isPrivate) {
+                // 合并密集的重定向/同 URL 跳转：极短时间内同一地址只落库一次。
+                // ⚠️ 这里**不再**看「是否刷新」：内核 157 起该回调的第 4 参语义是 hasUserGesture
+                //（Mozilla 官方 javadoc 实证，见 TabEvents.onLocationChanged 的注释），继续当 isReload 用
+                // 会把地址栏输入 / 应用内跳转 / 服务端重定向整类导航漏记；去重改由下面的同 URL + 时间窗负责。
                 val now = SystemClock.elapsedRealtime()
                 if (url != lastHistoryUrl || now - lastHistoryAt > 1500L) {
                     lastHistoryUrl = url
