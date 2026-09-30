@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  显式声明：**应用自身网络栈**（OkHttp —— AMO 扩展源/元数据、GitHub 版本查询）只允许 HTTPS。
+
+  ⚠️ 边界必须写清楚，否则会被误解成"给网页加载上锁"：
+  本文件**只约束应用自己的网络请求**，对 **GeckoView 完全无效** —— 浏览内核自带网络栈（libxul），
+  不看 Android 的 network security config；而浏览器必须能打开 http:// 站点（内网管理页、老站点），
+  那由内核行为 + 地址栏的安全指示器负责。
+
+  因此这个文件的价值是"把『本应用 API 仅 https』写成**机器可验的声明**"：
+  targetSdk 37 的默认行为本就禁明文，但"默认"随时可能被某个 library 的 manifest 合并改掉，
+  写死在这里才是可审的。（2026-09-30 外部审查指出：入口级加固做了 95%，少了这类"声明式"的一环。）
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

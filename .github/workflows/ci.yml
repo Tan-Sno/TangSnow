@@ -43,6 +43,10 @@ jobs:
           distribution: temurin
           java-version: '25'
 
+      # 缓存 Gradle 用户目录与依赖（首次仍要拉 GeckoView，之后命中缓存）
+      # ref 用 v6：`gradle/actions` 的最新 release 为 v6.4.0（2026-09-30 经 GitHub API 核对）
+      - uses: gradle/actions/setup-gradle@v6
+
       # lint 的 checkAllWarnings = true 是项目的硬门禁：全警告口径下必须 `No issues found`
       - name: Unit tests + lint
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug --console=plain
