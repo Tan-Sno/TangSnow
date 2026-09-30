@@ -78,7 +78,7 @@ object ExtensionPrompts {
      * ⚠️ 本类的 AtomicBoolean 只挡**本文件**的重复应答，挡不住**内核先行完成/取消**：
      * 那时 `GeckoResult.complete()` / `completeExceptionally()` 会抛
      * `IllegalStateException("result is already complete")` —— 已用 `javap` 在本项目锁定的
-     * geckoview 155 制品上证实（这两个方法都在 `mComplete` 为真时直接 `new IllegalStateException`）。
+     * geckoview 157 制品上证实（这两个方法都在 `mComplete` 为真时直接 `new IllegalStateException`）。
      * 该异常原本会从**主线程的按钮回调**里逃逸出去 —— 未捕获即崩溃；所以必须在这里吞掉
      * **这一种**（且只这一种，不扩大吞异常面）。内核何时会先行结算不由本仓控制，
      * 这一段是纯粹的防御。
@@ -347,7 +347,7 @@ object ExtensionPrompts {
      * 扩展 Tab 委托里创建标签所用的协程域。**必须落在主线程**，见下方证据与后果说明。
      *
      * ⚠️ 为什么不能用 IO：`BrowserSessionManager.newTab()` 最终会走到
-     * `GeckoSession.open(runtime)`，而 javap 实测 geckoview 155 的制品，
+     * `GeckoSession.open(runtime)`，而 javap 实测 geckoview 157 的制品，
      * `GeckoSession.open(GeckoRuntime, String)` 的**第一条指令**就是
      * `invokestatic org/mozilla/gecko/util/ThreadUtils.assertOnUiThread:()V`；
      * 该方法的实现是 `assertOnThread(getUiThread(), AssertBehavior.THROW)`

@@ -11,7 +11,7 @@ covers third-party content only and does not modify the LICENSE.
 
 | Component | Version | License | Purpose |
 |---|---|---|---|
-| Mozilla GeckoView | 155.0.20260903215306 | Mozilla Public License 2.0 | Web rendering engine (based on Gecko) |
+| Mozilla GeckoView | 157.0.20260924084938 | Mozilla Public License 2.0 | Web rendering engine (based on Gecko) |
 | OkHttp | 5.5.0 | Apache License 2.0 | HTTP requests for the extension catalogue, metadata and in-app update checks |
 | ZXing core | 3.5.4 | Apache License 2.0 | QR code decoding |
 | ZXing Android Embedded | 4.3.0 | Apache License 2.0 | Scanner viewfinder and camera-permission handling |
@@ -31,7 +31,7 @@ distribution):
 - **GeckoView source**: <https://github.com/mozilla/gecko-dev> — or the
   [Maven repository](https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/) published by
   Mozilla, which carries the exact artifact for the version this application uses,
-  `155.0.20260903215306`.
+  `157.0.20260924084938`.
 - This application has **not modified** GeckoView's source (it only calls its public APIs as a
   dependency), so no Modifications exist in the sense of MPL section 3.1. The application's own code
   is a Larger Work under the Apache License 2.0 and is not subject to the MPL 2.0 copyleft terms.

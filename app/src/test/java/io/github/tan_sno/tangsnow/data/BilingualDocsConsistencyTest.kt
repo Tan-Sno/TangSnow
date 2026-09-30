@@ -20,7 +20,8 @@ import java.io.File
  * ## 覆盖范围与边界（别高估它）
  *
  * ✅ 能查：文档对是否齐全、语言链接是否互指、**章节标题序列**是否对齐、
- *    关键**内容标识符**（权限名 / 对外主机名 / 应用标识 / 内核版本）是否**两侧对称**。
+ *    关键**内容标识符**（权限名 / 对外主机名 / 应用标识）是否**两侧对称**，
+ *    以及**内核版本**（README 与 THIRD_PARTY_NOTICES）是否与 `libs.versions.toml` 里钉的一致。
  * ❌ 查不了：正文是否真的译得对、译得全、语气是否得当 —— 那仍然只能靠人审。
  *
  * 刻意**不用文件名**做标识符（英文版是 `X.md`、中文版是 `X.zh-CN.md`，天然不对称）；
@@ -80,9 +81,37 @@ class BilingualDocsConsistencyTest {
         }
     }
 
+    /**
+     * **内核版本必须与依赖目录里钉的那一个对上**。
+     *
+     * 这是给「升级内核时漏改对外文档」上的锁：`gradle/libs.versions.toml` 是版本的单一事实来源，
+     * 而 README（写大版本）与 THIRD_PARTY_NOTICES（写完整构件版本 —— MPL 合规要求能对上具体构件）
+     * 必须同步。上面那份「标识符两侧次数一致」的检查**放不住**这种情况：两边一起漏改照样全绿，
+     * 故这里改用**存在性**断言。
+     */
     @Test
-    fun `两份文档顶部互相链接`() {
-        for ((en, zh) in pairs) {
+    fun `内核版本与依赖目录一致`() {
+        val catalog = File(repoRoot(), "gradle/libs.versions.toml").readText()
+        val version = Regex("^geckoView\\s*=\\s*\"([^\"]+)\"", RegexOption.MULTILINE)
+            .find(catalog)?.groupValues?.get(1)
+            ?: throw AssertionError("libs.versions.toml 里找不到 geckoView 版本")
+        val major = version.substringBefore('.')
+        for (doc in listOf("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.zh-CN.md")) {
+            assertTrue(
+                "$doc 里没有当前 GeckoView 构件版本 $version —— 升级内核后漏改对外文档？",
+                read(doc).contains(version),
+            )
+        }
+        for (doc in listOf("README.md", "README.zh-CN.md")) {
+            assertTrue(
+                "$doc 里没有当前 GeckoView 大版本「GeckoView $major」—— 升级内核后漏改对外文档？",
+                read(doc).contains("GeckoView $major"),
+            )
+        }
+    }
+
+    @Test
+    fun `两份文档顶部互相链接`() {        for ((en, zh) in pairs) {
             val enText = read(en)
             val zhText = read(zh)
             assertTrue("$en 顶部应链到 $zh", enText.contains("]($zh)"))
@@ -106,7 +135,9 @@ class BilingualDocsConsistencyTest {
             // 应用标识（README 的 2.0.x 升级说明）
             "io.github.tan_sno.tangsnow", "com.tangsnow.tangsnow",
             // 内核版本与许可证（README 与 THIRD_PARTY_NOTICES）
-            "155.0.20260903215306", "Apache License 2.0", "MPL 2.0",
+            // ⚠️ 内核**版本号本身**不在这里比次数 —— 「两侧次数相同」放不住漏改（两边一起漏改照样全绿），
+            //    故由下面的 `内核版本与依赖目录一致` 拿 libs.versions.toml 里的真实版本做**存在性**断言。
+            "Apache License 2.0", "MPL 2.0",
         )
         for ((en, zh) in pairs) {
             val enText = read(en)
