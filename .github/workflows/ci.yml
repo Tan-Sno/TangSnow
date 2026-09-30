@@ -10,8 +10,16 @@
 #    未标 obsolete、`<api-level>37.2</api-level>`，许可证为 `android-sdk-license`
 #    （GitHub-hosted runner 预接受）⇒ `compileSdk = 37.2` 在 runner 上可获得；
 #  · `gradlew` 在仓库里带可执行位（100755），wrapper 指向 gradle-9.6.0-bin.zip（公开可下）。
-# 本机基线：JDK 25(JBR) 下 `:app:testDebugUnitTest :app:lintDebug` 全绿。
-# CI 取 JDK 21（LTS）；本项目未声明 toolchain，若将来 runner 因 JDK 版本报错，把 java-version 提到 25 即可。
+#
+# JDK 取 **25**，不是随手的默认值：`gradle/gradle-daemon-jvm.properties` 里写明 `toolchainVersion=25`
+# （仓库自己钉的 Gradle daemon JVM），本机也正是在 JDK 25（JBR 25.0.3）下构建与出包的。
+# 若这里给 21，Gradle 会按该声明去 foojay 现拉一个 25 的 daemon ⇒ 多一次约 150MB 下载、多一个失败点，
+# 且"CI 绿"与"我本机能出包"之间就隔了一层版本差异。
+# 为什么不是 JBR 25：`actions/setup-java` 不提供 JetBrains Runtime，而本仓库自己的 toolchain 源
+# 就是 foojay 的通用 OpenJDK 构建（即那份文件里的 8 条 toolchainUrl）⇒ **本项目约束的是版本，不是厂商**。
+# Temurin 25 已由 Adoptium 官方 API 实测存在（jdk-25.0.4.1+1，LTS，linux x64）。
+# 另：app/build.gradle.kts 的 `sourceCompatibility/targetCompatibility = 17` 不变 ⇒ 用 25 构建
+# 不会抬高产物的 Java/Android 要求（字节码仍是 17）。
 name: CI
 
 on:
@@ -33,7 +41,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
 
       # lint 的 checkAllWarnings = true 是项目的硬门禁：全警告口径下必须 `No issues found`
       - name: Unit tests + lint
