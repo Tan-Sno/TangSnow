@@ -603,7 +603,12 @@ class BrowserSessionManager private constructor(
             // about:blank 等内部地址视为「无页面」，避免分享/收藏/恢复逻辑踩到假 URL
             tab.url = url?.takeUnless { it.startsWith("about:") }
             // 真实页面导航 = 新的浏览活动：恢复正常的会话落盘（抵消 purgePending）
-            if (!url.isNullOrBlank() && !url.startsWith("about:")) {
+            // ⚠️ 三个条件缺一不可：
+            //  · `isAlive(tab)` —— 已关闭 / 已重建的旧标签会投递**迟到**事件，它代表的不是"新浏览活动"，
+            //    却会把刚清掉的快照重新放行落盘；
+            //  · 非无痕 —— 无痕流量不该复位这个标志（在无痕标签里点一下就等于替普通标签撤销了清除）；
+            //  · 非 about: —— 内部页不算浏览活动（与写历史、崩溃日志两处同口径）。
+            if (isAlive(tab) && !tab.isPrivate && !url.isNullOrBlank() && !url.startsWith("about:")) {
                 SessionStore.clearPurged()
             }
             post { events?.onLocationChanged(tab, url, isReload) }

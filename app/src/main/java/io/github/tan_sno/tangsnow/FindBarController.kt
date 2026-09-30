@@ -102,15 +102,20 @@ class FindBarController(private val activity: MainActivity) {
     fun cancelPending() {
         debounce?.let { handler.removeCallbacks(it) }
         debounce = null
+        findSeq++   // 在途的查找结果一并作废（销毁后不该再写 count）
     }
 
     private fun runFind(query: String, forward: Boolean) {
         val finder = activity.sessionManager.activeTab?.session?.finder ?: return
         if (query.isEmpty()) {
+            findSeq++          // 输入被清空：在途结果一律作废
             finder.clear()
             count?.text = ""
             return
         }
+        // 查询序号：内核的 find 结果是**异步**回来的，连续两次查找（间隔超过防抖窗口即为两次）
+        // 的结果可能乱序到达 —— 不判序号就会把上一次的计数写到当前的输入上。
+        val seq = ++findSeq
         val flags = if (forward) GeckoSession.FINDER_FIND_FORWARD else GeckoSession.FINDER_FIND_BACKWARDS
         finder.find(query, flags).accept(
             { res ->
@@ -119,6 +124,7 @@ class FindBarController(private val activity: MainActivity) {
                     // 视图树已失效，再写就是把状态灌进一个废弃的界面。对齐 TabPreviewController
                     // 的做法（那里三处回调都判了）。
                     if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                    if (seq != findSeq) return@runOnUiThread   // 迟到的旧查询结果：丢弃
                     val text = if (res != null && res.found && res.total > 0) {
                         activity.getString(R.string.find_result, res.current + 1, res.total)
                     } else {
@@ -130,4 +136,7 @@ class FindBarController(private val activity: MainActivity) {
             { _ -> }
         )
     }
+
+    /** 已完成查询的序号（每次发起自增）；用于丢弃乱序到达的旧结果 */
+    private var findSeq = 0
 }

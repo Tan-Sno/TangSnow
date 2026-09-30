@@ -98,14 +98,27 @@ class EngineSettingsActivity : AppCompatActivity() {
             .setPositiveButton(R.string.dlg_ok) { _, _ ->
                 val name = nameInput.text.toString()
                 val template = urlInput.text.toString()
+                // 逐个原因给对应文案：`addCustomEngine` 用一个 false 表达四种失败，一律报
+                // 「该名称或地址已存在」会把「名称为空」「已达上限」也指成重复 —— 用户照着提示改不到点上。
                 val ok = when {
+                    name.isBlank() -> {
+                        toast(R.string.engine_name_empty)
+                        false
+                    }
                     !PreferenceStore.isHttpTemplate(template) -> {
                         toast(R.string.engine_url_scheme_invalid)
                         false
                     }
-                    else -> prefs.addCustomEngine(name, template).also {
-                        if (!it) toast(R.string.engine_duplicated)
+                    prefs.customEngines.size >= PreferenceStore.MAX_CUSTOM_ENGINES -> {
+                        val max = PreferenceStore.MAX_CUSTOM_ENGINES
+                        toast(resources.getQuantityString(R.plurals.engine_limit_reached, max, max))
+                        false
                     }
+                    !prefs.addCustomEngine(name, template) -> {
+                        toast(R.string.engine_duplicated)
+                        false
+                    }
+                    else -> true
                 }
                 if (ok) refreshList()
             }

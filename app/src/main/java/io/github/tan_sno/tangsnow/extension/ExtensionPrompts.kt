@@ -126,12 +126,30 @@ object ExtensionPrompts {
                                     extension.metaData.name.orEmpty().ifBlank { extension.id },
                                 )
                             )
-                            .setMessage(permissionSummary(activity, permissions, origins))
+                            // 申请项**必须含 dataCollection**：更新框早已这么渲染（见 onUpdatePrompt），
+                            // 安装框此前把 dataCollection 收了却没用 ⇒ 用户看不到「该扩展要收集数据」这一项。
+                            .setMessage(
+                                permissionSummary(activity, permissions, origins, dataCollection) +
+                                    if (dataCollection.isNotEmpty()) {
+                                        "\n\n" + activity.getString(R.string.extension_data_collection_notice)
+                                    } else {
+                                        ""
+                                    }
+                            )
                             .setNegativeButton(R.string.dlg_cancel) { _, _ ->
                                 once.complete(denied)
                             }
                             .setPositiveButton(R.string.dlg_ok) { _, _ ->
-                                once.complete(WebExtension.PermissionPromptResponse(true, false, false))
+                                // 第三个布尔位是「技术与交互数据收集」的授权（javap 实测字段名
+                                // `isTechnicalAndInteractionDataGranted`）。扩展确实申请了它、而弹窗里
+                                // 已把这项申请逐条列出、用户点的就是「确定」⇒ 记为用户同意。
+                                // 此前**恒传 false**：用户点了确定、数据收集授权却被静默拒绝 ——
+                                // 扩展要么装不上要么缺权限运行，两种都与用户实际表达的意思相反。
+                                once.complete(
+                                    WebExtension.PermissionPromptResponse(
+                                        true, false, dataCollection.isNotEmpty(),
+                                    )
+                                )
                             }
                             .setOnCancelListener {
                                 once.complete(denied)

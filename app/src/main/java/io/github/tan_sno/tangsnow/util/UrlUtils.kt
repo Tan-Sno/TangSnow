@@ -171,9 +171,14 @@ object UrlUtils {
         }
     }
 
-    /** fe80::/10（链路本地）与 fc00::/7（ULA）；按首段十六进制前缀判断即可覆盖实际取值 */
+    /** fe80::/10（链路本地）与 fc00::/7（ULA）；IPv4-mapped 形式按其内嵌的 IPv4 判 */
     private fun isLocalIpv6(host: String): Boolean {
         val h = host.lowercase()
+        // `::ffff:192.168.1.1`（IPv4-mapped IPv6）：内核按 IPv4 处理，但**字面量是 IPv6**
+        // ⇒ 不认它就会漏判，而漏判的后果是「静默连不上」（Android 17 起未授权时局域网被拦，
+        // 且因为没弹权限框，用户只会看到打不开）。剥掉前缀后按 IPv4 判。
+        val mapped = h.removePrefix("::ffff:").takeIf { it != h }
+        if (mapped != null) return isLocalIpv4(mapped)
         return h.startsWith("fe8") || h.startsWith("fe9") ||
             h.startsWith("fea") || h.startsWith("feb") ||   // fe80::/10
             h.startsWith("fc") || h.startsWith("fd")        // fc00::/7

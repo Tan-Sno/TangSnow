@@ -5,9 +5,9 @@
 
 # Privacy Policy / 隐私政策
 
-> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 22`。
-> This file matches the legal text shown in the app under “Settings → About TangSnow”, and corresponds to `POLICY_VERSION = 22` in the app.
-> 最后更新 / Last updated：2026年09月26日
+> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 23`。
+> This file matches the legal text shown in the app under “Settings → About TangSnow”, and corresponds to `POLICY_VERSION = 23` in the app.
+> 最后更新 / Last updated：2026年09月30日
 > **请勿直接编辑**；请修改 `strings.xml` 后运行 `python tools/export_legal_docs.py` 重新导出。
 > **Do not edit directly** — change `strings.xml` and re-run `python tools/export_legal_docs.py`.
 
@@ -17,7 +17,7 @@
 
 ## English
 
-Last updated: 2026-09-26
+Last updated: 2026-09-30
 
 1. What we process and why
 
@@ -47,7 +47,7 @@ The default is “Bing CN” (cn.bing.com) for stable, compliant access on mainl
 
 · Sites you visit yourself.
 
-· api.github.com (GitHub’s official API) — **only when you tap Settings → Check for updates**, to read TangSnow’s public release information (latest version number and release notes) so the app can tell you whether an update exists. This request reads public data only and carries no device identifier, account or browsing record; the app **never** issues it automatically in the background.
+· api.github.com (GitHub’s official API) — **only when you tap Settings → Check for updates**, to read TangSnow’s public release information (latest version number and release notes) so the app can tell you whether an update exists. This request reads public data only and carries no account, browsing record or device-unique identifier; to complete the HTTP request it includes the app version (User-Agent) and the device language preference (Accept-Language), and nothing else. The app **never** issues it automatically in the background.
 
 · Built-in tracking protection is on by default and can be adjusted (Standard/Strict/Custom) or fully turned off in Settings → Privacy & Security; blocking decisions are made on your device, and neither we nor any third party receives the URLs you visit or your browsing behaviour. In the Strict profile — and in Custom when “Block fingerprinting” is ticked — additional runtime fingerprinting protection is enabled on your device (it weakens browser characteristics usable for fingerprinting); because it changes information some pages can read and may affect how a few sites render, it is enabled only in the profiles you explicitly choose. “Bounce tracking protection” (blocking cross-site tracking built through redirection chains) follows the same setting and is turned off together with tracking protection. The filter lists used by tracking protection are provided and updated on-device by Mozilla’s official remote settings service (firefox.settings.services.mozilla.com); only lists and hash-prefix comparisons are downloaded, never the plain text of the URLs you visit, and they are not used to identify you.
 
@@ -91,7 +91,7 @@ For privacy or compliance questions, contact us via the project’s GitHub repos
 
 ## 隐私政策
 
-更新日期：2026年09月26日
+更新日期：2026年09月30日
 
 1. 我们处理哪些信息、为了什么
 
@@ -121,7 +121,7 @@ For privacy or compliance questions, contact us via the project’s GitHub repos
 
 · 您主动访问的网站；
 
-· api.github.com（GitHub 官方 API）：**仅当您点击「设置 → 检查更新」时**，读取棠雪的公开版本信息（最新版本号与更新说明），用于告知是否有新版本。该请求只读取公开数据，不携带任何设备标识、账号或浏览记录；应用**不会**在后台自动发起此请求。
+· api.github.com（GitHub 官方 API）：**仅当您点击「设置 → 检查更新」时**，读取棠雪的公开版本信息（最新版本号与更新说明），用于告知是否有新版本。该请求只读取公开数据，不携带账号、浏览记录，也不含任何设备唯一标识；为完成 HTTP 请求会附带本应用版本号（User-Agent）与设备语言偏好（Accept-Language），除此之外不发送其它信息。应用**不会**在后台自动发起此请求。
 
 · 内置跟踪保护默认开启，可在「设置 → 隐私与安全」调整强度（标准/严格/自定义）或整体关闭；拦截判断在本机完成，应用不会把您访问的网址或浏览行为上报给我们或任何第三方。其中「严格」档、以及自定义档勾选「拦截指纹跟踪」时，会额外在本机启用运行时级指纹保护（削弱可供指纹识别的浏览器特征）；该能力会改变部分网页可读取的浏览器信息、可能影响个别站点的显示效果，故仅在您主动选择这些档位时启用。「弹跳跟踪保护」（拦截以“红跳转”方式建立的跨站跟踪）与跟踪保护档位同开关，关闭跟踪保护时一并关闭。跟踪保护所使用的拦截名单由 Mozilla 官方远程设置服务（firefox.settings.services.mozilla.com）提供并在本机更新，仅下载名单与哈希前缀比对，不含您访问网址的明文，也不用于识别您的身份；
 

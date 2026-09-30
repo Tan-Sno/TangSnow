@@ -151,9 +151,18 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     // ------------------------------------------------------------- 网页弹窗 / 站点权限
 
-    /** 网页 <input type=file> 单选 */
+    /**
+     * 网页 `<input type=file>` 单选。
+     *
+     * 用 `OpenDocument`（契约收 **MIME 数组**）而不是 `GetContent`（只收单个 MIME 字符串）：
+     * 页面把 `accept` 写成多个 MIME（如图片 + PDF）时，旧实现只能把**第一个**交给选择器，
+     * 用户根本选不到后面的类型 —— 而多选那条路本来就传整个数组，两条路不对称。
+     *
+     * ⚠️ 注释里**不要**写 MIME 通配符的字面量（图片类型斜杠星号）：Kotlin 的块注释**可嵌套**，
+     * 那个斜杠星号会开启嵌套注释、把后续代码整段吞掉（实测报 "Unclosed comment"）。
+     */
     private val pickSingleFile =
-        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
             webPrompts.onPickedFiles(uri?.let(::listOf))
         }
 
@@ -464,8 +473,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         }
 
         override fun onExternalResponse(tab: Tab, response: WebResponse) {
-            // 已释放标签的响应不再处理：否则会为已经消失的标签弹出下载确认框
-            if (alive() && sessionManager.isAlive(tab)) handleDownload(response)
+            // 已释放标签的响应不再处理：否则会为已经消失的标签弹出下载确认框。
+            // 带上发起下载的页面地址：系统下载器回退路径要拿它当 Referer（见 startDownload）
+            if (alive() && sessionManager.isAlive(tab)) handleDownload(response, tab.url)
         }
 
         override fun onOpenInCurrentTab(uri: String) {
@@ -1174,8 +1184,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             runCatching {
                 Intent.parseUri(url, Intent.URI_INTENT_SCHEME).apply {
                     fallbackUrl = getStringExtra(INTENT_FALLBACK_EXTRA)
-                    component = null // 加固：不接受网页指定的组件
+                    // 加固三连：`intent://` 整串是**页面可控**的，凡是页面能指定"打给谁"的字段都不能留 ——
+                    //  component / selector：直接指向某应用内部组件（该 scheme 的经典滥用面）；
+                    //  package：把 Intent 限死在某个包上，可用来探测"某应用是否安装"或强行导向该应用。
+                    // ⚠️ 刻意**不清 extras**：`intent://` 规范里的 `S.` / `i.` 前缀 extra 是**目标应用的载荷**
+                    //（合法入口会依赖它），而"打给谁"已由上面三个字段置空 + 只保留 BROWSABLE 分类挡住。
+                    // 一律清空属过度收口 —— 与「只放 http/https 会误挡 mailto」是同一类错误。
+                    component = null
                     selector = null
+                    setPackage(null)
                     addCategory(Intent.CATEGORY_BROWSABLE)
                 }
             }.getOrNull()
@@ -1897,7 +1914,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     // ------------------------------------------------------------- 下载
 
-    private fun handleDownload(response: WebResponse) {
+    private fun handleDownload(response: WebResponse, pageUrl: String?) {
         // HTTP 头名大小写不敏感，统一查找 Content-Disposition，避免对两种大小写各查一次
         val disposition = response.headers.entries
             .firstOrNull { it.key.equals("content-disposition", ignoreCase = true) }?.value
@@ -1914,14 +1931,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 .setMessage(getString(R.string.dl_executable_message, fileName))
                 .setNegativeButton(R.string.dlg_cancel, null)
                 .setPositiveButton(R.string.dl_executable_continue) { _, _ ->
-                    startDownload(response, url, fileName)
+                    startDownload(response, url, fileName, pageUrl)
                 }
                 .show()
             return
         }
         // 用户已关掉「下载前询问」：直接开始
         if (!prefs.askBeforeDownload) {
-            startDownload(response, url, fileName)
+            startDownload(response, url, fileName, pageUrl)
             return
         }
         // 下载先征询用户，避免“页面偷偷开始下载”的体验与合规风险；
@@ -1936,7 +1953,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.download_confirm_ok) { _, _ ->
                 if (noAsk[0]) prefs.askBeforeDownload = false
-                startDownload(response, url, fileName)
+                startDownload(response, url, fileName, pageUrl)
             }
             .show()
     }
@@ -1954,7 +1971,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      * 撤销大文件路由的同一个理由对它一字不差地成立（此前 false 把「无响应体」与「写失败」
      * 混成一种，于是这两种情形共用了一条回退路径）。
      */
-    private fun startDownload(response: WebResponse, url: String, fileName: String) {
+    private fun startDownload(
+        response: WebResponse,
+        url: String,
+        fileName: String,
+        pageUrl: String?,
+    ) {
         lifecycleScope.launch {
             toast(R.string.toast_start_download)
             when (DownloadRepo.saveFromStream(this@MainActivity, response, fileName)) {
@@ -1963,7 +1985,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
                 // 内核没给响应体：手上本就没有内容，退回系统下载器是唯一出路（附 Referer/UA）
                 DownloadRepo.SaveOutcome.NO_BODY -> {
-                    val id = DownloadRepo.launch(this@MainActivity, url, fileName, referer = url)
+                    // Referer 必须传**发起下载的页面地址**，而不是下载地址本身：此前传的是 `url`，
+                    // 对服务端等于"自指"，防盗链校验与来源统计都会拿到错的值。
+                    val id = DownloadRepo.launch(this@MainActivity, url, fileName, referer = pageUrl)
                     if (id < 0) {
                         // 系统下载器也拒绝（URL scheme 不受支持等）：如实提示失败，
                         // 不让上面那句「开始下载」变成空头支票

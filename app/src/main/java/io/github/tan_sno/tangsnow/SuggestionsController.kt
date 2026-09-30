@@ -79,6 +79,10 @@ class SuggestionsController(private val activity: MainActivity) {
         activity.lifecycleScope.launch {
             val matches = withContext(Dispatchers.IO) { load(text, isPrivate) }
             if (current != seq) return@launch
+            // 展示条件要在**结果落地的这一刻**复查一遍（不只是发起时）：查询跑在 IO 上，
+            // 期间用户可能已经离开了首页搜索态（例如点进了某个页面）—— 那时把本地历史/书签
+            // 联想渲染出来就越界了。文本一致 + 有焦点都不足以排除这种情况。
+            if (!allowed()) return@launch
             if (!activity.binding.toolbar.addressBar.hasFocus()) return@launch
             if (activity.binding.toolbar.addressBar.text.toString() != text) return@launch
             render(matches, text)
