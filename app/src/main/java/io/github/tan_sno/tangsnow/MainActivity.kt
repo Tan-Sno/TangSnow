@@ -820,6 +820,13 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             }
         }
         if (::webPrompts.isInitialized) webPrompts.cancelPending()
+        // 挂起的下载确认：队列在进程级 companion，**配置变更重建**时由新实例的 onResume
+        // 接手补弹，不能在这里关流；**真销毁**（返回键退出等，内核仍在后台）时必须逐个
+        // 关掉，否则内核连接悬挂到超时（外部审查 M4）。
+        if (!isChangingConfigurations) {
+            pendingDownloadConfirms.forEach { abandonDownload(it.response) }
+            pendingDownloadConfirms.clear()
+        }
         // 扩展安装/权限提示同样必须在销毁前关闭并应答：否则页面侧的安装或权限请求
         // 对应的 GeckoResult 永不完成（流程永久挂起），且对话框会泄漏窗口。
         // 传入 this 只关闭本 Activity 持有的提示，不会误取消扩展页正在展示的弹窗。
@@ -1999,14 +2006,24 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     /** 需要确认但宿主不可见时挂起的下载请求（onResume 补弹）。上限见 [MAX_PENDING_DOWNLOADS] */
     private data class PendingDownloadConfirm(val response: WebResponse, val pageUrl: String?)
 
-    private val pendingDownloadConfirms = ArrayDeque<PendingDownloadConfirm>()
-
-    /** 挂起上限：超出即放弃最旧的（连接长挂到恢复前台多半已死，攒再多也没意义） */
     private companion object {
         const val MAX_PENDING_DOWNLOADS = 4
+
+        /**
+         * 挂起队列与丢弃计数放**进程级**：Activity 因主题/语言切换重建时，新实例能接手
+         * 这些内核响应（[WebResponse] 本就是进程级对象），onResume 照常补弹；
+         * 留在实例字段上只会「队列随旧实例消失、连接悬挂到超时」（外部审查 M4，2026-10-01）。
+         */
+        val pendingDownloadConfirms = ArrayDeque<PendingDownloadConfirm>()
+
+        @Volatile
+        var pendingDownloadDropped = 0
     }
 
-    private var pendingDownloadDropped = 0
+    /** 放弃一次下载：关掉内核响应流——不消费不关闭 = 连接悬挂到内核超时（外部审查 M4） */
+    private fun abandonDownload(response: WebResponse) {
+        runCatching { response.body?.close() }
+    }
 
     /**
      * 网页触发的下载。**宿主不可见时不建确认窗**（与权限征询同口径）：
@@ -2027,7 +2044,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         val needsConfirm = DownloadRepo.isExecutableName(fileName) || prefs.askBeforeDownload
         if (needsConfirm && !hostVisibleNow()) {
             if (pendingDownloadConfirms.size >= MAX_PENDING_DOWNLOADS) {
-                pendingDownloadConfirms.removeFirst()
+                // 被挤掉的请求必须**显式关掉**内核流：只丢引用，连接会挂到内核超时
+                abandonDownload(pendingDownloadConfirms.removeFirst().response)
                 pendingDownloadDropped++
             }
             pendingDownloadConfirms.addLast(PendingDownloadConfirm(response, pageUrl))
@@ -2043,10 +2061,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             AlertDialog.Builder(this)
                 .setTitle(R.string.dl_executable_title)
                 .setMessage(getString(R.string.dl_executable_message, fileName))
-                .setNegativeButton(R.string.dlg_cancel, null)
+                .setNegativeButton(R.string.dlg_cancel) { _, _ -> abandonDownload(response) }
                 .setPositiveButton(R.string.dl_executable_continue) { _, _ ->
                     startDownload(response, url, fileName, pageUrl)
                 }
+                // 返回键/点外侧取消也要关流（取消键走 OnCancelListener，不走负按钮回调）
+                .setOnCancelListener { abandonDownload(response) }
                 .show()
             return
         }
@@ -2064,11 +2084,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             .setMultiChoiceItems(
                 arrayOf(getString(R.string.download_no_ask)), noAsk
             ) { _, _, isChecked -> noAsk[0] = isChecked }
-            .setNegativeButton(R.string.dlg_cancel, null)
+            .setNegativeButton(R.string.dlg_cancel) { _, _ -> abandonDownload(response) }
             .setPositiveButton(R.string.download_confirm_ok) { _, _ ->
                 if (noAsk[0]) prefs.askBeforeDownload = false
                 startDownload(response, url, fileName, pageUrl)
             }
+            .setOnCancelListener { abandonDownload(response) }
             .show()
     }
 
