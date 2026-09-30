@@ -51,6 +51,72 @@ private val DT_DATETIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm")
 private val DT_MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM")
 
 /**
+ * **带秒**的变体：页面把 `step` 设成 1（或任意非 60 的整数）时，`<input type=time>` /
+ * `datetime-local` 的 value 形如 `10:30:00` / `2026-09-30T10:30:00`。
+ *
+ * 为什么要单独列：拿 `HH:mm` 去解析带秒的整串**必然**抛 `DateTimeParseException`，被
+ * `runCatching` 吞掉后回落到「此刻」⇒ 页面用 `defaultValue` 指定的默认值被**静默丢弃**。
+ * 这与 `datetime-local`、更早的 `week` 是**同一个坑的第三个形态**（见 [parseTimeLoose]）。
+ */
+private val DT_TIME_SEC_FMT = DateTimeFormatter.ofPattern("HH:mm:ss")
+private val DT_DATETIME_SEC_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+
+/** 时间默认值的解析结果：值 + 原始串是否带秒（回交时保持同一形态，否则页面会当成非法值丢掉） */
+private data class TimeDefault(val time: LocalTime, val withSeconds: Boolean)
+
+/**
+ * 宽松解析时间默认值：`HH:mm` 与 `HH:mm:ss` **都收**。
+ * - 无秒 ⇒ 回交 `HH:mm`（与旧行为一致）；
+ * - 有秒 ⇒ 回交 `HH:mm:00`（选择器只到分钟，秒位取 0）—— 关键是**格式必须与页面一致**。
+ */
+private fun parseTimeLoose(raw: String): TimeDefault? {
+    val t = raw.trim()
+    runCatching { LocalTime.parse(t, DT_TIME_SEC_FMT) }.getOrNull()
+        ?.let { return TimeDefault(it, withSeconds = true) }
+    runCatching { LocalTime.parse(t, DT_TIME_FMT) }.getOrNull()
+        ?.let { return TimeDefault(it, withSeconds = false) }
+    return null
+}
+
+/** 把用户选定的时:分按 [d] 的形态格式化回交 */
+private fun formatChosenTime(d: TimeDefault, hh: Int, mm: Int): String =
+    if (d.withSeconds) LocalTime.of(hh, mm).format(DT_TIME_SEC_FMT)
+    else LocalTime.of(hh, mm).format(DT_TIME_FMT)
+
+/** `datetime-local` 默认值的解析结果：值 + 是否带秒 */
+private data class DateTimeLocalDefault(val value: LocalDateTime, val withSeconds: Boolean)
+
+/**
+ * 解析 `<input type=datetime-local>` 的默认值，`yyyy-MM-ddTHH:mm` 与**带秒**的
+ * `yyyy-MM-ddTHH:mm:ss` 都收。
+ *
+ * ⚠️ 必须用对应格式解析。此前 `DATETIME_LOCAL` 与 `DATE` 共用同一个 `else` 分支，
+ * 用 `yyyy-MM-dd` 去解析带 `T` 的整串**必然**抛 `DateTimeParseException`，被 `runCatching`
+ * 吞掉后回落到「今天」；紧接着时间选择器又拿 `HH:mm` 去解析同一整串，同样失败回落到「此刻」。
+ * 结果是：**页面用 `defaultValue` 指定的默认日期与时间被静默丢弃**，用户每次打开都停在今天/现在。
+ * 这与 `WEEK` 分支踩过的是同一个坑（见 `onDateTimePrompt` 里那处注释），故解析统一收在这里。
+ */
+private fun parseDateTimeLocal(raw: String): DateTimeLocalDefault? {
+    val t = raw.trim()
+    runCatching { LocalDateTime.parse(t, DT_DATETIME_SEC_FMT) }.getOrNull()
+        ?.let { return DateTimeLocalDefault(it, withSeconds = true) }
+    runCatching { LocalDateTime.parse(t, DT_DATETIME_FMT) }.getOrNull()
+        ?.let { return DateTimeLocalDefault(it, withSeconds = false) }
+    return null
+}
+
+/** 把选定的日期 + 时:分按 [d] 的形态格式化回交 */
+private fun formatChosenDateTimeLocal(
+    d: DateTimeLocalDefault,
+    chosen: LocalDate,
+    hh: Int,
+    mm: Int,
+): String {
+    val dt = chosen.atTime(hh, mm)
+    return if (d.withSeconds) dt.format(DT_DATETIME_SEC_FMT) else dt.format(DT_DATETIME_FMT)
+}
+
+/**
  * <input type=week>：HTML 规范要求 `yyyy-Www`（ISO 周：周一为一周之首、第 1 周含 1 月 4 日）。
  *
  * 这里用 [WeekFields.ISO] 的字段**显式**构造，而不用模式字母 `w`/`Y`：
@@ -72,21 +138,6 @@ private val DT_TYPE_MONTH = GeckoSession.PromptDelegate.DateTimePrompt.Type.MONT
 private val DT_TYPE_WEEK = GeckoSession.PromptDelegate.DateTimePrompt.Type.WEEK
 
 /**
- * 解析 `<input type=datetime-local>` 的默认值（内核给的是 `yyyy-MM-ddTHH:mm`）。
- *
- * ⚠️ 必须用 [DT_DATETIME_FMT] 解析。此前 `DATETIME_LOCAL` 与 `DATE` 共用同一个 `else`
- * 分支，用 `yyyy-MM-dd` 去解析带 `T` 的整串**必然**抛 `DateTimeParseException`，
- * 被 `runCatching` 吞掉后回落到「今天」；紧接着时间选择器又拿 `HH:mm` 去解析同一整串，
- * 同样失败回落到「此刻」。结果是：**页面用 `defaultValue` 指定的默认日期与时间被静默丢弃**，
- * 用户每次打开都停在今天/现在。
- *
- * 这与 `WEEK` 分支踩过的是同一个坑（见 `onDateTimePrompt` 里那处注释）：
- * 新增子类型时忘了给它配对应的解析格式，就会静默退化。故这里抽成一处解析，两处共用。
- */
-private fun parseDateTimeLocal(raw: String): LocalDateTime? =
-    runCatching { LocalDateTime.parse(raw.trim(), DT_DATETIME_FMT) }.getOrNull()
-
-/**
  * 网页弹窗与站点权限的界面层实现（[PromptHandler] + [PermissionHandler]）：
  *  - alert/confirm/prompt/select/文件选择/HTTP 认证/离开确认 → AlertDialog 或系统文件选择器；
  *  - 定位/通知/摄像头/麦克风 → 明确允许或拒绝，绝不静默挂起；
@@ -106,7 +157,14 @@ private fun parseDateTimeLocal(raw: String): LocalDateTime? =
  */
 class WebPrompts(
     private val activity: AppCompatActivity,
-    private val pickSingleFile: ActivityResultLauncher<String>,
+    /**
+     * 单选文件：契约必须收 **MIME 数组** —— 页面可以把 `accept` 写成多个 MIME（如图片 + PDF），
+     * 只收单个 MIME 字符串的旧契约会让用户根本选不到后面的类型。
+     *
+     * ⚠️ 注释里**不要**写 MIME 通配符的字面量（形如 图片类型斜杠星号）：Kotlin 的块注释是**可嵌套**的，
+     * 那个斜杠星号会开启一段嵌套注释，把后续代码整段吞掉（实测：报 "Unclosed comment"）。
+     */
+    private val pickSingleFile: ActivityResultLauncher<Array<String>>,
     private val pickMultiFile: ActivityResultLauncher<Array<String>>,
     private val requestAndroidPermissions: ActivityResultLauncher<Array<String>>,
 ) : PromptHandler, PermissionHandler {
@@ -256,11 +314,15 @@ class WebPrompts(
         val labels = items.map { it.second }.toTypedArray()
         val builder = AlertDialog.Builder(activity)
             .setTitle(title.orEmpty().ifBlank { activity.getString(R.string.app_name) })
+        // 页面**没给**预选项时（`items` 里没有任何 `third == true`）取 -1，表示"无选中"。
+        // ⚠️ 不能再用 `coerceAtLeast(0)` 退回第一项：那样点「确定」会提交一个用户从未点过的选项。
+        var chosen = items.indexOfFirst { it.third }
         if (!multiple) {
-            var chosen = items.indexOfFirst { it.third }.coerceAtLeast(0)
             builder
                 .setSingleChoiceItems(labels, chosen) { _, which -> chosen = which }
-                .setPositiveButton(R.string.dlg_ok) { _, _ -> once(listOf(items[chosen].first)) }
+                .setPositiveButton(R.string.dlg_ok) { _, _ ->
+                    if (chosen >= 0) once(listOf(items[chosen].first))
+                }
         } else {
             val checked = BooleanArray(items.size) { items[it].third }
             builder
@@ -271,12 +333,19 @@ class WebPrompts(
                     once(items.filterIndexed { i, _ -> checked[i] }.map { it.first })
                 }
         }
-        tracked(
-            builder
-                .setNegativeButton(R.string.dlg_cancel) { _, _ -> once(null) }
-                .setOnCancelListener { once(null) }
-                .create()
-        )
+        val dialog = builder
+            .setNegativeButton(R.string.dlg_cancel) { _, _ -> once(null) }
+            .setOnCancelListener { once(null) }
+            .create()
+        if (!multiple) {
+            // 未预选时把「确定」置灰，直到用户真的选了一项。
+            // ⚠️ 必须挂在**创建出来的 dialog** 上：`AlertDialog.Builder` 没有 setOnShowListener。
+            dialog.setOnShowListener {
+                dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)
+                    .isEnabled = chosen >= 0
+            }
+        }
+        tracked(dialog)
     }
 
     override fun onFilePrompt(
@@ -293,8 +362,11 @@ class WebPrompts(
                     if (mimeTypes.isEmpty()) arrayOf("*/*") else mimeTypes
                 )
             } else {
+                // 单选也要把**整个** `accept` 数组交给选择器（注释里不写 MIME 通配符字面量，
+                // 见构造参数处的说明）：只取第一个 MIME 会让「图片 + PDF」这类页面选不到 PDF，
+                // 而多选那条路本来传的就是整个数组 —— 两条路此前并不对称。
                 pickSingleFile.launch(
-                    mimeTypes.firstOrNull()?.takeIf { it.isNotBlank() } ?: "*/*"
+                    if (mimeTypes.isEmpty()) arrayOf("*/*") else mimeTypes
                 )
             }
         }
@@ -449,10 +521,16 @@ class WebPrompts(
         val timeType = type == DT_TYPE_TIME || type == DT_TYPE_DATETIME_LOCAL
 
         if (!dateType) {
-            // 仅时间：直接弹 TimePickerDialog
-            val lt = runCatching { LocalTime.parse(defaultValue, DT_TIME_FMT) }.getOrDefault(LocalTime.now())
+            // 仅时间：直接弹 TimePickerDialog。
+            // 默认值用**宽松**解析（`HH:mm` 与 `HH:mm:ss` 都收）：页面设了 `step=1` 时给的是
+            // 带秒形态，用 `HH:mm` 去解析必然失败并静默回落到「此刻」（同族第三个形态）。
+            val parsed = parseTimeLoose(defaultValue)
+            val lt = parsed?.time ?: LocalTime.now()
             val timeDialog = TimePickerDialog(activity, { _, hh, mm ->
-                once(LocalTime.of(hh, mm).format(DT_TIME_FMT))
+                once(
+                    if (parsed != null) formatChosenTime(parsed, hh, mm)
+                    else LocalTime.of(hh, mm).format(DT_TIME_FMT)
+                )
             }, lt.hour, lt.minute, true)
             timeDialog.setOnCancelListener { once(null) }
             tracked(timeDialog)
@@ -467,9 +545,9 @@ class WebPrompts(
             DT_TYPE_WEEK -> runCatching {
                 LocalDate.parse(defaultValue.trim() + "-1", DateTimeFormatter.ISO_WEEK_DATE)
             }.getOrDefault(LocalDate.now())
-            // DATETIME_LOCAL 的默认值是 yyyy-MM-ddTHH:mm，必须用对应格式解析，
-            // 否则必然失败并回落到「今天」（见 parseDateTimeLocal 的说明）
-            DT_TYPE_DATETIME_LOCAL -> parseDateTimeLocal(defaultValue)?.toLocalDate()
+            // DATETIME_LOCAL 的默认值是 yyyy-MM-ddTHH:mm（页面设了 step 时还带秒），
+            // 必须用对应格式解析，否则必然失败并回落到「今天」（见 parseDateTimeLocal 的说明）
+            DT_TYPE_DATETIME_LOCAL -> parseDateTimeLocal(defaultValue)?.value?.toLocalDate()
                 ?: LocalDate.now()
             else -> runCatching { LocalDate.parse(defaultValue, DT_DATE_FMT) }.getOrDefault(LocalDate.now())
         }
@@ -480,12 +558,15 @@ class WebPrompts(
                 DT_TYPE_MONTH -> once(chosen.format(DT_MONTH_FMT))
                 DT_TYPE_WEEK -> once(chosen.format(DT_WEEK_FMT))
                 DT_TYPE_DATETIME_LOCAL -> {
-                    // 日期选定后再弹时间选择器，二者拼成 yyyy-MM-dd'T'HH:mm。
-                    // 时间默认值也要从 `yyyy-MM-ddTHH:mm` 整串里取 —— 直接拿 `HH:mm`
-                    // 解析整串同样会失败并回落「此刻」（见 parseDateTimeLocal）
-                    val lt = parseDateTimeLocal(defaultValue)?.toLocalTime() ?: LocalTime.now()
+                    // 日期选定后再弹时间选择器，二者拼成 yyyy-MM-dd'T'HH:mm（带秒形态见下）。
+                    // 时间默认值也要从整串里取 —— 直接拿 `HH:mm` 解析整串同样会失败并回落「此刻」
+                    val parsedDt = parseDateTimeLocal(defaultValue)
+                    val lt = parsedDt?.value?.toLocalTime() ?: LocalTime.now()
                     val timeDialog = TimePickerDialog(activity, { _, hh, mm ->
-                        once(chosen.atTime(hh, mm).format(DT_DATETIME_FMT))
+                        once(
+                            if (parsedDt != null) formatChosenDateTimeLocal(parsedDt, chosen, hh, mm)
+                            else chosen.atTime(hh, mm).format(DT_DATETIME_FMT)
+                        )
                     }, lt.hour, lt.minute, true)
                     timeDialog.setOnCancelListener { once(null) }
                     tracked(timeDialog)

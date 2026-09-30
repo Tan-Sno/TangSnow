@@ -159,7 +159,12 @@ class AboutActivity : AppCompatActivity() {
             .setNegativeButton(R.string.about_crash_delete) { _: android.content.DialogInterface, _: Int ->
                 // 文件删除属磁盘写，放 IO 线程；完成后异步刷新计数
                 lifecycleScope.launch {
-                    withContext(Dispatchers.IO) { runCatching { file.delete() } }
+                    val deleted = withContext(Dispatchers.IO) {
+                        runCatching { file.delete() }.getOrDefault(false)
+                    }
+                    // 删除失败必须如实说一声：此前忽略返回值，用户点完「删除」只看到条目还在、
+                    // 没有任何解释（refreshCrashSummary 只是把计数重刷一遍）。
+                    if (!deleted) toast(R.string.about_crash_delete_failed)
                     refreshCrashSummary()
                 }
             }

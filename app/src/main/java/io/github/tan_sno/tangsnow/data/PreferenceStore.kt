@@ -439,7 +439,8 @@ class PreferenceStore(context: Context) {
         private const val KEY_LANGUAGE_CHOICE_OFFERED = "language_choice_offered"
         private const val KEY_CUSTOM_ENGINES = "custom_engines"
         const val KEY_APP_LOCALE = "app_locale"
-        private const val MAX_CUSTOM_ENGINES = 8
+        /** 自定义引擎上限。`internal` 供 EngineSettingsActivity 区分「已达上限」与「重名」两种失败 */
+        internal const val MAX_CUSTOM_ENGINES = 8
 
         const val TRACKING_OFF = "off"
         const val TRACKING_STANDARD = "standard"

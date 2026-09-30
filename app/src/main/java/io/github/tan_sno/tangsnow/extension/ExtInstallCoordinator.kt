@@ -357,6 +357,12 @@ class ExtInstallCoordinator(
                 .also { completed = true }
         }
         if (ext == null && !completed) throw InstallTimeoutException(Stage.FILE_INSTALL)
+        // ⚠️ `completed == true` 且 `ext == null` = **内核把这个 GeckoResult 以 null 结算了**
+        //（安装被拒 / 扩展未返回实例），不是成功。此前这里直接返回 null，调用方
+        //（`performInstall` → `onDone` → `cb.onSuccess(source, null)`）会**报「安装成功」**
+        // 而实际上什么都没装上 —— 用户看到成功提示却找不到扩展，且完全无从判断。
+        // 归因只能到这一步：内核没给原因，故用一句如实的失败信息，而不是假装成功。
+        if (ext == null) throw IllegalStateException("内核已结算但未返回扩展实例")
         return ext
     }
 

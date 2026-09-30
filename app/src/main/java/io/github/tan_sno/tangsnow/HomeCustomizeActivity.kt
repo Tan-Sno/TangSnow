@@ -174,11 +174,19 @@ class HomeCustomizeActivity : AppCompatActivity() {
         //    lifecycleScope.launch（无 CoroutineExceptionHandler）⇒ 应用崩溃。
         val out = runCatching { File.createTempFile("bg-", ".jpg", dir) }.getOrNull() ?: return null
         return try {
-            contentResolver.openInputStream(uri)?.use { input ->
+            val input = contentResolver.openInputStream(uri)
+            if (input == null) {
+                // 打不开输入流时**必须自己清掉刚占位的空文件**：此前写成 `?: return null`，而
+                // 非局部 return 会跳过下面 catch 里的 `out.delete()` ⇒ 空文件永久留在
+                // `filesDir/home_bg/`（该目录的清理出口只认"当前偏好指向的那一份"，它不认这个）。
+                runCatching { out.delete() }
+                return null
+            }
+            input.use { ins ->
                 out.outputStream().buffered().use { sink ->
-                    input.copyTo(sink)
+                    ins.copyTo(sink)
                 }
-            } ?: return null
+            }
             if (out.length() == 0L) {
                 out.delete()
                 return null
@@ -226,9 +234,11 @@ class HomeCustomizeActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val bmp = ImageLoader.loadScaled(this@HomeCustomizeActivity, uri, PREVIEW_MAX_W, PREVIEW_MAX_H)
             if (isFinishing || isDestroyed) return@launch
-            // 复查：偏好未被清除（用户未点「清除图片」）且当前风格仍为 IMAGE 才写回
-            if (prefs.homeImageUri == requestedUri && prefs.homeStyle == PreferenceStore.STYLE_IMAGE) {
-                showPreview(bmp)
+            // 复查：偏好未被清除（用户没点「清除图片」）才写回。风格已切走（如改成「极简」）时
+            // 写 **null** 而不是什么都不做 —— 否则上一张预览图会继续显示在「自定义图片」栏里，
+            // 看起来像"还在用那张图"，与本函数「刷新预览」的名字也不符。
+            if (prefs.homeImageUri == requestedUri) {
+                showPreview(bmp.takeIf { prefs.homeStyle == PreferenceStore.STYLE_IMAGE })
             }
             // 否则丢弃结果（避免旧图回显）
         }

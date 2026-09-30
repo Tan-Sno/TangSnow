@@ -535,6 +535,10 @@ class ExtensionsActivity : AppCompatActivity() {
 
                 override fun onFailure(source: ExtInstallCoordinator.Source, err: Throwable?) {
                     urlInstalling = false
+                    // 失败后把地址回填：安装最长可能等 170s 才失败，用户早已找不到当初粘的那串链接
+                    //（此前失败时输入框已是空的，只能重新去别处复制一遍）。仅在用户没重新输入时回填，
+                    //不覆盖他刚敲进去的内容。
+                    if (binding.urlInput.text.toString().isBlank()) binding.urlInput.setText(url)
                     toast(describeInstallError(err))
                 }
             }

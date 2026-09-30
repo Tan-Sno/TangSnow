@@ -82,8 +82,15 @@ object LegalDocs {
      *  表现为浏览器打不开路由器 / NAS / 打印机的管理页，且没有任何提示。
      *  应用仅在用户要打开局域网地址时按需申请（MainActivity.needsLocalNetworkGrant）。
      *  政策 §2 权限清单与同意页摘要同步补句。
+     *
+     *  22 → 23（2026-09-30，措辞与实发对齐）：§4 与摘要里关于「检查更新」请求的原文是
+     *  「不携带任何设备标识、账号或浏览记录」，而实发还带**应用版本号（User-Agent）**与
+     *  **设备语言偏好（Accept-Language）**（见 AppHttp.userAgent / acceptLanguage）。
+     *  二者都不是「设备标识符」，故原措辞**不构成不实陈述**，但确实可能被读得比实际更宽 ——
+     *  现如实列出这两项，并明确「除此之外不发送其它信息」。
+     *  正文「更新日期」同步为 2026年09月30日 / 2026-09-30。全量用户下次启动需重新同意。
      */
-    const val POLICY_VERSION = 22
+    const val POLICY_VERSION = 23
 
     // 注意：以下资源引用保持「非 const」，避免 Kotlin IR 在编译期常量折叠时
     // 因 R 常量跨模块求值触发 InterpreterMethodNotFoundError 内部错误。

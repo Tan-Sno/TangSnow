@@ -5,8 +5,8 @@
 
 # User Agreement / 用户协议
 
-> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 22`。
-> This file matches the legal text shown in the app under “Settings → About TangSnow”, and corresponds to `POLICY_VERSION = 22` in the app.
+> 本文件与应用内「设置 → 关于棠雪」展示的法律文本一致，对应应用内 `POLICY_VERSION = 23`。
+> This file matches the legal text shown in the app under “Settings → About TangSnow”, and corresponds to `POLICY_VERSION = 23` in the app.
 > 最后更新 / Last updated：2026年09月25日
 > **请勿直接编辑**；请修改 `strings.xml` 后运行 `python tools/export_legal_docs.py` 重新导出。
 > **Do not edit directly** — change `strings.xml` and re-run `python tools/export_legal_docs.py`.
