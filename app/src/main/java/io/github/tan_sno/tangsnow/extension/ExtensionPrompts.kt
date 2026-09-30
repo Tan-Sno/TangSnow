@@ -447,8 +447,13 @@ object ExtensionPrompts {
      * “Must use an unopened GeckoSession instance”崩溃）。showPopup 仅负责把会话挂到可见 GeckoView。
      */
     private fun openPopupSession(action: WebExtension.Action): GeckoResult<GeckoSession> {
+        // 没有前台界面能承载弹窗时**必须拒绝**：官方 javadoc 对 onOpenPopup 的返回值写得明确 ——
+        // "A GeckoSession that will be used to display the pop-up, **null if no popup will be displayed**"。
+        // 此前是无条件建会话再交给内核：popupHost 为 null 时 `showPopup` 是空操作，而内核照样会
+        // open + loadUri ⇒ 该会话永不展示、也没有任何路径 close（泄漏到进程结束）。
+        val host = popupHost ?: return GeckoResult.fromValue(null)
         val session = GeckoSession(GeckoSessionSettings.Builder().build())
-        popupHost?.showPopup(session)
+        host.showPopup(session)
         return GeckoResult.fromValue(session)
     }
 
