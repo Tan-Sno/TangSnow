@@ -247,6 +247,9 @@ object SessionStore {
         return ok
     }
 
+    /** 快照结构版本（2026-09-30 起 写入 `"v"`）。当前唯一取值；未来任何字段语义变更先 +1 */
+    internal const val SNAPSHOT_VERSION = 1
+
     // internal 供 JVM 单元测试直接覆盖（SessionStoreJsonTest）：这两个函数承载
     // 「清除后快照不得复活」与进程回收恢复的正确性，边界必须被测试钉住。
     internal fun buildJson(snapshot: Snapshot): String {
@@ -260,12 +263,19 @@ object SessionStore {
             )
         }
         return JSONObject()
+            .put("v", SNAPSHOT_VERSION)
             .put("active", snapshot.activeIndex)
             .put("tabs", arr)
             .toString()
     }
 
-    /** 损坏输入会抛 JSONException（由调用方 runCatching 兜成 null），见 [read]。 */
+    /**
+     * 损坏输入会抛 JSONException（由调用方 runCatching 兜成 null），见 [read]。
+     *
+     * `v` 字段当前**只写不判**（宽容读取：旧文件没有 v 也照常解析）。它是给未来留的
+     * 锚点 —— 此前快照没有版本号，一旦字段语义变更，旧版本读到新文件只能静默错解；
+     * 有了它，未来任何结构性改动才能写出「版本不符 → 降级/放弃」的明确分支。
+     */
     internal fun parse(text: String): Snapshot? {
         val root = JSONObject(text)
         val active = root.optInt("active", 0)

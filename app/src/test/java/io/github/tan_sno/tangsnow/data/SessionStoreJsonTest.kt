@@ -2,6 +2,7 @@ package io.github.tan_sno.tangsnow.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -28,6 +29,20 @@ class SessionStoreJsonTest {
     private fun roundTrip(s: SessionStore.Snapshot): SessionStore.Snapshot =
         SessionStore.parse(SessionStore.buildJson(s))
             ?: error("buildJson 的输出必须能被 parse 读回（往返前提被破坏）")
+
+    @Test
+    fun `快照 JSON 带版本字段且旧格式仍可解析`() {
+        val s = snap(SessionStore.TabSnapshot("https://a.cn/", "t", null))
+        val json = SessionStore.buildJson(s)
+        // v 字段是未来结构变更的锚点（此前没有版本号，旧版本读到新文件只能静默错解）
+        assertTrue("快照 JSON 应含 v 字段", json.contains("\"v\":" + SessionStore.SNAPSHOT_VERSION))
+
+        // 旧格式（无 v）宽容解析：存量用户的快照文件不能因为加了版本号就作废
+        val legacy = org.json.JSONObject(json).apply { remove("v") }.toString()
+        val parsed = SessionStore.parse(legacy) ?: error("无 v 的旧快照必须能解析")
+        assertEquals(0, parsed.activeIndex)
+        assertEquals("https://a.cn/", parsed.tabs[0].url)
+    }
 
     @Test
     fun `往返保留全部字段`() {

@@ -2,6 +2,7 @@ package io.github.tan_sno.tangsnow.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -296,6 +297,56 @@ class BookmarkHtmlTest {
         assertTrue(BookmarkHtml.isHttpUrl("http://a.cn/"))
         assertFalse(BookmarkHtml.isHttpUrl("a.cn/"))
         assertFalse(BookmarkHtml.isHttpUrl("moz-extension://abc/x"))
+    }
+
+    // ------------------------------------------------------------- ADD_DATE
+
+    @Test
+    fun `ADD_DATE 秒与毫秒都解析为毫秒`() {
+        // Netscape 约定秒；个别工具导毫秒。1e11 为界：两侧真实时间各归其位（见 parseAddDate）
+        val html = """<DT><A HREF="https://a.cn/" ADD_DATE="1700000000">秒</A>""" +
+            """<DT><A HREF="https://b.cn/" ADD_DATE="1700000000000">毫秒</A>"""
+        val entries = BookmarkHtml.parseImport(html)
+        assertEquals(1_700_000_000_000L, entries[0].createdAtMs)
+        assertEquals(1_700_000_000_000L, entries[1].createdAtMs)
+    }
+
+    @Test
+    fun `ADD_DATE 非法或超前一律回落 null`() {
+        val now = 1_790_000_000_000L
+        // 非数字 / 负值 / 空 / 未来超过一天（秒、毫秒两种写法各验一例）
+        assertNull(BookmarkHtml.parseAddDate("abc", now))
+        assertNull(BookmarkHtml.parseAddDate("-5", now))
+        assertNull(BookmarkHtml.parseAddDate("", now))
+        assertNull(BookmarkHtml.parseAddDate("4000000000", now))      // 秒：公元 2096
+        assertNull(BookmarkHtml.parseAddDate("9999999999999", now))   // 毫秒：公元 2286
+        // 现在前后一秒内仍有效（钟表微小偏差不丢时间）
+        assertEquals(now, BookmarkHtml.parseAddDate("1790000000", now))
+    }
+
+    @Test
+    fun `sanitize 保留原始收藏时间且属性名大小写无关`() {
+        val html = """<dt><a add_date="1700000000" href="https://a.cn/">A</a></dt>"""
+        val raw = BookmarkHtml.parseImport(html)
+        assertEquals(1_700_000_000_000L, raw[0].createdAtMs)
+        val (entries, skipped) = BookmarkHtml.sanitize(raw, emptySet())
+        assertEquals(0, skipped)
+        assertEquals(1_700_000_000_000L, entries[0].createdAtMs)
+    }
+
+    @Test
+    fun `无 ADD_DATE 时 createdAtMs 为 null`() {
+        val entries = BookmarkHtml.parseImport("""<DT><A HREF="https://a.cn/">无时间</A>""")
+        assertNull(entries[0].createdAtMs)
+    }
+
+    @Test
+    fun `导出导入往返保留收藏时间`() {
+        val html = BookmarkHtml.export(listOf(Bookmark(1, "https://e.cn/t", "标题", 1_700_000_000_123L)))
+        val parsed = BookmarkHtml.parseImport(html)
+        assertEquals(1, parsed.size)
+        // 秒级精度：往返损失亚秒（与导出格式 ADD_DATE=秒 一致）
+        assertEquals(1_700_000_000_000L, parsed[0].createdAtMs)
     }
 
     // ------------------------------------------- 差分基准（仅测试用，非生产代码）

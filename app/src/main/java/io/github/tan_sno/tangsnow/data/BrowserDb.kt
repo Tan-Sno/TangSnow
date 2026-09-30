@@ -93,8 +93,12 @@ class BrowserDb private constructor(context: Context) :
      * created_at，也不会因 CONFLICT_REPLACE 重建 _id 而跳到列表最前）；标题为空时不动
      * 已有标题 —— 导入路径会送来空标题，无条件 update 会把已有标题静默清空；不存在才新建。
      * 更新/插入间采用先 UPDATE 后 INSERT，即使并发也只会落一行。
+     *
+     * @param createdAtMs 原始收藏时间（导入路径携带 `ADD_DATE`，见 [insertBookmarks]）；
+     *   null = 用当前时间。只作用于**新建**行：UPDATE 分支刻意不碰 created_at ——
+     *   重复导入不得把老收藏的「收藏于」顶到导入时刻。
      */
-    fun insertBookmark(url: String, title: String) {
+    fun insertBookmark(url: String, title: String, createdAtMs: Long? = null) {
         val db = db()
         // 空标题不覆盖已有标题：导入路径会送来空标题（缺 </a> 时 sanitize 保留 ""），
         // 此前「URL 存在就无条件 update title」会把已有标题静默清空 —— 这是有损的。
@@ -106,7 +110,7 @@ class BrowserDb private constructor(context: Context) :
             val cv = ContentValues().apply {
                 put("url", url)
                 put("title", title.takeIf { it.isNotBlank() } ?: "")
-                put("created_at", System.currentTimeMillis())
+                put("created_at", createdAtMs ?: System.currentTimeMillis())
             }
             // IGNORE：与其它并发写入竞争时宁可跳过，也不覆盖已存在的原收藏
             db.insertWithOnConflict("bookmarks", null, cv, SQLiteDatabase.CONFLICT_IGNORE)
@@ -118,13 +122,15 @@ class BrowserDb private constructor(context: Context) :
      * [insertBookmark]，每条各自落盘 —— 一次 ≤1000 条的导入就是 ≤1000 次独立
      * 事务（每次都带 fsync 语义），事务化后一次提交。
      * 复用 [insertBookmark] 的「已存在只刷新标题」upsert 语义，导入天然幂等。
+     * 第三位是原始收藏时间（`ADD_DATE`，epoch 毫秒；null = 导入时刻）—— 此前导入
+     * 统一写当前时间，导出→导入往返丢时间、整批浮到列表最前且批内乱序。
      */
-    fun insertBookmarks(items: List<Pair<String, String>>) {
+    fun insertBookmarks(items: List<Triple<String, String, Long?>>) {
         if (items.isEmpty()) return
         val db = db()
         db.beginTransaction()
         try {
-            for ((url, title) in items) insertBookmark(url, title)
+            for ((url, title, createdAtMs) in items) insertBookmark(url, title, createdAtMs)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

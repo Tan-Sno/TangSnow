@@ -24,7 +24,7 @@ object BookmarkRepo {
      * 批量新增（书签导入路径）：insertBookmark 自带「已存在只刷新标题」的 upsert 语义，
      * 与并发导入的幂等性由库层保证。整批一个写事务（见 [BrowserDb.insertBookmarks]）。
      */
-    suspend fun addAll(items: List<Pair<String, String>>): Unit = withContext(Dispatchers.IO) {
+    suspend fun addAll(items: List<Triple<String, String, Long?>>): Unit = withContext(Dispatchers.IO) {
         BrowserDb.get(ApplicationScope.context).insertBookmarks(items)
     }
 
