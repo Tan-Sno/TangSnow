@@ -133,6 +133,10 @@ internal class PrintPdfAdapter(
     }
 
     override fun onFinish() {
+        // ⚠️ 调用方在本回调之后删临时文件，而 `ioScope` 的复制可能**此刻仍在进行**：
+        // 这份实现能跑通依赖一个**平台前提** —— 「已打开的 FD 在文件被 unlink 后仍可继续读」。
+        // 该语义在 Linux/Android 上成立（inode 直到底层 FD 关闭才释放），但**不是 POSIX 保证**的
+        // 通用行为（Windows 上删除会直接失败）。Android 上无需处理，但别把这个前提当成可移植事实。
         onDone()
     }
 

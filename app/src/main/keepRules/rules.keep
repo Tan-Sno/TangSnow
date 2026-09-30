@@ -1,12 +1,8 @@
-# Add project specific R8 rules here.
-# AGP will combine all keep rule files in src/main/keepRules to pass to R8
+# 本项目**刻意留空**的 R8 keep 规则落点（AGP 约定目录）。
 #
-# For more details, see
-#   https://d.android.com/r/tools/r8/keep-rules
-
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# AGP 9 会自动拾取 src/main/keepRules/ 下的规则文件并合并给 R8。本项目的规则**统一维护在
+# app/proguard-rules.pro** —— 请不要在这里写规则：两处都写是"规则落点漂移"的典型来源
+#（后来者不知道该改哪个，或只改了一处而另一处静默失效）。
+#
+# 2026-09-30：此处原先只剩 AGP 模板注释（含一段与本项目无关的 WebView JS 接口示例），
+# 外部审查指出这构成"两个规则落点"。处理方式是**保留文件**（删掉等于撤掉 AGP 的落点）并写明归属。

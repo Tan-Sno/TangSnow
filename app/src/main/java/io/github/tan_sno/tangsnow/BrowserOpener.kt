@@ -58,6 +58,12 @@ object BrowserOpener {
         if (fresh) url to newTab else null
     }
 
+    /**
+     * 记录待打开 URL。**后到覆盖先到是刻意行为**（last-writer-wins），不是缺陷：
+     * 触发场景是"连点两行历史/连续两次分享"，此时**用户最后点的那个才是他的意图**；
+     * 改成队列会把两次都打开（连开两个标签页），比覆盖更糟。
+     * 2026-09-30 外部审查把它记为"静默丢失"，故在此写明口径，免得后来者"修"成队列。
+     */
     private fun setPending(url: String, newTab: Boolean) = synchronized(lock) {
         pendingUrl = url
         pendingNewTab = newTab

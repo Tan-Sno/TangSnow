@@ -51,7 +51,9 @@ fun showSelectionPopup(
     }
     actions.forEach { (label, onClick) -> action(label, onClick) }
 
-    val width = (context.resources.displayMetrics.widthPixels - context.dp(32)).coerceAtLeast(280)
+    // ⚠️ `coerceAtLeast` 的**单位必须与被比较的那一侧一致**：左边是 px（widthPixels - dp(32)），
+    // 所以下限也要 px。原先写裸 `280` 是"280 像素" —— 低密度屏只有约 93dp，明显偏窄。
+    val width = (context.resources.displayMetrics.widthPixels - context.dp(32)).coerceAtLeast(context.dp(280))
     val pw = PopupWindow(content, width, ViewGroup.LayoutParams.WRAP_CONTENT)
     // 需要可聚焦：非聚焦弹窗不拦截外部点击，配 isOutsideTouchable=true 也无法点外关闭。
     // 聚焦后点击弹窗外区域会同时关闭弹窗并把该次点击交给下层页面（选中随之收起）。
@@ -60,6 +62,10 @@ fun showSelectionPopup(
     pw.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0))
     pw.setOnDismissListener { onDismiss() }
     pw.elevation = 8f
+    // 宿主正在结束 / 已销毁（或锚点已脱离窗口）时不展示：PopupWindow.show* 与对话框一样需要有效的
+    // 窗口令牌，拿不到就是 BadTokenException。判 `isAttachedToWindow` 是这里最省的等价判据
+    //（锚点在、令牌就在），不必把 Activity 传进来。
+    if (!anchor.isAttachedToWindow) return pw
     if (bottomMarginPx != null) {
         // 地址栏在底部：锚在整窗底边并上移“底栏+地址栏”的高度，使操作条压在地址栏之上
         pw.showAtLocation(anchor.rootView, Gravity.BOTTOM, 0, bottomMarginPx)

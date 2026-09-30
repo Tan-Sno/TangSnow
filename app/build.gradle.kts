@@ -304,7 +304,8 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **204**（+3 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest`），
+        //   测试 181 → **205**（+4 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   `内核版本与依赖目录一致`），
         //   两条新哨兵已主动验证会红（临时改坏 ⇒ 6 条 FAILED）；lint 全警告口径仍 `No issues found`。
         versionCode = 39
         versionName = "2.1.6"
