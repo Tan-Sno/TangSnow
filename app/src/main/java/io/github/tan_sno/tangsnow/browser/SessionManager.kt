@@ -368,6 +368,13 @@ pref("media.gmp-manager.url", "");"""
     private var nextId = 1
     private var active: Tab? = null
 
+    /**
+     * 用户最近一次停留的**普通**标签 id（[switchTo] / [newTab] 里更新）。
+     * 活动标签是无痕时，快照的 activeIndex 用它兜底 —— 否则恢复后会落在
+     * 第一个普通标签，而不是用户进无痕前看的那一个（纯 UX，无数据问题）。
+     */
+    private var lastNormalActiveId: Int? = null
+
     /** 全部标签（按创建先后），首元素最先创建 */
     val tabs: MutableList<Tab> = mutableListOf()
 
@@ -400,6 +407,7 @@ pref("media.gmp-manager.url", "");"""
     fun newTab(isPrivate: Boolean = prefs.privateMode): Tab {
         val tab = newTabInternal(isPrivate)
         active = tab
+        if (!tab.isPrivate) lastNormalActiveId = tab.id
         // 只有**普通**标签才算「新的浏览活动」：无痕标签不该替普通标签撤销「清除后暂停落盘」——
         // 否则在无痕里点一下「+」就把刚清掉的普通标签快照放行了（与 onLocationChange 那处同口径）。
         if (!isPrivate) SessionStore.clearPurged()
@@ -419,7 +427,10 @@ pref("media.gmp-manager.url", "");"""
     }
 
     fun switchTo(tab: Tab) {
-        if (tab in tabs) active = tab
+        if (tab in tabs) {
+            active = tab
+            if (!tab.isPrivate) lastNormalActiveId = tab.id
+        }
     }
 
     /**
@@ -1825,7 +1836,13 @@ pref("media.gmp-manager.url", "");"""
             SessionStore.clear(appContext)
             return
         }
-        val activeIndex = normalTabs.indexOfFirst { it === active }.coerceAtLeast(0)
+        // 活动标签是无痕时不能直接用它的下标（无痕不进快照，coerce 会落错到第一个普通标签）——
+        // 优先用「用户最近停留的普通标签」；已关闭/从未记录时退回原有口径。
+        val activeIndex = (lastNormalActiveId
+            ?.let { id -> normalTabs.indexOfFirst { it.id == id } }
+            ?.takeIf { it >= 0 }
+            ?: normalTabs.indexOfFirst { it === active })
+            .coerceAtLeast(0)
         val snapshot = SessionStore.Snapshot(
             activeIndex = activeIndex,
             tabs = normalTabs.map { tab ->

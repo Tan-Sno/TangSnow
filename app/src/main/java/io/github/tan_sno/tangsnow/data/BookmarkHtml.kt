@@ -13,8 +13,13 @@ package io.github.tan_sno.tangsnow.data
  */
 object BookmarkHtml {
 
-    /** 待插入的书签条目 */
-    data class Entry(val url: String, val title: String)
+    /**
+     * 待插入的书签条目。
+     * @param createdAtMs 原始收藏时间（`ADD_DATE`，epoch **毫秒**）；null = 文件没给或值非法。
+     * 此前导入统一写「当前时间」—— 导出→导入往返丢时间，且按 created_at 倒序的列表里
+     * 整批导入会浮到最前、批内按插入序而非原收藏序。
+     */
+    data class Entry(val url: String, val title: String, val createdAtMs: Long? = null)
 
     /**
      * 标签内的 href 属性（单/双引号或无引号）；lookbehind 防止 `data-href=` 里的 href= 被抢匹配。
@@ -23,6 +28,28 @@ object BookmarkHtml {
      * ⇒ 全文总扫描量与原文等长，不会退化。
      */
     private val HREF_ATTR = Regex("""(?<![\w-])href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
+
+    /** `ADD_DATE` 属性：与 [HREF_ATTR] 同一套引号/lookbehind 口径（属性名大小写不敏感） */
+    private val ADD_DATE_ATTR =
+        Regex("""(?<![\w-])add_date\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))""", RegexOption.IGNORE_CASE)
+
+    /**
+     * 解析 `ADD_DATE` 原始值为 epoch **毫秒**；非法一律返回 null（回落「导入时刻」）。
+     *
+     * Netscape 约定是**秒**，但个别工具导出**毫秒** —— 以 1e11 为界区分：
+     * 1e11 秒 = 公元 5138 年（必被上界拒收），1e11 毫秒 = 1973 年 ⇒
+     * 「≥1e11 按毫秒、<1e11 按秒」两侧的真实时间都能各归其位。
+     * 拒收非纯数字、≤0、以及「未来超过一天」的值（钟表错乱 / 单位猜错的兜底）。
+     */
+    internal fun parseAddDate(raw: String, nowMs: Long = System.currentTimeMillis()): Long? {
+        val s = raw.trim()
+        if (s.isEmpty() || s.length > 16 || s.any { it !in '0'..'9' }) return null
+        val v = s.toLongOrNull() ?: return null
+        if (v <= 0) return null
+        val seconds = if (v >= 100_000_000_000L) v / 1000 else v
+        val ms = seconds * 1000
+        return if (ms in 1..(nowMs + 86_400_000L)) ms else null
+    }
 
     /** 收尾标签前缀。刻意不用正则：查找游标单调推进即可线性，见 [parseImport] 的复杂度说明 */
     private const val CLOSE_PREFIX = "</a"
@@ -139,6 +166,10 @@ object BookmarkHtml {
                 (m.groupValues[2].ifEmpty { m.groupValues[3] }).ifEmpty { m.groupValues[4] }
             } ?: continue
             if (href.isBlank()) continue
+            // ADD_DATE 可选：缺失/非法回落 null（导入时刻），不因时间坏而丢条目
+            val addDate = ADD_DATE_ATTR.find(text.substring(lt, gt + 1))?.let { m ->
+                (m.groupValues[2].ifEmpty { m.groupValues[3] }).ifEmpty { m.groupValues[4] }
+            }.let { raw -> raw?.let { parseAddDate(it) } }
             // href 同样要解码：主流浏览器导出时会把 URL 里的 & 写成 &amp;，
             // 不解码则导入的带查询参数链接全部失效
             //
@@ -149,7 +180,7 @@ object BookmarkHtml {
             if (out.size >= RAW_PARSE_ENTRY_CAP) {
                 dropped++
             } else {
-                out += Entry(decodeEntities(href).trim(), decodeEntities(title).trim())
+                out += Entry(decodeEntities(href).trim(), decodeEntities(title).trim(), addDate)
             }
         }
         return out to dropped
@@ -198,7 +229,7 @@ object BookmarkHtml {
                 skipped++
                 continue
             }
-            out += Entry(url, e.title.take(MAX_TITLE_LENGTH))
+            out += Entry(url, e.title.take(MAX_TITLE_LENGTH), e.createdAtMs)
         }
         return out to skipped
     }
