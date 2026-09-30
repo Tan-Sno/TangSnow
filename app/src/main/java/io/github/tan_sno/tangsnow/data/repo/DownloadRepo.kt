@@ -1181,8 +1181,11 @@ object DownloadRepo {
             // 逐键清，而不是点名两个：新增键只要登记进 [ALL_RECORD_KEYS] 就必然被清到
             // （此前只 remove 了 KEY_IDS/KEY_MANAGED，漏了后加的 KEY_STALE_PROMOTIONS
             // ⇒ 「清空下载记录」之后，转正待重试队列仍带着旧条目复活）。
-            val e = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val e = prefs.edit()
             ALL_RECORD_KEYS.forEach { e.remove(it) }
+            // 隔离备份键（quarantineCorrupt 的产物）也是记录的一部分，一并清掉
+            prefs.all.keys.filter { it.endsWith(".corrupt") }.forEach { e.remove(it) }
             e.apply()
         }
     }
@@ -1208,6 +1211,10 @@ object DownloadRepo {
             val arr = JSONArray(raw)
             (0 until arr.length()).map { arr.getLong(it) }
         } catch (e: Exception) {
+            // 不静默（本仓原则）：损坏的旧值先隔离留证再按空表继续 —— 否则随后的
+            // 读-改-写会把「损坏的全部索引」无声覆盖成「只剩新条目」，用户的历史下载
+            // 在应用内永久消失且无任何痕迹（外部审查 M5，2026-10-01 修）。
+            quarantineCorrupt(context, KEY_IDS, raw)
             emptyList()
         }
     }
@@ -1230,7 +1237,22 @@ object DownloadRepo {
                 Managed(o.optString("uri"), o.optString("title"), o.optString("mime", "").ifBlank { null })
             }
         } catch (e: Exception) {
+            quarantineCorrupt(context, KEY_MANAGED, raw)
             emptyList()
+        }
+    }
+
+    /**
+     * 持久化内容损坏时的隔离备份：原值挪到 `<key>.corrupt`（可被 [clearRecords] 一并清掉），
+     * debug 下记日志。宁可损失本次解析，也不让损坏无声地变成数据全丢。
+     */
+    private fun quarantineCorrupt(context: Context, key: String, raw: String) {
+        if (io.github.tan_sno.tangsnow.BuildConfig.DEBUG) {
+            android.util.Log.w("DownloadRepo", "记录键 $key 的持久化内容损坏，已隔离到 $key.corrupt")
+        }
+        runCatching {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putString("$key.corrupt", raw).apply()
         }
     }
 
