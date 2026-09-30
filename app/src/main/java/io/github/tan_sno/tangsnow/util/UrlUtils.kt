@@ -174,15 +174,73 @@ object UrlUtils {
     /** fe80::/10（链路本地）与 fc00::/7（ULA）；IPv4-mapped 形式按其内嵌的 IPv4 判 */
     private fun isLocalIpv6(host: String): Boolean {
         val h = host.lowercase()
-        // `::ffff:192.168.1.1`（IPv4-mapped IPv6）：内核按 IPv4 处理，但**字面量是 IPv6**
+        // IPv4-mapped（`::ffff:0:0/96`）：内核按内嵌的 IPv4 处理，但**字面量是 IPv6**
         // ⇒ 不认它就会漏判，而漏判的后果是「静默连不上」（Android 17 起未授权时局域网被拦，
-        // 且因为没弹权限框，用户只会看到打不开）。剥掉前缀后按 IPv4 判。
-        val mapped = h.removePrefix("::ffff:").takeIf { it != h }
-        if (mapped != null) return isLocalIpv4(mapped)
+        // 且因为没弹权限框，用户只会看到打不开）。三种写法都要认：
+        // `::ffff:192.168.1.1`（压缩）、`0:0:0:0:0:ffff:192.168.1.1`（展开）、`::ffff:c0a8:101`（十六进制内嵌）。
+        mappedIpv4(h)?.let { return isLocalIpv4(it) }
         return h.startsWith("fe8") || h.startsWith("fe9") ||
             h.startsWith("fea") || h.startsWith("feb") ||   // fe80::/10
             h.startsWith("fc") || h.startsWith("fd")        // fc00::/7
     }
+
+    /**
+     * 从 IPv6 字面量里识别 **IPv4-mapped** 形式并抽出内嵌的点分 IPv4；不是 mapped 形式返回 null。
+     *
+     * 结构（RFC 4291 §2.5.5.2）：前 80 位全零、81–96 位为 `ffff`、低 32 位是 IPv4。
+     * 组口径即「6 组里前 5 组全零、第 6 组恰为 ffff」，IPv4 落在第 6 组之后：
+     *  - 点分尾：`::ffff:192.168.1.1`、`0:0:0:0:0:ffff:192.168.1.1`（前 6 组 + 点分段）；
+     *  - 十六进制内嵌：`::ffff:c0a8:101`（8 组，末两组 hi:lo 拼成 32 位）。
+     *
+     * 只做字面量识别，不判「是否局域网」——那是 [isLocalIpv4] 的事（公网 mapped 地址如
+     * `::ffff:8.8.8.8` 会走到它并被正确判为非局域网）。零组可以是显式 `0`，也可以被 `::`
+     * 压缩掉；除零与 ffff 外出现任何别的组，一律不是 mapped。
+     */
+    internal fun mappedIpv4(host: String): String? {
+        val h = host.lowercase()
+        if (!h.contains(':')) return null
+        val lastColon = h.lastIndexOf(':')
+        val tail = h.substring(lastColon + 1)
+        if (tail.contains('.')) {
+            // 点分尾：末段即内嵌 IPv4，前缀必须恰是「5 零 + ffff」
+            if (!isMappedPrefix(h.substring(0, lastColon))) return null
+            return tail
+        }
+        // 十六进制内嵌：需要倒数第二个组作 hi，与 tail（lo）拼 32 位
+        val prevColon = h.lastIndexOf(':', lastColon - 1).takeIf { it >= 0 } ?: return null
+        val hi = h.substring(prevColon + 1, lastColon)
+        if (!isHexGroup(hi)) return null
+        if (!isMappedPrefix(h.substring(0, prevColon))) return null
+        if (!isHexGroup(tail)) return null
+        val hiV = hi.toInt(16)
+        val loV = tail.toInt(16)
+        return "${hiV shr 8}.${hiV and 0xff}.${loV shr 8}.${loV and 0xff}"
+    }
+
+    /**
+     * 校验 mapped 前缀（点分尾取末冒号之前、十六进制形取 hi 组之前的整段）：
+     * 除 `0` 与 `ffff` 外不允许任何其他组，`ffff` 是最后一个非空组且必须存在；
+     * 零组总数（显式 0 + 被 `::` 压缩掉的）必须恰为 5。
+     */
+    private fun isMappedPrefix(prefix: String): Boolean {
+        val compressed = prefix.contains("::")
+        var zeros = 0
+        var ffffSeen = false
+        for (g in prefix.split(':')) {
+            when {
+                g.isEmpty() -> if (ffffSeen) return false            // `::` 只能压 ffff 之前的零
+                g == "0" -> { if (ffffSeen) return false; zeros++ }
+                g == "ffff" -> { if (ffffSeen) return false; ffffSeen = true }
+                else -> return false
+            }
+        }
+        if (!ffffSeen) return false
+        return if (compressed) zeros <= 4 else zeros == 5
+    }
+
+    /** 1–4 位十六进制组（mapped 内嵌 IPv4 的 hi/lo 段） */
+    private fun isHexGroup(g: String): Boolean =
+        g.length in 1..4 && g.all { it in '0'..'9' || it in 'a'..'f' }
 
     /** 地址栏输入解析结果：url = 可加载地址；isSearch = 是否走了搜索引擎 */
     data class Resolved(val url: String, val isSearch: Boolean)

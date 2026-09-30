@@ -38,6 +38,23 @@ class CrashLoggerRedactTest {
     }
 
     @Test
+    fun `路径里含 at 符号时 host 不得被误剥`() {
+        // userinfo 的 `@` 只在 authority 段合法；先截 authority 再剥 `@`，
+        // 否则 /docs/@user 里的 `@` 会把 host 连同路径前缀整个吃掉
+        assertEquals(
+            "fail https://example.com/…",
+            CrashLogger.redactUrls("fail https://example.com/docs/@user?page=2"),
+        )
+    }
+
+    @Test
+    fun `userinfo 与路径含 at 符号同时存在时各归其位`() {
+        val out = CrashLogger.redactUrls("fetch https://alice@s3.example.com/blobs/@me/x")
+        assertFalse(out.contains("alice"))
+        assertEquals("fetch https://s3.example.com/…", out)
+    }
+
+    @Test
     fun `大小写 scheme 同样处理`() {
         assertEquals("HTTPS://example.com/…", CrashLogger.redactUrls("HTTPS://example.com/x"))
     }

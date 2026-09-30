@@ -106,8 +106,27 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         private set
     /** 画中画（PiP）进行中：隐藏框架只留网页画面，退出自动恢复 */
     private var pipActive = false
+    /**
+     * 本实例处于「onResume..onPause 之间」的常规可见态。与 [pipActive] 一道构成
+     * 宿主可见性的两个来源 —— PiP 期间系统**必走 onPause**，但窗口仍在屏幕上，
+     * 只看 onResume/onPause 就会把 PiP 判成不可见（弹窗/权限被误拒）。
+     */
+    private var resumedVisible = false
     private val topBarH get() = dp(70)
     private val bottomBarH get() = dp(78)
+
+    /**
+     * 把「宿主可见性」的两个来源（常规可见、PiP）收敛成**一处**下发。
+     *
+     * 为什么必须收敛而不是在各个回调里各自 set：PiP 的进入/退出与 onResume/onPause
+     * 的相对时序在不同路径（返回键退出、展开全屏、直接回桌面）下并不一致，
+     * 分散赋值总有一条路径会把可见性留在错误的状态。凡可见性变化一律走这里。
+     */
+    private fun syncHostVisible() {
+        if (::sessionManager.isInitialized) {
+            sessionManager.setHostVisible(resumedVisible || pipActive)
+        }
+    }
 
     /** 本应用主动写剪贴板的时间戳（用于区分「外部静默写入」与「用户主动复制」） */
     private var selfClipboardWriteAt = 0L
@@ -714,7 +733,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     override fun onResume() {
         super.onResume()
         // 界面重新可见：权限征询的守卫据此判定「用户此刻看不看得见」这一维（见 permissionStale）
-        if (::sessionManager.isInitialized) sessionManager.setHostVisible(true)
+        resumedVisible = true
+        syncHostVisible()
         // 无条件夺回处理器（幂等）：本实例可能刚被另一个实例压在栈下又恢复前台
         bindSessionHandlers()
         // 同一件事的另一半：后创建的实例会把活动会话挂到它自己的 GeckoView 上，本实例恢复前台时
@@ -758,8 +778,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     override fun onPause() {
         super.onPause()
-        // 界面不再可见：此后由后台标签触发的权限征询一律拒绝（不弹框、不抢焦点）
-        if (::sessionManager.isInitialized) sessionManager.setHostVisible(false)
+        // 界面不再可见：此后由后台标签触发的权限征询一律拒绝（不弹框、不抢焦点）。
+        // PiP 是唯一例外 —— PiP 必走 onPause 但窗口仍可见，由 syncHostVisible 用 pipActive 补回。
+        resumedVisible = false
+        syncHostVisible()
         // 进入后台前立即保存会话快照：进程可能在后台被系统回收，这是最后的落盘时机
         if (::sessionManager.isInitialized) sessionManager.saveState()
         runCatching {
@@ -899,6 +921,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pipActive = isInPictureInPictureMode
+        // PiP 期间窗口仍可见，宿主可见性要补回 true：否则网页弹窗（alert/confirm/HTTP 认证）
+        // 会被 promptStale 的 hostVisible 判据就地拒绝 —— 用户在小窗看视频时页面的
+        // 「会话已过期，请重新登录」这类框会被静默吞掉。退出 PiP 后的各种走向
+        // （展开全屏 / 回桌面 / 被覆盖）由 onResume/onPause 经 resumedVisible 如实接管。
+        syncHostVisible()
         // PiP 时只留网页画面（隐藏顶/底栏 + 进度），恢复后自动还原
         if (::binding.isInitialized) refreshChrome()
     }
