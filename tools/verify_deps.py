@@ -20,7 +20,8 @@ SHA256，但**依赖产物本身**（尤其来自 maven.mozilla.org 的 GeckoVie
     python tools/verify_deps.py --online   # 额外联官网校验（慢，受网络影响）
     python tools/verify_deps.py --cache D:/Android/gradle   # 指定 GRADLE_USER_HOME
 
-退出码：0 = 全部一致（或无公布校验和项已如实列出）；1 = 发现不一致（值得当事故查）。
+退出码：0 = 全部一致（或无公布校验和项已如实列出）；1 = 发现不一致（值得当事故查），
+或**一项都没能校验**（缓存缺失/元数据全无 ⇒ 闸门形同虚设，按失败处理，见 main 末尾）。
 """
 
 from __future__ import annotations
@@ -32,6 +33,21 @@ import os
 import re
 import sys
 import urllib.request
+
+
+def _use_utf8_output():
+    """把 stdout / stderr 重配为 UTF-8 —— 与 verify_release.py 同款。
+
+    Windows 中文环境默认 GBK/CP936：本脚本打的 ✓/✗/⚠️ 会抛 UnicodeEncodeError。
+    作为子进程被 verify_release.py 调用时后果更糟：主脚本会把「编码崩溃」误报成
+    「散列不一致（构件可能被改动）」—— 一次假供应链事故（2026-10-01 外部审查实证）。
+    与 verify_release 同样刻意不做模块级调用（谁 import 谁被波及）。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
 
 # 依赖坐标 → (仓库基址, 构件文件名)。版本从 gradle/libs.versions.toml 读取，避免两处写版本。
 REPOS = {
@@ -133,6 +149,7 @@ def fetch(url: str, timeout: int = 25) -> str | None:
 
 
 def main() -> int:
+    _use_utf8_output()
     ap = argparse.ArgumentParser()
     ap.add_argument("--online", action="store_true", help="对无 .module 的构件联官网校验")
     ap.add_argument("--cache", default=os.environ.get("GRADLE_USER_HOME", os.path.expanduser("~/.gradle")))
@@ -198,6 +215,12 @@ def main() -> int:
         print("\n❗ 不一致项（当事故查：构件可能在下载后被改动）：")
         for x in failures:
             print("  · %s" % x)
+        return 1
+    # 「无法校验」单条不拦（缓存缺/仓库未提供散列在干净机器上确实会发生），
+    # 但**一项都没能校验**就是另一回事：那意味着这道闸门这次什么都没验，
+    # 亮绿灯等于装模作样 —— 按失败处理，逼人去查缓存路径或加 --online。
+    if ok == 0 and TARGETS:
+        print("\n❗ 一项都没能校验（ok=0）—— 校验链本次形同虚设，按失败处理。")
         return 1
     return 0
 

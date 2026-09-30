@@ -419,7 +419,16 @@ def main():
         apks = [os.path.join(apk_dir, n) for n in ABI_SPLITS]
         missing = [p for p in apks if not os.path.isfile(p)]
         if missing:
-            raise Fail("缺少 APK：\n      " + "\n      ".join(os.path.basename(p) for p in missing))
+            raise Fail("缺少 APK：\n      " + "\n".join(os.path.basename(p) for p in missing))
+        # 反向也要查：目录里任何**预期之外**的 .apk 都不进校验链，可能搭车发布
+        # （旧包/第四个分包）。宁可在发布前拦下清点，不让它悄悄混出去（2026-10-01 外部审查）。
+        extra = sorted(
+            n for n in os.listdir(apk_dir)
+            if n.lower().endswith(".apk") and n not in ABI_SPLITS
+        )
+        if extra:
+            raise Fail("发布目录里出现预期之外的 APK（不在校验链内，清点后再发布）：\n      "
+                       + "\n      ".join(extra))
 
         # SDK 先解析：它既用于定位构建工具，也是 find_java 推导「兄弟目录里的 Android Studio JBR」的依据
         sdk = find_sdk(root)
@@ -504,14 +513,18 @@ def main():
         # 为什么排在 ⑥ 之后：⑥ 只是「签名后是否又改过产物」的**提示**，不是检查项，
         # 保持 ①–⑤ 的编号连续更清楚。
         # 语义：**不一致就拦**（构件与公布散列不符 = 供应链层面的红灯）；
-        # 而"缓存里找不到 / 仓库未提供散列"只算"无法校验"，不拦发布（本机 CI 上都可能发生）。
+        # 「一项都没能校验」也拦（ok=0 ⇒ 闸门形同虚设，2026-10-01 收紧）；
+        # 个别条目「缓存里找不到 / 仓库未提供散列」只算"无法校验"，不拦（本机/CI 都可能发生）。
         dep = subprocess.run(
             [sys.executable, os.path.join(root, "tools", "verify_deps.py")],
             capture_output=True, text=True, cwd=root,
         )
         if dep.returncode != 0:
-            detail = "\n      ".join(dep.stdout.strip().splitlines()[-6:])
-            raise Fail("依赖完整性与公布散列不一致（构件可能在下载后被改动），发布前必须查清：\n      %s" % detail)
+            # stdout 与 stderr 都要带上：子脚本自身崩溃（如编码问题）时真凶在 stderr，
+            # 只看 stdout 会把「脚本崩了」误报成「散列不一致」（2026-10-01 外部审查实证）。
+            tail = (dep.stdout + "\n[stderr]\n" + dep.stderr).strip().splitlines()[-8:]
+            detail = "\n      ".join(tail)
+            raise Fail("依赖完整性校验未通过（散列不一致或校验链自身失败），发布前必须查清：\n      %s" % detail)
         dep_summary = next(
             (l.strip() for l in dep.stdout.splitlines() if l.startswith("结果：")), "已核对"
         )
