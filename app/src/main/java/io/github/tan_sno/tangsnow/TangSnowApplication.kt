@@ -30,8 +30,9 @@ class TangSnowApplication : Application() {
             )
         }
         ApplicationScope.init(this)
-        // 本地崩溃日志（仅落盘留存，供「关于 → 崩溃报告」查看/分享；不上传）
-        io.github.tan_sno.tangsnow.util.CrashLogger.install(this)
+        // 本地崩溃日志**不在这里装**：它曾无条件注册在 Application.onCreate，于是"同意门禁还没
+        // 走完"时崩溃也会落盘，与同意页"同意前不做任何数据处理"的字面冲突。
+        // 现在改由 MainActivity.onCreate 在**确认已同意**之后安装（见那里的注释）。
         // 应用用户上次选择的语言（系统 / 中文 / English）。
         // API 33+ 仅在偏好与"上次已应用值"不同时才调用系统接口，避免覆盖用户在系统设置里为本
         // 应用单独指定的语言（per-app language）；API ≤ 32 没有该系统级存储，每次冷启动都重放，

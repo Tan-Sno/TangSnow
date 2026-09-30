@@ -76,7 +76,7 @@ object ClearDataUseCase {
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Throwable) {
-                    android.util.Log.w("ClearDataUseCase", "kernel clear failed", e)
+                    android.util.Log.w("ClearDataUseCase", "kernel clear failed: ${e.javaClass.simpleName}")
                     false
                 }
             }
@@ -97,7 +97,7 @@ object ClearDataUseCase {
                 throw e
             } catch (e: Throwable) {
                 localFailed++
-                android.util.Log.w("ClearDataUseCase", "local clear failed", e)
+                android.util.Log.w("ClearDataUseCase", "local clear failed: ${e.javaClass.simpleName}")
             }
         }
 

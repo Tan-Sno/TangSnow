@@ -35,6 +35,7 @@ class BrowserDb private constructor(context: Context) :
             )"""
         )
         createIndexes(db)
+        createHistoryUniqueIndex(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -46,12 +47,37 @@ class BrowserDb private constructor(context: Context) :
                     "(SELECT _id FROM history ORDER BY visited_at DESC LIMIT $HISTORY_KEEP)"
             )
         }
+        if (oldVersion < 3) {
+            // history.url 补唯一约束（2026-09-30 外部审查：`bookmarks` 有 UNIQUE 而 `history` 没有，
+            // 旧版本或异常路径留下的重复行**永远无法自愈** —— `UPDATE … WHERE url=?` 会同时刷多行）。
+            // ⚠️ 顺序不能变：**有任何重复行时 `CREATE UNIQUE INDEX` 会直接失败**，而失败发生在
+            // onUpgrade 里等于库打不开。故先合并、再去重、最后建索引。
+            //  ① 时间取该 URL 的最大值（最近一次访问），信息不丢
+            db.execSQL(
+                "UPDATE history SET visited_at = " +
+                    "(SELECT MAX(h2.visited_at) FROM history h2 WHERE h2.url = history.url)"
+            )
+            //  ② 每个 URL 只保留最早插入的那一行
+            db.execSQL("DELETE FROM history WHERE _id NOT IN (SELECT MIN(_id) FROM history GROUP BY url)")
+            //  ③ 旧的**非唯一**索引退役（新唯一索引覆盖同样的查询），再建唯一索引
+            db.execSQL("DROP INDEX IF EXISTS idx_history_url")
+            createHistoryUniqueIndex(db)
+        }
     }
 
-    /** 历史检索索引：地址栏联想与历史页排序走 visited_at / url 查询时显著提速 */
+    /** 历史检索索引：地址栏联想与历史页排序走 visited_at 查询时显著提速 */
     private fun createIndexes(db: SQLiteDatabase) {
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_history_visited ON history(visited_at DESC)")
-        db.execSQL("CREATE INDEX IF NOT EXISTS idx_history_url ON history(url)")
+    }
+
+    /**
+     * `history.url` 的**唯一索引**：同一 URL 只保留一行（配合 [touchHistory] 的事务 upsert）。
+     *
+     * 名字刻意与旧的 `idx_history_url` **不同** —— 若沿用同名，`CREATE INDEX IF NOT EXISTS`
+     * 在已存在该索引的库上会静默跳过，"改索引"等于没改（这类坑本项目踩过多次）。
+     */
+    private fun createHistoryUniqueIndex(db: SQLiteDatabase) {
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_history_url_unique ON history(url)")
     }
 
     // ---------- 书签 ----------
@@ -261,7 +287,8 @@ class BrowserDb private constructor(context: Context) :
 
     companion object {
         private const val DB_NAME = "tangsnow.db"
-        private const val DB_VERSION = 2
+        /** 3 = history.url 补唯一索引（迁移见 onUpgrade 的 `< 3` 分支） */
+        private const val DB_VERSION = 3
         /** 专门历史页可见范围：超出后按最近访问自动裁剪 */
         const val HISTORY_KEEP = 200
 
