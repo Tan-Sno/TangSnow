@@ -230,19 +230,24 @@ object UrlUtils {
         scheme == "file" || scheme == "moz-extension" || scheme == "javascript"
 
     /**
-     * 适合**分享 / 复制 / 写入会话快照**的 URL。
+     * **可携带 / 可落盘**的 URL —— 供**分享、复制、写入会话快照**三处共用。
      *
-     * 为什么单独一个判据：`tab.url` 保留真实值（地址栏要如实显示当前地址），但 `data:` 动辄几十 KB、
-     * `blob:` 只在当前会话内有效 —— 拿去分享/复制是给用户一坨没法用的文本，写进快照则是白占磁盘、
-     * 恢复时还要把这一大坨喂回内核。历史落库本来就有 `HistoryRepo.SKIP_PREFIXES` 兜底，
-     * 这里把**分享 / 复制 / 快照**三处口径拉齐到同一判据，免得各写各的（2026-09-30 外部审查即指出
-     * 「历史有兜底、分享与快照没有」这种口径不一致）。
+     * 为什么三处必须共用同一个判据：这三件事的取舍完全同源，各写各的就会出现"历史有兜底、
+     * 分享与快照没有"这种口径漂移（2026-09-30 外部审查正是这么说的）。排掉的原因各自成立：
+     *  · `about:` —— 内部页，没有可分享/可复制的内容；快照里也不需要它（恢复出来同样是空白标签）；
+     *  · `data:` —— 单个可达数百 KB 乃至数 MB（页面派生出来的临时文档），分享给用户是一坨没法用的
+     *    文本，落进快照会把快照撑大（`sessionState` 里同样带着它）；
+     *  · `blob:` —— **只在当前会话内有效**，恢复时必然打不开（会变成一个错误页），
+     *    所以更不能写进快照。
+     *
+     * ⚠️ 快照侧要连 `sessionState` 一起丢弃才算彻底（那里面带着整条历史栈，同样含这些 URL）；
+     * 见 `SessionManager.saveState`。标签本身与标题保留，恢复后是空白标签而不是错误页。
      */
-    internal fun isShareableUrl(url: String?): Boolean =
-        !url.isNullOrBlank() && schemeOf(url) !in NON_SHAREABLE_SCHEMES
+    internal fun isPortableUrl(url: String?): Boolean =
+        !url.isNullOrBlank() && schemeOf(url) !in NON_PORTABLE_SCHEMES
 
-    /** 内部页与"超长/临时"URL：分享/复制/快照都不该带上它们 */
-    private val NON_SHAREABLE_SCHEMES = setOf("about", "data", "blob")
+    /** 内部页与"超长 / 临时 / 不可恢复"URL */
+    private val NON_PORTABLE_SCHEMES = setOf("about", "data", "blob", "file", "content")
 
     fun resolveInfo(input: String, engine: SearchEngine): Resolved? {
         val trimmed = input.trim()

@@ -1939,7 +1939,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         val tab = sessionManager.activeTab ?: return
         val url = tab.url ?: return
         // about:/data:/blob: 都没有可分享的内容（超长/临时/内部页）—— 判据统一在 UrlUtils
-        if (!UrlUtils.isShareableUrl(url)) {
+        if (!UrlUtils.isPortableUrl(url)) {
             toast(R.string.toast_share_empty)
             return
         }
@@ -2247,8 +2247,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private fun copyCurrentUrl() {
         val tab = sessionManager.activeTab ?: return
         val url = tab.url ?: return
-        // 与分享同一判据（about:/data:/blob: 不复制），见 UrlUtils.isShareableUrl
-        if (!UrlUtils.isShareableUrl(url)) {
+        // 与分享同一判据（about:/data:/blob: 不复制），见 UrlUtils.isPortableUrl
+        if (!UrlUtils.isPortableUrl(url)) {
             toast(R.string.more_nothing_to_copy)
             return
         }

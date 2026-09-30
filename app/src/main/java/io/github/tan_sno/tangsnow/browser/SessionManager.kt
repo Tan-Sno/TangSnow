@@ -1750,10 +1750,15 @@ class BrowserSessionManager private constructor(
         val snapshot = SessionStore.Snapshot(
             activeIndex = activeIndex,
             tabs = normalTabs.map { tab ->
+                // ⚠️ `url` 与 `sessionState` **必须一起过滤**（2026-09-30 补）：
+                // `sessionState` 是内核序列化的会话状态，**整条历史栈都在里面** —— 只清 `url` 而留着它
+                // 等于没做（同样的体积、同样的不可恢复 URL）。判据与分享/复制共用 `UrlUtils.isPortableUrl`。
+                // 不保留的标签**仍然保留自己与标题**，恢复后是一个空白标签（而不是一个打不开的错误页）。
+                val keep = io.github.tan_sno.tangsnow.util.UrlUtils.isPortableUrl(tab.url)
                 SessionStore.TabSnapshot(
-                    url = tab.url,
+                    url = tab.url.takeIf { keep },
                     title = tab.title,
-                    sessionState = stateCache[tab.id],
+                    sessionState = stateCache[tab.id].takeIf { keep },
                 )
             },
         )
