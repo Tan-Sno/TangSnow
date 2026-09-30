@@ -140,6 +140,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private var lastHistoryUrl: String? = null
     private var lastHistoryAt: Long = 0L
 
+    /**
+     * 与 [lastHistoryUrl] 配套：落库时**实际用到**的标题。
+     * 供 [backfillHistoryTitle] 判断「标题是否真的变了」，避免每次加载都多写一次库。
+     */
+    private var lastHistoryTitle: String? = null
+
     /** 收藏图标查询的单调序号：丢弃过期 DB 查询的返回，避免快速导航时图标被写回旧态 */
     private var bookmarkQuerySeq = 0
 
@@ -245,6 +251,57 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      */
     private val dialogs = DialogTracker()
 
+    /**
+     * 历史标题补写。
+     *
+     * 历史行是在 `onLocationChanged` 落库的，而那一句读的是 `tab.title` —— 内核的标题事件
+     * （`ContentDelegate.onTitleChange`）与导航提交**谁先谁后没有文档承诺**（`omni.ja` 是内核资源包，
+     * 证明不了 Java 侧委托的投递顺序）。若标题确实晚于提交到达，那一行记下的就是**上一页的标题**，
+     * 且此后没有任何路径回写。
+     *
+     * 为什么挂在 `onPageStop` 而不是 `onTitleChanged`：
+     *  - `onPageStop` 时 `tab.url` 与 `tab.title` 都已是**本次文档**的最终值，两者天然配对；
+     *  - `onTitleChanged` 会在标题每次变化时触发，而那时 `tab.url` 属于哪一页并不确定
+     *    （标题事件早于导航提交时，`tab.url` 还是**上一页**的）—— 照它回写会把新标题写到旧 URL 上，
+     *    比现状更糟。
+     *
+     * 三道护栏（缺一都会误伤，尤其第一道）：
+     *  ① 只补**刚刚记录过的那一条**（URL 相等）—— 否则后台标签（邮件 / 聊天站）频繁改标题会把
+     *     历史行反复顶到最前，那是比「标题错一页」更明显的回归；
+     *  ② 标题必须真的变了（与落库时用的标题不同）—— 避免每次加载都多写一次库；
+     *  ③ 无痕 / 空白页不写，与 `onLocationChanged` 同口径。
+     *
+     * 副作用有界：`HistoryRepo.add` 是按 URL 的 upsert，命中已存在的行只刷新 `visited_at` 与标题，
+     * 不会新增历史行。
+     */
+    private fun backfillHistoryTitle(tab: Tab) {
+        if (!sessionManager.isAlive(tab)) return
+        if (prefs.privateMode || tab.isPrivate) return
+        val url = tab.url
+        if (url.isNullOrBlank() || url.startsWith("about:")) return
+        if (url != lastHistoryUrl) return
+        val title = tab.title
+        if (title.isBlank() || title == lastHistoryTitle) return
+        lastHistoryTitle = title
+        lifecycleScope.launch { HistoryRepo.add(url, title) }
+    }
+
+    /**
+     * 把界面层的四个处理器挂到（**进程级单例**）会话管理器上。
+     *
+     * 为什么抽成一处并在 `onCreate` 与 `onResume` **都**调用（幂等）：管理器是应用级单例，而处理器
+     * 引用由**具体的 Activity 实例**持有 —— 双实例场景（singleTop + 外部深链/分享）下后创建者会覆盖
+     * 它们，先创建者必须在重新可见时无条件夺回，否则地址栏 / 进度 / 权限回调全部失联。
+     * 配套的另一半在 [onDestroy]：那里按**引用比对**解绑，绝不无条件置空（置空会摘掉另一个实例的引用）。
+     */
+    private fun bindSessionHandlers() {
+        if (!::sessionManager.isInitialized) return
+        sessionManager.events = tabEvents
+        sessionManager.selectionHandler = selectionHandlerImpl
+        sessionManager.promptHandler = webPrompts
+        sessionManager.permissionHandler = webPrompts
+    }
+
     /** 主界面侧扩展安装确认委托（AMO 页面「添加到 Firefox」弹窗），与扩展页共用实现 */
     private var extPromptDelegate: org.mozilla.geckoview.WebExtensionController.PromptDelegate? = null
 
@@ -340,8 +397,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             // 已释放标签的迟到事件：不再影响地址栏、历史与崩溃日志的"最近访问站点"
             if (!sessionManager.isAlive(tab)) return
             if (!url.isNullOrBlank()) {
-                // 供本地崩溃日志记录“最近访问站点”（仅域名），便于复现定位；不上传
-                io.github.tan_sno.tangsnow.util.CrashLogger.noteVisit(url)
+                // 供本地崩溃日志记录“最近访问站点”（仅域名），便于复现定位；不上传。
+                // ⚠️ 口径必须与下方写历史那一处（:363）**完全一致**：两条通道都属「浏览痕迹」，
+                // 一处守卫一处不守卫，就等于把无痕会话的域名留在了崩溃日志里（见 CrashLogger.clearHost）。
+                if (!prefs.privateMode && !tab.isPrivate) {
+                    io.github.tan_sno.tangsnow.util.CrashLogger.noteVisit(url)
+                }
             }
             // 页面内跳转到的局域网地址（不是 loadInTab 发起的，那里拦不到）：同样按需申请权限。
             // 这里**既不挂起也不续跑**导航 —— 内核此刻已经在加载了，让用户授权后自行刷新即可，
@@ -366,6 +427,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 if (url != lastHistoryUrl || now - lastHistoryAt > 1500L) {
                     lastHistoryUrl = url
                     lastHistoryAt = now
+                    // 记下落库时实际用的标题：此刻的 `tab.title` 未必已是**本页**的标题
+                    //（内核的标题事件可能晚于导航提交到达），onPageStop 会据此补写一次
+                    lastHistoryTitle = tab.title
                     lifecycleScope.launch { HistoryRepo.add(url, tab.title) }
                 }
             }
@@ -395,6 +459,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 // 页面加载完成且当前可见时刷新缩略图
                 binding.root.postDelayed({ tabPreviewController.captureCurrentPreview() }, 200)
             }
+            // 加载结束 = 本次文档的 URL 与标题都已定型，是补写历史标题的唯一可靠时机
+            if (alive()) backfillHistoryTitle(tab)
         }
 
         override fun onExternalResponse(tab: Tab, response: WebResponse) {
@@ -408,6 +474,24 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             if (!alive()) return
             // window.open() 无参/空串时没有可导航的目标，忽略即可（新窗口本就被拒）
             if (uri.isBlank()) return
+            // 安全闸门 + 外部协议分流（P2-3）。这条链最终调用 `session.loadUri()`，而那是**应用发起的
+            // 直接导航**（isDirectNavigation=true）⇒ 内核侧的特权 scheme 闸门（SessionManager.onLoadRequest）
+            // 会放行 `file:` / `moz-extension:`。不在这里收口，恶意页面就能用
+            // `window.open('file:///data/data/<pkg>/files/session_store.json')` 把应用私有文件
+            // （会话快照、崩溃日志）渲染到屏幕上。
+            // 三分法（与内核侧共用同一份判定，避免两处漂移）：
+            //  · 网页导航 → 照常在当前标签加载；
+            //  · file:/moz-extension:/javascript: → **静默丢弃**（既不放行、也**不给提示** ——
+            //    否则页面循环 window.open 就能拿 toast 刷屏）；
+            //  · 其余（mailto/tel/market/intent/geo…）→ 交回既有的「外部打开」实现，
+            //    与普通链接同款走系统 Intent。**不能一律丢弃**：`target="_blank"` 的 mailto
+            //    链接原本能唤起邮件应用，误挡即功能回归。
+            val scheme = UrlUtils.schemeOf(uri)
+            if (UrlUtils.isNeverWebContentScheme(scheme)) return
+            if (!UrlUtils.isWebNavigationScheme(scheme)) {
+                openExternalUrl(uri)
+                return
+            }
             val tab = sessionManager.activeTab ?: return
             binding.toolbar.addressBar.setText(uri)
             // 走统一入口：让局域网地址也触发按需的权限申请。
@@ -504,13 +588,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         enableEdgeToEdge()
         ThemeController.apply(prefs.theme)
         sessionManager = BrowserSessionManager.get(applicationContext, prefs)
-        sessionManager.events = tabEvents
-        sessionManager.selectionHandler = selectionHandlerImpl
         webPrompts = io.github.tan_sno.tangsnow.ui.WebPrompts(
             this, pickSingleFile, pickMultiFile, requestAndroidPermissions,
         )
-        sessionManager.promptHandler = webPrompts
-        sessionManager.permissionHandler = webPrompts
+        bindSessionHandlers()
+        // 记一个前台宿主：关停判据是「本进程已无任何 MainActivity 实例」，见 hostDetached 的说明
+        sessionManager.hostAttached()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -602,6 +685,18 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         super.onResume()
         // 界面重新可见：权限征询的守卫据此判定「用户此刻看不看得见」这一维（见 permissionStale）
         if (::sessionManager.isInitialized) sessionManager.setHostVisible(true)
+        // 无条件夺回处理器（幂等）：本实例可能刚被另一个实例压在栈下又恢复前台
+        bindSessionHandlers()
+        // 同一件事的另一半：后创建的实例会把活动会话挂到它自己的 GeckoView 上，本实例恢复前台时
+        // 必须把画面重新挂回来 —— 否则内核在跑、屏幕却是白的（上次退出时被它解绑了）
+        if (::sessionManager.isInitialized) {
+            sessionManager.activeTab?.let { active ->
+                if (::binding.isInitialized && binding.geckoView.session !== active.session) {
+                    binding.geckoView.setSession(active.session)
+                    syncViewWithTab(active)
+                }
+            }
+        }
         // 从「设置」返回时同步防截屏开关（开关是即时生效的窗口级标志）
         SecureScreen.apply(this, prefs)
         sessionManager.applyLiveSettings()
@@ -639,12 +734,18 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     }
 
     override fun onDestroy() {
-        // 无论退出还是重建都要解除对旧 Activity 的引用，避免回调悬空与内存泄漏
+        // 无论退出还是重建都要解除对旧 Activity 的引用，避免回调悬空与内存泄漏。
+        // ⚠️ 必须**按引用比对**逐项解绑：无条件置空会摘掉**另一个仍存活的实例**刚登记的处理器，
+        // 那正是「双实例」事故里先创建的实例沦为活死状态的直接成因（另一半在 onResume 的重新挂载）。
         if (::sessionManager.isInitialized) {
-            sessionManager.events = null
-            sessionManager.selectionHandler = null
-            sessionManager.promptHandler = null
-            sessionManager.permissionHandler = null
+            if (sessionManager.events === tabEvents) sessionManager.events = null
+            if (sessionManager.selectionHandler === selectionHandlerImpl) {
+                sessionManager.selectionHandler = null
+            }
+            if (::webPrompts.isInitialized && sessionManager.promptHandler === webPrompts) {
+                sessionManager.promptHandler = null
+                sessionManager.permissionHandler = null
+            }
         }
         if (::webPrompts.isInitialized) webPrompts.cancelPending()
         // 扩展安装/权限提示同样必须在销毁前关闭并应答：否则页面侧的安装或权限请求
@@ -668,8 +769,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         dialogs.cancelAll()
         if (::findBarController.isInitialized) findBarController.cancelPending()
         if (::suggestionsController.isInitialized) suggestionsController.cancelPending()
-        // 只有真正退出应用才销毁会话；主题切换等重建场景下标签页得以保留
-        if (isFinishing && ::sessionManager.isInitialized) {
+        // 先摘除本实例的宿主计数（**与 isFinishing 解耦**：配置变更也要减，否则计数只增不减、
+        // 之后正常的「划掉任务」就再也不关停内核）；只有真正退出应用、**且本进程已无其它
+        // MainActivity 实例**时才销毁会话 —— 双实例场景下先创建的实例只是被压到栈下，
+        // 用户返回时还要继续用它，不能因为另一个实例结束就被连带关停。
+        val lastHost = if (::sessionManager.isInitialized) sessionManager.hostDetached() else false
+        if (isFinishing && lastHost) {
             detachActiveSession()
             sessionManager.shutdown()
         }
@@ -1234,6 +1339,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             createTab(url = null, isPrivate = false)
             showHome()
         }
+        // 无痕浏览结束 = 那一段浏览痕迹的终点。CrashLogger 里那个「最近访问站点」住在内存里、
+        // 不会自己过期，不清掉的话此后任何一次崩溃都会把它写进持久化日志（与「无痕不留痕」冲突）。
+        io.github.tan_sno.tangsnow.util.CrashLogger.clearHost()
         toast(R.string.toast_private_off)
     }
 

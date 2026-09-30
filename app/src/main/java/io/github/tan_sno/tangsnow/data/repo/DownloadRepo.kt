@@ -112,9 +112,14 @@ object DownloadRepo {
     private const val STATE_FAILED = "fail"
 
     /**
-     * 文件名长度上限（字符数）。超限时由 [truncateKeepingExtension] 保留扩展名并截断主名。
+     * 文件名上限，**按 UTF-8 字节数**而不是字符数。
+     *
+     * 文件系统（ext4 / exFAT）与 MediaStore 的单段上限是 255 **字节**，而 150 个汉字就已经是
+     * 450 字节：按字符限长时，超长**中文**名会带着 450 字节一路走到 `createNewFile`，
+     * 在那里抛 `File name too long` → 本次落盘整体失败（本可截到 ~66 个汉字成功）。
+     * 取 200 字节：给扩展名与调用方的再拼接留出余量，同时远低于 255。
      */
-    private const val MAX_FILE_NAME_LENGTH = 150
+    private const val MAX_FILE_NAME_BYTES = 200
 
     /**
      * 状态 → 本地化文案资源 id（含 [Item.progressPercent] 占位参数）。
@@ -811,28 +816,70 @@ object DownloadRepo {
             // 结尾的点与空格在部分文件系统（exFAT/SD 卡）上非法，一并去掉
             .replace(TRAILING_SPACE_OR_DOT, "")
             .trim()
-            .let { truncateKeepingExtension(it, MAX_FILE_NAME_LENGTH) }
+            .let { truncateKeepingExtension(it, MAX_FILE_NAME_BYTES) }
         return cleaned.ifBlank { DEFAULT_FILE_NAME }
     }
 
     /**
-     * 限长但**保留扩展名**：超限且能识别出合法扩展名时，完整保留 `.ext`、把主名截到剩余可用长度；
-     * 无扩展名、或扩展名本身塞不进上限时，退化为整段截断。
+     * 限长但**保留扩展名**，且按 UTF-8 **字节**计量、绝不在多字节字符或代理对中间截断。
      *
      * 为什么必须保留扩展名：下游「可执行文件警示」按**最终文件名**的扩展名判定
      * （[isExecutableName]），若把 `.apk` / `.exe` 随主名一起截掉，超长名的安装包
      * 就会被当成普通文件放行 —— 这正是本函数要堵的绕过面。
+     *
+     * 为什么必须按码点整块收：直接 `take(n)` 会把一个汉字劈成半个、把 emoji 劈成落单代理，
+     * 落盘后是乱码；而 `String.length` 是 UTF-16 码元数，与文件系统关心的字节数根本不是一回事。
      * 清洗（非法字符替换、去结尾点/空格、trim）已在调用点先完成，故此处只在「限长」环节生效。
      */
-    private fun truncateKeepingExtension(name: String, max: Int): String {
-        if (name.length <= max) return name
+    private fun truncateKeepingExtension(name: String, maxBytes: Int): String {
+        if (utf8Length(name) <= maxBytes) return name
         val dot = name.lastIndexOf('.')
-        // 合法扩展名：存在 '.'、不在首尾、且含 '.' 的扩展名仍小于上限（至少留 1 个主名字符）
+        // 合法扩展名：存在 '.'、不在首尾，且扩展名自身放得下（至少留 1 个主名字符的位置）
         if (dot > 0 && dot < name.length - 1) {
             val ext = name.substring(dot)
-            if (ext.length < max) return name.substring(0, max - ext.length) + ext
+            val extBytes = utf8Length(ext)
+            if (extBytes < maxBytes) {
+                val head = takeWithinUtf8Bytes(name.substring(0, dot), maxBytes - extBytes)
+                if (head.isNotEmpty()) return head + ext
+            }
         }
-        return name.take(max)
+        // 无扩展名、或扩展名本身塞不进上限：退化为整段截断（与旧行为一致）
+        return takeWithinUtf8Bytes(name, maxBytes)
+    }
+
+    /** 取前缀，保证其 UTF-8 字节数不超过 [maxBytes]；按码点整块收（代理对不拆开） */
+    private fun takeWithinUtf8Bytes(name: String, maxBytes: Int): String {
+        if (maxBytes <= 0) return ""
+        var bytes = 0
+        var i = 0
+        while (i < name.length) {
+            val cp = name.codePointAt(i)
+            val width = utf8Width(cp)
+            if (bytes + width > maxBytes) break
+            bytes += width
+            i += Character.charCount(cp)
+        }
+        return name.substring(0, i)
+    }
+
+    /** 字符串的 UTF-8 字节数（超长名判据的量纲，必须与文件系统一致） */
+    private fun utf8Length(s: String): Int {
+        var n = 0
+        var i = 0
+        while (i < s.length) {
+            val cp = s.codePointAt(i)
+            n += utf8Width(cp)
+            i += Character.charCount(cp)
+        }
+        return n
+    }
+
+    /** 单个码点的 UTF-8 字节数（RFC 3629：1 / 2 / 3 / 4） */
+    private fun utf8Width(codePoint: Int): Int = when {
+        codePoint < 0x80 -> 1
+        codePoint < 0x800 -> 2
+        codePoint < 0x10000 -> 3
+        else -> 4
     }
 
     // ------------------------------------------------------------- 查询 / 打开 / 删除

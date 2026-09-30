@@ -77,21 +77,47 @@ object Bitmaps {
         return sample
     }
 
-    /** 把源图按 center-crop 缩放到目标尺寸，保证无拉伸失真 */
+    /**
+     * 把源图按 center-crop 缩放到目标尺寸，保证无拉伸失真。
+     *
+     * ⚠️ 顺序是**先裁后缩**，而不是「先缩后裁」：`createScaledBitmap` 为了填满目标，会把
+     * 长边按 `max(targetW/w, targetH/h)` 放大 —— 一张 8000×500 的宽幅图配 1080×2400 的目标
+     * 会先被放大到 9600×2400（≈23MP / 92MB），极端长宽比下可达数亿像素。而 [MAX_PIXELS]
+     * 只约束 [decodeSampled] 那一步，**管不到这里**，于是内存闸门被绕开。
+     * 先按目标宽高比在源图上裁出居中的一小块、再缩放到目标：中间图不会超过目标尺寸量级。
+     */
     fun cover(src: Bitmap, targetW: Int, targetH: Int): Bitmap {
         if (targetW <= 0 || targetH <= 0) return src
-        val w = src.width.toFloat()
-        val h = src.height.toFloat()
-        val scale = maxOf(targetW / w, targetH / h)
-        val scaledW = (w * scale).toInt().coerceAtLeast(1)
-        val scaledH = (h * scale).toInt().coerceAtLeast(1)
-        val scaled = Bitmap.createScaledBitmap(src, scaledW, scaledH, true)
-        val x = ((scaledW - targetW) / 2).coerceAtLeast(0)
-        val y = ((scaledH - targetH) / 2).coerceAtLeast(0)
-        val safeW = scaledW.coerceAtMost(targetW)
-        val safeH = scaledH.coerceAtMost(targetH)
-        return runCatching {
-            Bitmap.createBitmap(scaled, x, y, safeW, safeH)
-        }.getOrDefault(scaled)
+        val rect = centerCropRect(src.width, src.height, targetW, targetH)
+        val cropped = runCatching {
+            Bitmap.createBitmap(src, rect[0], rect[1], rect[2], rect[3])
+        }.getOrDefault(src)
+        // 裁剪后的宽高比已与目标一致（取整误差 ≤1px），直接缩放到目标即可，无需二次裁剪
+        val scaled = runCatching {
+            Bitmap.createScaledBitmap(cropped, targetW, targetH, true)
+        }.getOrDefault(cropped)
+        // 中间图不再需要；但绝不动调用方传进来的 src（裁剪失败时 cropped 就是 src 本身）
+        if (cropped !== src && scaled !== cropped) runCatching { cropped.recycle() }
+        return scaled
+    }
+
+    /**
+     * 目标宽高比下、在源图里居中的最大内接矩形（`[x, y, w, h]`）。
+     *
+     * 抽成纯函数：这是「无拉伸」的唯一依据，边界（极端长宽比、1px 源图、宽高比恰好相等）
+     * 必须能被单测钉住。比较一律用整数乘法，避免浮点误差把边界判反。
+     */
+    internal fun centerCropRect(srcW: Int, srcH: Int, targetW: Int, targetH: Int): IntArray {
+        if (srcW <= 0 || srcH <= 0 || targetW <= 0 || targetH <= 0) {
+            return intArrayOf(0, 0, srcW.coerceAtLeast(1), srcH.coerceAtLeast(1))
+        }
+        // 目标更「宽」（含相等）⇒ 源相对更高 ⇒ 裁掉上下；否则裁掉左右
+        return if (targetW.toLong() * srcH >= targetH.toLong() * srcW) {
+            val h = (srcW.toLong() * targetH / targetW).toInt().coerceIn(1, srcH)
+            intArrayOf(0, (srcH - h) / 2, srcW, h)
+        } else {
+            val w = (srcH.toLong() * targetW / targetH).toInt().coerceIn(1, srcW)
+            intArrayOf((srcW - w) / 2, 0, w, srcH)
+        }
     }
 }

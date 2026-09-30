@@ -128,7 +128,7 @@ class DownloadFileNameTest {
     fun `超长文件名被截断`() {
         val long = "x".repeat(500) + ".pdf"
         val name = DownloadRepo.parseFileName("attachment; filename=\"$long\"", null)
-        assertTrue("长度必须受限，实际 ${name.length}", name.length <= 150)
+        assertTrue("字节数必须受限，实际 ${utf8(name)}", utf8(name) <= MAX_BYTES)
     }
 
     @Test
@@ -137,13 +137,84 @@ class DownloadFileNameTest {
         // 若限长时把扩展名连同主名一起截掉，一个 400 字符长的 .apk 就会被当成普通文件放行
         // —— 这正是 truncateKeepingExtension 要堵的绕过面。
         val name = DownloadRepo.parseFileName("attachment; filename=\"${"x".repeat(400)}.apk\"", null)
-        assertEquals(150, name.length)
+        assertTrue("字节数必须受限，实际 ${utf8(name)}", utf8(name) <= MAX_BYTES)
         assertTrue("扩展名必须保留，实际 $name", name.endsWith(".apk"))
         assertTrue("截断后必须仍判为可执行", DownloadRepo.isExecutableName(name))
 
         // 无扩展名时退化为整段截断（不得抛异常、不得超长）
         val noExt = DownloadRepo.parseFileName("attachment; filename=\"${"y".repeat(400)}\"", null)
-        assertEquals(150, noExt.length)
+        assertTrue("字节数必须受限，实际 ${utf8(noExt)}", utf8(noExt) <= MAX_BYTES)
+    }
+
+    // ---------------------------------------------- 限长的量纲是**字节**而不是字符（P3-5）
+
+    /**
+     * 旧实现按 `String.length`（UTF-16 码元）限长 150，而文件系统单段上限是 255 **字节**：
+     * 150 个汉字 = 450 字节，会**原样穿过**限长、一路走到 `createNewFile` 抛
+     * `File name too long`，整单下载失败（本可截到 60 余个汉字成功）。
+     */
+    @Test
+    fun `超长中文名按字节截断，不会带着 450 字节去落盘`() {
+        val name = DownloadRepo.parseFileName("attachment; filename=\"$CJK150.pdf\"", null)
+        assertTrue("字节数必须受限，实际 ${utf8(name)}", utf8(name) <= MAX_BYTES)
+        assertTrue("扩展名必须保留，实际 $name", name.endsWith(".pdf"))
+        assertTrue("截断后仍应是可读的中文名", name.contains('中'))
+    }
+
+    @Test
+    fun `按字节截断不得劈开多字节字符`() {
+        // 汉字（3 字节）与 emoji（4 字节、且是代理对）都要整块收 —— 半个字符落盘就是乱码
+        val cjk = DownloadRepo.parseFileName("attachment; filename=\"$CJK150.txt\"", null)
+        assertFalse("不得出现替换字符（半个汉字被解码的结果）", cjk.contains('\uFFFD'))
+        assertFalse("不得留下落单代理", hasLoneSurrogate(cjk))
+
+        val emoji = DownloadRepo.parseFileName("attachment; filename=\"$EMOJI80.apk\"", null)
+        assertTrue("字节数必须受限，实际 ${utf8(emoji)}", utf8(emoji) <= MAX_BYTES)
+        assertTrue("扩展名必须保留，实际 $emoji", emoji.endsWith(".apk"))
+        assertTrue("截断后必须仍判为可执行", DownloadRepo.isExecutableName(emoji))
+        // ⚠️ 注意：成对 emoji 的**高代理本身** isHighSurrogate() 也为 true，所以不能拿它当「半个字符」的判据
+        //（本用例第一版就是这么写错的 —— 它会对自己造出来的正确结果报假红）。这里只判「代理不落单」。
+        assertFalse("不得留下落单代理", hasLoneSurrogate(emoji))
+        assertFalse("不得出现替换字符", emoji.contains('\uFFFD'))
+        // 49 个完整 emoji（49×4=196B）+ ".apk" = 200B
+        assertEquals(49, emoji.codePointCount(0, emoji.length) - ".apk".length)
+    }
+
+    @Test
+    fun `短名与边界名一字不动`() {
+        assertEquals("报告.pdf", DownloadRepo.parseFileName("attachment; filename=\"报告.pdf\"", null))
+        // 恰好 200 字节：不得被截
+        val exact = "a".repeat(196) + ".pdf"
+        assertEquals(exact, DownloadRepo.parseFileName("attachment; filename=\"$exact\"", null))
+    }
+
+    private fun utf8(s: String): Int = s.toByteArray(Charsets.UTF_8).size
+
+    /**
+     * 是否含**落单**代理（半个 emoji）。
+     * 注意不能写成 `none { it.isHighSurrogate() }` —— 成对 emoji 的高代理也满足它，那样会对正确结果报假红。
+     */
+    private fun hasLoneSurrogate(s: String): Boolean {
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                c.isHighSurrogate() -> {
+                    if (i + 1 >= s.length || !s[i + 1].isLowSurrogate()) return true
+                    i += 2
+                }
+                c.isLowSurrogate() -> return true
+                else -> i++
+            }
+        }
+        return false
+    }
+
+    private companion object {
+        /** 与生产侧上限一致（见 DownloadRepo.MAX_FILE_NAME_BYTES 的说明） */
+        const val MAX_BYTES = 200
+        val CJK150 = "中".repeat(150)
+        val EMOJI80 = "😀".repeat(80)
     }
 
     @Test
