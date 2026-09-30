@@ -99,6 +99,17 @@ class ExtInstallCoordinator(
 
         /** 自定义官方链接安装 */
         class Remote(override val label: String, override val remoteUrl: String) : Source() {
+            init {
+                // 纵深防御（2026-09-30 外部审查建议）：本类是"远端来源"的**唯一构造口**，准入校验
+                // 不能只靠调用方 —— 上游两处（ExtensionsActivity 的自定义链接、downloadPackage 的
+                // 下载前缀）确实都校验了，但将来新增调用点绕开 Activity 就会放宽准入，正是
+                // [ExtensionCatalog.AMO_HOST] 注释里说要防的"漏改一处"。当前所有构造点均先校验，
+                // 故本断言**不可达**；一旦可达即属代码缺陷（走界面通用失败文案即可，不新增文案）。
+                require(remoteUrl.startsWith("https://${ExtensionCatalog.AMO_HOST}/")) {
+                    "远端安装来源必须是官方扩展源：$remoteUrl"
+                }
+            }
+
             // key 必须带上**本次安装的来源**：此前是常量 "__remote__"，于是「同时装两个不同链接」
             // 会命中同一个去重键而被 [isWorking] 拦下 —— 第二次点击像被吞掉一样毫无反馈。
             // 三个子类里只有 Catalog 允许用常量键（它本来就是「每个扩展一条」）。

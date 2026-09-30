@@ -425,7 +425,9 @@ class BrowserSessionManager private constructor(
         toClose.forEach {
             stateCache.remove(it.id)
             releasePreview(it)
-            post { runCatching { it.session.close() } }
+            // shutDown 之后内核运行时已关，close 打向已销毁的会话 —— 只是日志噪音，但口径要与
+            // closeSessionLater（:1690 那处判了 shutDown）一致：关停后不再排队任何内核动作。
+            post { if (!shutDown) runCatching { it.session.close() } }
         }
         tabs.clear()
         tabs.add(keep)
@@ -443,7 +445,9 @@ class BrowserSessionManager private constructor(
         tabs.toList().forEach {
             stateCache.remove(it.id)
             releasePreview(it)
-            post { runCatching { it.session.close() } }
+            // shutDown 之后内核运行时已关，close 打向已销毁的会话 —— 只是日志噪音，但口径要与
+            // closeSessionLater（:1690 那处判了 shutDown）一致：关停后不再排队任何内核动作。
+            post { if (!shutDown) runCatching { it.session.close() } }
         }
         tabs.clear()
         active = null
@@ -461,7 +465,8 @@ class BrowserSessionManager private constructor(
         if (wasActive) active = tabs.lastOrNull()
         // 会话关闭延后一拍执行：标签若刚被释放或仍在加载，立刻 close() 会让引擎把
         // 迟到事件断言成 Must use an unopened GeckoSession instance（桌面版/关闭加载页闪退）
-        post { runCatching { tab.session.close() } }
+        // 同上：关停后不再排队 close（口径与 closeSessionLater 一致）
+        post { if (!shutDown) runCatching { tab.session.close() } }
         return active
     }
 
@@ -476,7 +481,9 @@ class BrowserSessionManager private constructor(
             tabs.remove(it)
             stateCache.remove(it.id)
             releasePreview(it)
-            post { runCatching { it.session.close() } }
+            // shutDown 之后内核运行时已关，close 打向已销毁的会话 —— 只是日志噪音，但口径要与
+            // closeSessionLater（:1690 那处判了 shutDown）一致：关停后不再排队任何内核动作。
+            post { if (!shutDown) runCatching { it.session.close() } }
         }
         if (active?.isPrivate == true) {
             active = tabs.lastOrNull { !it.isPrivate } ?: tabs.lastOrNull()
@@ -692,6 +699,10 @@ class BrowserSessionManager private constructor(
             if (internal) return null
             // 外部协议（intent://、market://、mailto:、tel:、geo: 等）：先让界面层用系统
             // Intent 尝试打开，再拒绝内核本次跳转（否则内核会尝试自行处理、带走当前页）。
+            // ⚠️ 归属 / 活性守卫（与 onNewSession 同口径，2026-09-30 补）：拉起外部应用是**全局副作用**，
+            // 不该由后台标签的脚本或已关闭标签的迟到导航驱动 —— 用户正在看别的页面时突然被弹进另一个应用，
+            // 既莫名其妙又像是自己点了什么。后台标签的外部协议一律按拒绝处理。
+            if (!isAlive(tab) || tab !== active) return GeckoResult.deny()
             post { events?.onExternalProtocol(uri) }
             return GeckoResult.deny()
         }
@@ -933,7 +944,16 @@ class BrowserSessionManager private constructor(
         result: GeckoResult<GeckoSession.PromptDelegate.PromptResponse>,
         prompt: GeckoSession.PromptDelegate.BasePrompt,
     ): Boolean {
-        if (isAlive(tab) && tab === active) return false
+        // 三维判据：标签活着、是本标签、**且有一个可见的界面能承载弹窗**。
+        // 第三维是 2026-09-30 补的（外部审查指出 `ui/WebPrompts` 全系弹窗没有销毁/结束守卫，
+        // 而同仓 `ExtensionPrompts` 有 —— 同一仓两套标准）：
+        //  · 为什么补在**这里**而不是那 18 个 `on*Prompt` 里逐处加：那些回调各有自己的 `done`，
+        //    早退**必须同时把 prompt 应答掉**（否则内核永久等这个 GeckoResult），逐处加极易漏一处；
+        //    本函数是它们唯一的共同入口，且 `settleResult(dismiss)` 已经把"应答"这一步做掉了。
+        //  · 为什么用 [hostVisible]：它由 onResume 置 true、onPause 置 false ⇒ 用户按返回键之后
+        //    （onPause → … → onDestroy 这段）或界面被别的 Activity 盖住时到达的弹窗会被就地拒绝，
+        //    不会再出现"对话框建在正要销毁的窗口上"。这与 [permissionStale] 的判据完全对称（那里早就补了）。
+        if (isAlive(tab) && tab === active && hostVisible) return false
         settleResult(result, prompt.dismiss())
         return true
     }
@@ -1343,39 +1363,21 @@ class BrowserSessionManager private constructor(
     }
 
     /**
-     * 「活动会话的显示已被另一个宿主接管」标志（对应 [hostAttached] 说明里的双实例场景）。
+     * 本进程内**是否还有另一个**存活的 MainActivity 宿主（即不止我一个）。
      *
-     * 为什么需要它（`javap -p` 实测 geckoview 157 制品）：`GeckoView` 的会话是**逐视图字段**
-     * `protected GeckoSession mSession`，类里**没有任何静态视图注册表**；`setSession` 的字节码是
-     * 「先 `releaseSession()` → `putfield mSession` → `acquireDisplay()`」。
-     * ⇒ 后来者只设置了**自己**视图的字段，先创建的那个视图的 `mSession` **仍指向同一会话** ——
-     * 光比对 `geckoView.session !== active.session` 看不出「显示已经易主」，于是被压在栈下的宿主
-     * 恢复前台时不会重挂，可能出现「内核在跑、屏幕是空的」。
-     * 置位：后来者在 onCreate 发现「已有别的宿主」时；消费：任何一次重挂之后（取即清）。
+     * 用途：给「我的显示被另一个实例接管了」这件事一个**只有当事方本地**能判定的判据 ——
+     * 宿主在 `onStop` 里问一句「我是不是被压下去了」，是则**在自己身上**记一笔，等自己 `onResume` 时重挂会话。
+     *
+     * ⚠️ 为什么**不**做成进程级的「显示已被接管」一次性标志（2026-09-30 实测踩过的坑）：
+     * 那种标志由**后来者**置位，而后来者**自己的第一次 `onResume` 就会把它取走**（取即清）⇒
+     * 真正需要它的先创建者永远读到 false，修复**完全失效** —— 而编译通过、205 个单测全绿都发现不了。
+     * 结论：**置位者若也会走到消费点，一次性标志就等于没写**；改成"谁受损谁记账"就不会被抢走。
+     *
+     * 时序依据（为什么不落空）：新实例覆盖旧实例时系统顺序是
+     * `A.onPause → B.onCreate/onStart/onResume → A.onStop` ⇒ A 走到 `onStop` 时本计数**必然已 ≥ 2**。
+     * （也正因如此，这个判定**不能**放在 `onPause`：那时 B 还没创建，计数仍是 1。）
      */
-    @Volatile
-    private var displayTakenOver = false
-
-    /** 后来者声明「活动会话的显示现在归我」 */
-    fun noteDisplayTakenOver() {
-        displayTakenOver = true
-    }
-
-    /** 取走并清空该标志（被接管过的宿主恢复前台时调用一次） */
-    fun consumeDisplayTakenOver(): Boolean {
-        val v = displayTakenOver
-        displayTakenOver = false
-        return v
-    }
-
-    /**
-     * 撤销标志：宿主**因配置变更**销毁时调用 —— 那种情况下的"另一个实例"其实是自己的继任者，
-     * 继任者在 onCreate 里已经挂过一次会话 ⇒ 不必再补一次（补了就是每次切主题 / 切语言之后
-     * 多一次 release+acquire 的黑帧）。
-     */
-    fun forgetDisplayTakenOver() {
-        displayTakenOver = false
-    }
+    fun hasOtherHost(): Boolean = hostCount > 1
 
     /**
      * 权限征询的**执行瞬间复查** —— 与 [promptStale] 同口径、同理由（那里写得最全）：

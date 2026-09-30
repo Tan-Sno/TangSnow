@@ -149,6 +149,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     /** 收藏图标查询的单调序号：丢弃过期 DB 查询的返回，避免快速导航时图标被写回旧态 */
     private var bookmarkQuerySeq = 0
 
+    /**
+     * 本实例曾被**另一个 MainActivity 实例**压到后台 ⇒ 活动会话的显示被它接管。
+     *
+     * 只记在**自己身上**（在 [onStop] 记、在 [onResume] 消费）—— 不跨实例传信号。
+     * 理由与踩坑记录见 `SessionManager.hasOtherHost` 的注释：进程级一次性标志会被**置位者自己**消费掉，
+     * 导致真正需要的那个实例永远读不到。
+     */
+    private var coveredByOtherHost = false
+
     // ------------------------------------------------------------- 网页弹窗 / 站点权限
 
     /**
@@ -571,6 +580,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         super.onCreate(savedInstanceState)
 
         prefs = PreferenceStore(this)
+        // 崩溃日志**只在通过同意门禁之后**才安装。原先装在 Application.onCreate，于是"同意页
+        // 还没走完（用户点不同意、或同意前就崩）"也会往盘里写一条日志 —— 与同意页写的
+        // "同意前不做任何数据处理"字面冲突。放在这里：主界面只在同意后才创建。
+        if (!ConsentGate.needsConsent(prefs)) {
+            io.github.tan_sno.tangsnow.util.CrashLogger.install(applicationContext)
+        }
         // 防截屏（可选，默认关闭）：在设置内容视图**之前**应用，避免首帧就被系统拍进最近任务快照
         SecureScreen.apply(this, prefs)
         // 同意门禁：首次安装 / 政策版本更新后，任何进入浏览器的路径都先回到同意页。
@@ -606,9 +621,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         )
         bindSessionHandlers()
         // 记一个前台宿主：关停判据是「本进程已无任何 MainActivity 实例」，见 hostDetached 的说明。
-        // 返回 true = 「此前已有别的宿主」⇒ 本实例是**后来者**，活动会话的显示现在归我；
-        // 被压在栈下的那个实例恢复前台时要据此重挂（判据见 SessionManager.displayTakenOver）。
-        if (sessionManager.hostAttached()) sessionManager.noteDisplayTakenOver()
+        // （「显示被接管」不再在这里置位 —— 那是**后来者**的视角，而它自己会立刻消费掉该标志；
+        //   改由被压下去的那个实例在 onStop 自己记账，见 coveredByOtherHost。）
+        sessionManager.hostAttached()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -704,14 +719,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         bindSessionHandlers()
         // 同一件事的另一半：后创建的实例会把活动会话挂到它自己的 GeckoView 上，本实例恢复前台时
         // 必须把画面重新挂回来 —— 否则内核在跑、屏幕却是空的。
-        // ⚠️ 判据**不能只看引用**：GeckoView 的会话是逐视图字段、类里没有视图注册表（javap 实测，
-        // 见 SessionManager.displayTakenOver）—— 后来者改的是它自己的字段，本视图的 `session`
-        // 仍指向同一会话，`!==` 恒假。故以「显示已被接管」标志为主、引用比对作兜底。
+        // 判据是**本实例自己的** coveredByOtherHost（在 onStop 记的），不是跨实例标志：
+        // GeckoView 的会话是逐视图字段、类里没有视图注册表（javap 实测），后来者改的是它自己的字段，
+        // 本视图的 `session` 仍指向同一会话 ⇒ 单看引用比对（`!==`）恒假，只能靠"我被压下去过"这件事。
         if (::sessionManager.isInitialized) {
             val active = sessionManager.activeTab
-            val reattach = sessionManager.consumeDisplayTakenOver() ||
+            val reattach = coveredByOtherHost ||
                 (active != null && ::binding.isInitialized && binding.geckoView.session !== active.session)
             if (reattach && active != null && ::binding.isInitialized) {
+                coveredByOtherHost = false
                 binding.geckoView.setSession(active.session)
                 syncViewWithTab(active)
             }
@@ -750,6 +766,16 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                 .removePrimaryClipChangedListener(clipboardChangedListener)
         }
+    }
+
+    override fun onStop() {
+        // 被另一个 MainActivity 实例压到后台 ⇒ 活动会话的显示归它了。**必须在这里判**：
+        // 系统顺序是 `本实例.onPause → 新实例.onCreate/onStart/onResume → 本实例.onStop`，
+        // 走到 onStop 时宿主计数必然 ≥2；放在 onPause 判则永远是 1（那时新实例还没创建）。
+        if (::sessionManager.isInitialized && sessionManager.hasOtherHost()) {
+            coveredByOtherHost = true
+        }
+        super.onStop()
     }
 
     override fun onDestroy() {
@@ -793,11 +819,6 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // MainActivity 实例**时才销毁会话 —— 双实例场景下先创建的实例只是被压到栈下，
         // 用户返回时还要继续用它，不能因为另一个实例结束就被连带关停。
         val lastHost = if (::sessionManager.isInitialized) sessionManager.hostDetached() else false
-        // 因配置变更而销毁：那种情况下的"另一个实例"其实是自己的继任者，它在 onCreate 里已挂过
-        // 一次会话 ⇒ 撤销「显示已被接管」标志，免得继任者第一次 onResume 多一次重挂（黑帧）。
-        if (isChangingConfigurations && ::sessionManager.isInitialized) {
-            sessionManager.forgetDisplayTakenOver()
-        }
         if (isFinishing && lastHost) {
             detachActiveSession()
             sessionManager.shutdown()
@@ -1917,8 +1938,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private fun shareCurrentPage() {
         val tab = sessionManager.activeTab ?: return
         val url = tab.url ?: return
-        // about:blank 等内部页没有可分享的内容
-        if (url.isBlank() || url.startsWith("about:")) {
+        // about:/data:/blob: 都没有可分享的内容（超长/临时/内部页）—— 判据统一在 UrlUtils
+        if (!UrlUtils.isShareableUrl(url)) {
             toast(R.string.toast_share_empty)
             return
         }
@@ -2226,7 +2247,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private fun copyCurrentUrl() {
         val tab = sessionManager.activeTab ?: return
         val url = tab.url ?: return
-        if (url.isBlank() || url.startsWith("about:")) {
+        // 与分享同一判据（about:/data:/blob: 不复制），见 UrlUtils.isShareableUrl
+        if (!UrlUtils.isShareableUrl(url)) {
             toast(R.string.more_nothing_to_copy)
             return
         }
