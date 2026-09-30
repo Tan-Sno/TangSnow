@@ -46,7 +46,22 @@ class Tab(val id: Int, val session: GeckoSession, val isPrivate: Boolean) {
      */
     @Volatile
     var mediaPlaying: Boolean = false
+
+    /**
+     * 用户在本标签选过「阻止弹窗并不再询问」⇒ 后续 window.open 静默拒绝、不再弹框。
+     * 只记**本标签**、只活到标签关闭：换标签/重开即恢复询问（不跨标签也不持久化 ——
+     * 「不再问」是页面级降噪，不是全局授权的否定）。
+     */
+    @Volatile
+    var popupDenyAlways: Boolean = false
 }
+
+/**
+ * window.open 弹窗的用户决定（[PromptHandler.onPopupPrompt] 的应答）。
+ *  - ALLOW / DENY：单次放行 / 阻止；
+ *  - DENY_ALWAYS：阻止并**在本标签**记住（`Tab.popupDenyAlways`），标签关闭即失效。
+ */
+enum class PopupAnswer { ALLOW, DENY, DENY_ALWAYS }
 
 /**
  * 标签页事件（均在主线程派发）。
@@ -153,10 +168,11 @@ interface PromptHandler {
      */
     fun onDateTimePrompt(type: Int, defaultValue: String, done: (String?) -> Unit)
     /**
-     * window.open 弹出窗口请求：done(true)=允许 / false=拒绝 / null=取消（dismiss）。
-     * 内核区分「明确拒绝(confirm DENY)」与「用户关闭(dismiss)」，故用三态表达。
+     * window.open 弹出窗口请求：[PopupAnswer] 三态。
+     * 内核区分「明确拒绝(confirm DENY)」与「用户关闭(dismiss)」——取消（未选择）按
+     * DENY 处理（本次阻止），DENY_ALWAYS 由桥接层记到 [Tab.popupDenyAlways]。
      */
-    fun onPopupPrompt(targetUri: String, done: (Boolean?) -> Unit)
+    fun onPopupPrompt(targetUri: String, done: (PopupAnswer) -> Unit)
     /**
      * 重新提交表单确认：done(true)=确认重提 / false=取消。
      * 内核 confirm 只收 AllowOrDeny（无空参重载），故取消即 dismiss。
@@ -1243,18 +1259,24 @@ pref("media.gmp-manager.url", "");"""
                 if (!isAlive(tab) || tab !== active) {
                     return GeckoResult.fromValue(prompt.dismiss())
                 }
+                // 本标签已被用户选过「阻止并不再询问」：静默拒绝，不建窗、不问。
+                // 没有这条，页面循环 window.open 依旧能刷出一摞对话框（用户只能逐个点）。
+                if (tab.popupDenyAlways) {
+                    return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.DENY))
+                }
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 post {
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onPopupPrompt(prompt.targetUri.orEmpty()) { allow ->
-                        // 三态：允许=ALLOW，拒绝=DENY，用户关闭=dismiss（语义有别，不能混为一谈）
-                        settleResult(result, 
-                            when (allow) {
-                                true -> prompt.confirm(AllowOrDeny.ALLOW)
-                                false -> prompt.confirm(AllowOrDeny.DENY)
-                                null -> prompt.dismiss()
+                    else h.onPopupPrompt(prompt.targetUri.orEmpty()) { answer ->
+                        if (answer == PopupAnswer.DENY_ALWAYS) tab.popupDenyAlways = true
+                        // 三态：允许=ALLOW，阻止/DENY_ALWAYS=DENY（后者已由 Tab 记住）
+                        settleResult(result,
+                            when (answer) {
+                                PopupAnswer.ALLOW -> prompt.confirm(AllowOrDeny.ALLOW)
+                                PopupAnswer.DENY, PopupAnswer.DENY_ALWAYS ->
+                                    prompt.confirm(AllowOrDeny.DENY)
                             }
                         )
                     }

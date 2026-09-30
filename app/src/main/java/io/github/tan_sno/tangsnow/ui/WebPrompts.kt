@@ -18,6 +18,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import io.github.tan_sno.tangsnow.browser.PopupAnswer
 import androidx.core.content.ContextCompat
 import io.github.tan_sno.tangsnow.GeckoHolder
 import io.github.tan_sno.tangsnow.R
@@ -579,18 +580,22 @@ class WebPrompts(
         tracked(dateDialog)
     }
 
-    override fun onPopupPrompt(targetUri: String, done: (Boolean?) -> Unit) {
+    override fun onPopupPrompt(targetUri: String, done: (PopupAnswer) -> Unit) {
         var called = false
-        fun once(v: Boolean?) {
+        fun once(v: PopupAnswer) {
             if (!called) { called = true; done(v) }
         }
         tracked(
             AlertDialog.Builder(activity)
                 .setTitle(R.string.app_name)
                 .setMessage(activity.getString(R.string.prompt_popup_message, targetUri))
-                .setPositiveButton(R.string.perm_allow) { _, _ -> once(true) }
-                .setNegativeButton(R.string.perm_deny) { _, _ -> once(false) }
-                .setOnCancelListener { once(null) }
+                .setPositiveButton(R.string.perm_allow) { _, _ -> once(PopupAnswer.ALLOW) }
+                .setNegativeButton(R.string.perm_deny) { _, _ -> once(PopupAnswer.DENY) }
+                // 中性按钮 = 阻止并记住（仅本标签，Tab.popupDenyAlways）：页面循环
+                // window.open 时的降噪出口，否则用户只能逐个点掉刷屏的对话框
+                .setNeutralButton(R.string.perm_deny_always) { _, _ -> once(PopupAnswer.DENY_ALWAYS) }
+                // 用户关闭对话框 = 未选择：按「本次阻止」处理（不记「不再询问」）
+                .setOnCancelListener { once(PopupAnswer.DENY) }
                 .create()
         )
     }

@@ -417,6 +417,7 @@
     <string name="prompt_share_chooser">分享到…</string>
     <string name="perm_allow">允许</string>
     <string name="perm_deny">拒绝</string>
+    <string name="perm_deny_always">阻止并不再询问（本页）</string>
     <string name="perm_location_message">%1$s 请求获取你的位置信息</string>
     <string name="perm_notification_message">%1$s 请求向你发送通知</string>
     <string name="perm_local_device_message">%1$s 请求访问本地设备</string>
@@ -497,6 +498,11 @@
     <string name="dl_executable_title">这是安装包或可执行文件</string>
     <string name="dl_executable_message">「%1$s」可能是安装包或程序文件，安装或运行后能修改你的设备。请只在你完全信任下载来源时继续。</string>
     <string name="dl_executable_continue">我了解风险，继续</string>
+
+    <!-- ==== 后台挂起后被挤掉的下载确认（如实计数，不说“都还在”） ==== -->
+    <plurals name="dl_background_dropped">
+        <item quantity="other">后台有 %1$d 个下载请求因未能确认而被忽略</item>
+    </plurals>
 
     <!-- ==== 防截屏（P4）：开启后系统截图与最近任务预览不显示本应用画面 ==== -->
     <string name="pref_secure_screen_title">禁止截屏</string>
