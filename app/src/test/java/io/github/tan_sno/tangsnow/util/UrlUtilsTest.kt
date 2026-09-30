@@ -59,6 +59,16 @@ class UrlUtilsTest {
     }
 
     @Test
+    fun `authority 段含 @ 的裸输入按搜索处理——防 userinfo 钓鱼`() {
+        // trusted.com@evil.com 会导航到 evil.com，而用户视线里的前缀是 trusted.com ——
+        // 主流浏览器对 authority 含 @ 的裸输入按搜索处理，这里钉住同款行为（2026-10-01）。
+        assertFalse(UrlUtils.looksLikeUri("trusted.com@evil.com"))
+        assertFalse(UrlUtils.looksLikeUri("trusted.com@evil.com/x"))
+        // 路径里的 @ 是合法用法（社交 handle），不能误伤
+        assertTrue(UrlUtils.looksLikeUri("twitter.com/@jack"))
+    }
+
+    @Test
     fun `含空白的输入一律不是网址`() {
         assertFalse(UrlUtils.looksLikeUri("example.com 空格"))
         assertFalse(UrlUtils.looksLikeUri("aa bb.com"))
