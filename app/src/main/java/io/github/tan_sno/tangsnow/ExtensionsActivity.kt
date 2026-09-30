@@ -512,10 +512,10 @@ class ExtensionsActivity : AppCompatActivity() {
             return
         }
         val url = binding.urlInput.text.toString().trim()
-        // 与产品口径一致：扩展只走 Mozilla 官方源（AMO），不接受任意第三方地址
-        val host = android.net.Uri.parse(url).host.orEmpty()
-        // scheme 校验必须 ignoreCase：HTTPS://addons.mozilla.org/... 也应放行
-        if (!url.startsWith("https://", ignoreCase = true) || !host.equals(ExtensionCatalog.AMO_HOST, ignoreCase = true)) {
+        // 与产品口径一致：扩展只走 Mozilla 官方源（AMO），不接受任意第三方地址。
+        // 判据与 Source.Remote 的构造断言**共用同一个函数**（两处口径曾经不一致，
+        // 通过这里校验的输入会在构造器抛 IAE 崩溃，见 ExtensionCatalog.isAmoUrl 的注释）。
+        if (!ExtensionCatalog.isAmoUrl(url)) {
             toast(R.string.extension_url_invalid)
             return
         }

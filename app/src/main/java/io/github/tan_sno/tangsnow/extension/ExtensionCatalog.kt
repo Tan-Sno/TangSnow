@@ -53,6 +53,21 @@ object ExtensionCatalog {
 
     const val OFFICIAL_STORE_URL = AMO_ORIGIN + "/firefox/extensions/"
 
+    /**
+     * 「这是 AMO 官方源的 https 链接」的**唯一**判据 —— 界面校验（ExtensionsActivity.installFromUrl）
+     * 与构造断言（ExtInstallCoordinator.Source.Remote）都必须走这里，两处判据曾经不一致
+     * （解析式忽略大小写 vs 大小写敏感字符串前缀），导致通过界面校验的输入在构造器里抛
+     * IllegalArgumentException 崩溃（2026-10-01 外部审查实证后统一到这里）。
+     *
+     * 只看 scheme + host：路径不限（详情页 / 直链都可），能否安装由内核与下载链各自判定。
+     * host 用解析结果而不是前缀匹配：`HTTPS://…`、大写 host、显式 :443 都是合法同源。
+     */
+    internal fun isAmoUrl(url: String): Boolean {
+        val uri = runCatching { android.net.Uri.parse(url.trim()) }.getOrNull() ?: return false
+        return uri.scheme.equals("https", ignoreCase = true) &&
+            uri.host.equals(AMO_HOST, ignoreCase = true)
+    }
+
     data class Entry(
         val slug: String,
         val addonId: Int,
