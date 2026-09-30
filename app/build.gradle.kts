@@ -356,6 +356,18 @@ android {
         }
     }
 
+    // 资源语言过滤：只保留中文与英文的字符串变体。第三方库（AndroidX/Material/zxing）
+    // 默认携带 ~80 种语言的翻译；shrinkResources 只按「资源名是否被引用」裁剪，
+    // 被引用字符串的各语言变体全保留 —— 不过滤的话，在应用强制的中英语言模型下，
+    // 库字符串（zxing 取景页、Material 对话框按钮等）会按系统语言冒出来，与应用内
+    // 语言选择不一致。⚠️ 该列表按**精确资源配置**匹配：库只带 values-zh-rCN/rHK/rTW
+    // （无裸 zh），只写 "zh" 会把库的中文全部剥掉（中文设备上库字符串退英文）——
+    // 必须逐个列出；裸 zh 一并保留是防御（个别库可能带 values-zh）。
+    // AGP 9 的新 DSL（取代 defaultConfig.resourceConfigurations）。
+    androidResources {
+        localeFilters.addAll(listOf("en", "zh", "zh-rCN", "zh-rHK", "zh-rTW"))
+    }
+
     // ABI 拆分：GeckoView 原生库（.so，未压缩存储）约占包体 86%，按 ABI 独立出包可大幅瘦身；
     // 不生成包含全部 ABI 的 universal APK（体积巨大且无必要）。
     splits {
@@ -399,6 +411,26 @@ androidComponents {
                         + "或恢复 isUniversalApk = false。"
                 )
             output.versionCode.set(output.versionCode.get() * 10 + offset)
+        }
+    }
+}
+
+// 第三道签名闸门：keystore.properties **整个缺失**时 release 静默回退 debug 证书
+// （文件存在但凭据无效/占位符的情形已由配置期与执行期闸门硬失败）。回退本是为
+// 贡献者 clone 后能构建，但「assembleRelease 的名字暗示可分发」与 debug 签名产物
+// 的两面待遇不一致 —— 现在缺失时也默认硬失败，明确传
+// -Ptangsnow.allowDebugSignedRelease 才放行（贡献者本地自查用；产物仍不可分发）。
+// doFirst 而非配置期：贡献者跑 assembleDebug / 测试时完全不受影响。
+val allowDebugSignedRelease =
+    providers.gradleProperty("tangsnow.allowDebugSignedRelease").isPresent
+tasks.matching { it.name in setOf("assembleRelease", "bundleRelease") }.configureEach {
+    if (!keystorePropsFile.exists() && !allowDebugSignedRelease) {
+        doFirst {
+            throw GradleException(
+                "未找到 keystore.properties：release 产物将回退 debug 证书签名，不可分发。"
+                    + "请配置真实凭据后构建；或（仅本地验证时）显式加 "
+                    + "-Ptangsnow.allowDebugSignedRelease 跳过本闸门。"
+            )
         }
     }
 }

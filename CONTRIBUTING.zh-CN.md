@@ -50,6 +50,11 @@
 ./gradlew :app:testDebugUnitTest  # 单元测试
 ```
 
+构建 release（`assembleRelease`）需要仓库根目录的 `keystore.properties`（不随仓库分发）；
+文件缺失时 release 构建会**直接报错**（防止静默产出 debug 签名的可分发假象）。
+仅本地验证打包链路时，可显式加 `-Ptangsnow.allowDebugSignedRelease` 跳过该闸门
+——产物仍用 debug 证书、仍不可分发或上架。
+
 提交前请确保上述三条命令均通过，且 lint 保持**零问题**。
 注意本项目已开启 `checkAllWarnings`（`app/build.gradle.kts`），**warning 级问题同样会被报出** ——
 请勿为了消掉一条警告而关掉整类检查，有必要的话按现成写法逐条写明豁免理由。
