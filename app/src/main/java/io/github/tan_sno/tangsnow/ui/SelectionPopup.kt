@@ -60,12 +60,24 @@ fun showSelectionPopup(
     pw.isFocusable = true
     pw.isOutsideTouchable = true
     pw.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0))
-    pw.setOnDismissListener { onDismiss() }
+    // [onDismiss] 的合约是「收口回调恰好一次」：无论走正常关闭，还是下面因锚点脱离窗口
+    // 而未展示的早退分支，都要恰好回调一次 —— 否则调用方挂在 onDismiss 里的清引用/复位
+    // 逻辑会被跳过（未展示≠无状态需要收口）。单次守卫防两条路径叠加成两次。
+    var dismissFired = false
+    fun fireDismissOnce() {
+        if (dismissFired) return
+        dismissFired = true
+        onDismiss()
+    }
+    pw.setOnDismissListener { fireDismissOnce() }
     pw.elevation = 8f
     // 宿主正在结束 / 已销毁（或锚点已脱离窗口）时不展示：PopupWindow.show* 与对话框一样需要有效的
     // 窗口令牌，拿不到就是 BadTokenException。判 `isAttachedToWindow` 是这里最省的等价判据
-    //（锚点在、令牌就在），不必把 Activity 传进来。
-    if (!anchor.isAttachedToWindow) return pw
+    //（锚点在、令牌就在），不必把 Activity 传进来。未展示也必须走一次收口回调（见上）。
+    if (!anchor.isAttachedToWindow) {
+        fireDismissOnce()
+        return pw
+    }
     if (bottomMarginPx != null) {
         // 地址栏在底部：锚在整窗底边并上移“底栏+地址栏”的高度，使操作条压在地址栏之上
         pw.showAtLocation(anchor.rootView, Gravity.BOTTOM, 0, bottomMarginPx)

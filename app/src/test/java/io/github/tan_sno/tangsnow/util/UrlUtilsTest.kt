@@ -265,4 +265,35 @@ class UrlUtilsTest {
             assertFalse("不应判为局域网：$url", UrlUtils.isLocalNetworkAddress(url))
         }
     }
+
+    @Test
+    fun `IPv4-mapped IPv6 的三种写法都按内嵌 IPv4 判局域网`() {
+        // 压缩 / 展开零 / 十六进制内嵌：内核实际按 192.168.1.1 连接，
+        // 字面量是 IPv6 ⇒ 不认就会漏弹权限框（Android 17 静默连不上）
+        for (url in listOf(
+            "http://[::ffff:192.168.1.1]/",
+            "http://[0:0:0:0:0:ffff:192.168.1.1]/",
+            "http://[::ffff:c0a8:101]/",          // c0a8:101 = 192.168.1.1
+            "http://[0::ffff:10.0.0.2]/",
+        )) {
+            assertTrue("应判为局域网（mapped）：$url", UrlUtils.isLocalNetworkAddress(url))
+        }
+    }
+
+    @Test
+    fun `mapped 公网地址与非 mapped 形式不误判`() {
+        for (url in listOf(
+            "http://[::ffff:8.8.8.8]/",           // mapped 但公网
+            "http://[ffff::192.168.1.1]/",        // ffff 在前：非 mapped 结构
+            "http://[::1:192.168.1.1]/",          // 前缀零组数不足（仅 1 个零 + 1 组，凑不满 5 零 + ffff）
+            "http://[::fffe:192.168.1.1]/",       // 第 6 组不是 ffff
+            "http://[::ffff:192.168.1.1.9]/",     // 内嵌段数不对（5 段）
+        )) {
+            assertFalse("不应判为局域网：$url", UrlUtils.isLocalNetworkAddress(url))
+        }
+        // 边界补钉：c0a8:808 = 192.168.8.8（属 192.168/16 → 真）；
+        // fe80 前缀与 mapped 混合——按 fe80 链路本地已判真，mapped 分支不参与
+        assertTrue(UrlUtils.isLocalNetworkAddress("http://[::ffff:c0a8:808]/"))
+        assertTrue(UrlUtils.isLocalNetworkAddress("http://[fe80::ffff:192.168.1.1]/"))
+    }
 }

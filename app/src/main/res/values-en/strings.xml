@@ -422,7 +422,7 @@
     <string name="perm_media_mic">microphone</string>
 
     <!-- Open source notice (MPL 2.0 / Apache 2.0 compliance) -->
-    <string name="open_source_text">This app uses the following open-source components:\n\n1. Mozilla GeckoView (v155)
+    <string name="open_source_text">This app uses the following open-source components:\n\n1. Mozilla GeckoView (v157)
 Copyright © Mozilla Foundation, license: Mozilla Public License 2.0
 Source: https://github.com/mozilla/gecko-dev
 MPL 2.0 full text: https://www.mozilla.org/en-US/MPL/2.0/

@@ -84,9 +84,12 @@ object CrashLogger {
     internal fun redactUrls(text: String): String =
         URL_IN_TEXT.replace(text) { m ->
             val scheme = m.groupValues[1]
-            // 去掉 userinfo（可能是凭据）与路径/查询/片段，只留 host[:port]
-            val hostPort = m.groupValues[2].substringAfterLast('@')
-                .takeWhile { it != '/' && it != '?' && it != '#' }
+            // 先截 authority（第一个 '/'|'?'|'#' 之前），**再**剥 userinfo：
+            // 顺序不能反 —— userinfo 的 `@` 只在 authority 里合法；若先对整段做
+            // substringAfterLast('@')，路径里含 `@` 的 URL（如 /docs/@user）会把
+            // host 与路径前缀整个误剥掉，收敛成 scheme://user/…，白丢排障信息。
+            val authority = m.groupValues[2].takeWhile { it != '/' && it != '?' && it != '#' }
+            val hostPort = authority.substringAfterLast('@')
             "$scheme://$hostPort/…"
         }
 
