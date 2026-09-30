@@ -500,6 +500,23 @@ def main():
             say("    有则说明 APK 落后于 HEAD，请重新构建并签名后再发布。")
             say("")
 
+        # ⑦ 依赖完整性（供应链加固，2026-09-30 新增）
+        # 为什么排在 ⑥ 之后：⑥ 只是「签名后是否又改过产物」的**提示**，不是检查项，
+        # 保持 ①–⑤ 的编号连续更清楚。
+        # 语义：**不一致就拦**（构件与公布散列不符 = 供应链层面的红灯）；
+        # 而"缓存里找不到 / 仓库未提供散列"只算"无法校验"，不拦发布（本机 CI 上都可能发生）。
+        dep = subprocess.run(
+            [sys.executable, os.path.join(root, "tools", "verify_deps.py")],
+            capture_output=True, text=True, cwd=root,
+        )
+        if dep.returncode != 0:
+            detail = "\n      ".join(dep.stdout.strip().splitlines()[-6:])
+            raise Fail("依赖完整性与公布散列不一致（构件可能在下载后被改动），发布前必须查清：\n      %s" % detail)
+        dep_summary = next(
+            (l.strip() for l in dep.stdout.splitlines() if l.startswith("结果：")), "已核对"
+        )
+        say("  ✅ ⑦ 依赖完整性：%s" % dep_summary)
+
         print("✅ 校验通过，可以发布。校验和（可直接贴进发布说明）：")
         print()
         for name, digest, size, on in checksums:
