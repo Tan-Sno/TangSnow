@@ -175,17 +175,28 @@ def find_java(sdk=None):
 
 
 def find_sdk(root):
-    """从 local.properties 读 sdk.dir（Android SDK 的位置）。"""
+    """定位 Android SDK：先读 local.properties 的 sdk.dir，再退到 ANDROID_HOME / ANDROID_SDK_ROOT。
+
+    ⚠️ 顺序不能反：开发机上 ANDROID_HOME 可能指向另一份 SDK，而 local.properties 才是本工程
+    实际构建所用的那一份（该文件已 gitignore、不进仓库）。CI 上没有它，故必须有环境变量兜底 ——
+    否则本脚本一上 runner 就必 Fail（这正是「加 CI」这条待办的前置之一）。
+    """
     lp = os.path.join(root, "local.properties")
-    if not os.path.isfile(lp):
-        raise Fail("缺少 local.properties，无法定位 Android SDK。")
-    with open(lp, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if line.startswith("sdk.dir="):
-                # 值形如 D\:\\some\\sdk（Windows 上盘符冒号与反斜杠都会被转义），需反转义
-                return line.split("=", 1)[1].replace("\\\\", "\\").replace("\\:", ":")
-    raise Fail("local.properties 中没有 sdk.dir。")
+    if os.path.isfile(lp):
+        with open(lp, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("sdk.dir="):
+                    # 值形如 D\:\\some\\sdk（Windows 上盘符冒号与反斜杠都会被转义），需反转义
+                    return line.split("=", 1)[1].replace("\\\\", "\\").replace("\\:", ":")
+    for env_var in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
+        value = os.environ.get(env_var)
+        if value and os.path.isdir(value):
+            return value
+    raise Fail(
+        "无法定位 Android SDK：既没有 local.properties 的 sdk.dir，"
+        "也没有可用的 ANDROID_HOME / ANDROID_SDK_ROOT。"
+    )
 
 
 def find_build_tool(sdk, name):

@@ -1,0 +1,40 @@
+# 最小 CI：只跑**不需要任何签名凭据**的两项门禁 —— 单元测试 + lint。
+#
+# 刻意**不跑** assembleRelease：release 打包要求 keystore 凭据，缺凭据会被
+# app/build.gradle.kts 里的两道闸门硬失败，而按设计仓库里不放凭据。
+# 也不跑 assembleDebug：它要多下载/解压 GeckoView 的原生库（APK 约 200MB），
+# 换来的信息（"能打出包"）已被编译 + lint + 单测覆盖大半。
+#
+# 前置（2026-09-30 只读核实过，别再凭猜）：
+#  · Google 的 repository2-3.xml 里 `platforms;android-37.2` 属 **channel-0（stable）**、
+#    未标 obsolete、`<api-level>37.2</api-level>`，许可证为 `android-sdk-license`
+#    （GitHub-hosted runner 预接受）⇒ `compileSdk = 37.2` 在 runner 上可获得；
+#  · `gradlew` 在仓库里带可执行位（100755），wrapper 指向 gradle-9.6.0-bin.zip（公开可下）。
+# 本机基线：JDK 25(JBR) 下 `:app:testDebugUnitTest :app:lintDebug` 全绿。
+# CI 取 JDK 21（LTS）；本项目未声明 toolchain，若将来 runner 因 JDK 版本报错，把 java-version 提到 25 即可。
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  # 允许手动触发：新 workflow 上线前先在 Actions 页手动跑一次，别等 push 才发现问题
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # lint 的 checkAllWarnings = true 是项目的硬门禁：全警告口径下必须 `No issues found`
+      - name: Unit tests + lint
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug --console=plain
