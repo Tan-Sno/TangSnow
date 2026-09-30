@@ -53,6 +53,13 @@ the privacy impact.
 ./gradlew :app:testDebugUnitTest  # unit tests
 ```
 
+Building a release (`assembleRelease`) requires `keystore.properties` at the repo root
+(not distributed with the repository); when it is missing, release builds **fail fast** —
+this prevents silently producing a debug-signed artifact that only looks distributable.
+For local verification of the packaging pipeline only, pass
+`-Ptangsnow.allowDebugSignedRelease` explicitly to skip the gate — the artifact still
+uses the debug certificate and must not be distributed or published.
+
 Make sure all three pass before submitting, and that lint stays at **zero issues**.
 Note that `checkAllWarnings` is enabled (`app/build.gradle.kts`), so **warnings are reported too** —
 please do not silence a whole category of checks to get rid of one warning; if a suppression is
