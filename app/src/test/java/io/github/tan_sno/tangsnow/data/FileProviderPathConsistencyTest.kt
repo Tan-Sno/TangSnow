@@ -31,9 +31,14 @@ class FileProviderPathConsistencyTest {
     @Test
     fun `代码里的外部私有目录落点都被 file_paths_xml 覆盖`() {
         val xml = File(repoRoot(), "app/src/main/res/xml/file_paths.xml").readText()
-        val allowed = Regex("""path="([^"]*)"""")
+        // ⚠️ 只认**外部**类标签，且要容忍属性顺序与换行 —— xml 里实际写的是
+        //    `<external-files-path\n  name="ext_downloads"\n  path="Download/" />`，
+        //    所以不能假设 `path` 紧跟标签名（第一版这么写，被下方"没解析出任何 path"的自检当场抓出）。
+        // 原正则抠所有 `path="…"`：将来加一条 `<cache-path path="Download"/>` 会被误判成
+        //    "external-files 已覆盖"（latent fail-open，2026-10-01 外部审查）。
+        val allowed = Regex("""<(external-files-path|external-path|external-cache-path)\b[^>]*?\bpath="([^"]*)"""")
             .findAll(xml)
-            .map { it.groupValues[1].trim().trimEnd('/') }
+            .map { it.groupValues[2].trim().trimEnd('/') }
             .toSet()
         assertTrue("file_paths.xml 里没解析出任何 path，正则可能失效了", allowed.isNotEmpty())
 

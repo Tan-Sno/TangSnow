@@ -575,6 +575,14 @@ object DownloadRepo {
             // 两段分开处置（本函数的核心约定，见上方 KDoc）：
             //  · 写流阶段失败 ⇒ 内容不完整 ⇒ 清占位（**唯一**会删内容的路径）
             //  · 转正阶段失败 ⇒ 内容已完整落盘、只是对外不可见 ⇒ **保留**，如实报失败
+            // ⚠️ 取消要在**开始写之前**看出来（2026-10-01 外部审查）：`write` 是阻塞式复制、
+            // 中途没有挂起点，取消只能在边界被观察到 —— 不在这里判，用户取消之后文件照样落盘、
+            // 记录照样登记，与"取消"语义相悖。用 FQ 写法避免为一个判据引入导入。
+            // 已知残留：**复制进行中**的取消仍不可中断（`write` 是非 suspend 阻塞循环，
+            // 要打断得把 ensureActive 织进复制循环本身）—— 另行评估，不在本次范围。
+            if (kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.isActive == false) {
+                throw kotlinx.coroutines.CancellationException("download cancelled before write")
+            }
             try {
                 // ⚠️ 判空不能丢：openOutputStream 返回 null 时**不抛异常**。只看异常会把
                 //    「打不开流」当成写入成功，于是 0 字节的占位行被清零转正成可见文件，
@@ -1014,7 +1022,18 @@ object DownloadRepo {
                     cursor.use { if (it.moveToFirst()) Presence.ALIVE else Presence.GONE }
                 }
             }
-            "file" -> if (java.io.File(uri.path.orEmpty()).exists()) Presence.ALIVE else Presence.GONE
+            // ⚠️ 与上面的 content 分支同口径：`exists()` 返回 false 也可能是**探测失败**
+            //（权限 / IO 抖动），一律当 GONE 会把还在的文件判成"已消失"、进而清掉记录。
+            // 只有"父目录可读且文件确实不在其中"才算真没了，其余归 UNKNOWN（交给上层按兜底处理）。
+            "file" -> {
+                val f = java.io.File(uri.path.orEmpty())
+                val parent = f.parentFile
+                when {
+                    f.exists() -> Presence.ALIVE
+                    parent != null && parent.canRead() && parent.list()?.contains(f.name) == false -> Presence.GONE
+                    else -> Presence.UNKNOWN
+                }
+            }
             else -> Presence.GONE
         }
 

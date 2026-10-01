@@ -75,7 +75,10 @@ fun showSelectionPopup(
     // 窗口令牌，拿不到就是 BadTokenException。判 `isAttachedToWindow` 是这里最省的等价判据
     //（锚点在、令牌就在），不必把 Activity 传进来。未展示也必须走一次收口回调（见上）。
     if (!anchor.isAttachedToWindow) {
-        fireDismissOnce()
+        // 未展示也必须走一次收口回调（合约见上），但**必须延后**（2026-10-01 外部审查）：
+        // 同步回调会跑在调用方"把返回值存进字段"**之前**，于是那个字段最终指向一个从未展示、
+        // 且已收口的实例（倒挂）。post 一拍让调用方先完成赋值，再由回调把它清掉。
+        anchor.post { fireDismissOnce() }
         return pw
     }
     if (bottomMarginPx != null) {
