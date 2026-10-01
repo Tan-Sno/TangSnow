@@ -18,6 +18,18 @@ val keystoreProps = Properties().apply {
     // 会把含中文的路径（如 `D:/密钥库/xxx.jks`）变成乱码并报「keystore 不存在」。
     if (keystorePropsFile.exists()) keystorePropsFile.reader(Charsets.UTF_8).use { load(it) }
 }
+// 「Android Studio 签名向导驱动本次构建」的判据 —— **三处闸门单一来源**。
+// 2026-10-01 提升到顶层：第三道闸门在这个 if/else 之外，原先取不到块内的局部值（编译不过）。
+// 向导不读 keystore.properties，而是为这一次构建注入 android.injected.signing.*，由 AGP 覆盖项目里
+// 声明的 signingConfig ⇒ 此时凭据由向导提供，必须放行。
+// ⚠️ 属性名是**点号**分隔（`store.password` 而非 `storePassword`）—— 取自 AGP 内部常量，已在 gradle 缓存里反查确认。
+val injectedSigning = gradle.startParameter.projectProperties
+val wizardDriven = listOf(
+    "android.injected.signing.store.password",
+    "android.injected.signing.key.alias",
+    "android.injected.signing.key.password",
+).all { !injectedSigning[it].isNullOrBlank() }
+
 if (!keystorePropsFile.exists()) {
     logger.warn(
         "未找到 keystore.properties：release 将回退用 debug 证书签名，" +
@@ -56,16 +68,8 @@ if (!keystorePropsFile.exists()) {
     //    即使项目自带一份签名配置也能被覆盖）。此时凭据由向导提供，
     //    keystore.properties 里是否还留着占位符与本次构建**无关**，必须放行。
     //
-    // ⚠️ 属性名是**点号**分隔（`store.password` 而非 `storePassword`）——
-    // 取自 AGP 内部常量，已在 gradle 缓存里反查确认：
-    //   android.injected.signing.store.file / store.password /
-    //   key.alias / key.password（另有 store.type、v1、v2）
-    val injectedSigning = gradle.startParameter.projectProperties
-    val wizardDriven = listOf(
-        "android.injected.signing.store.password",
-        "android.injected.signing.key.alias",
-        "android.injected.signing.key.password",
-    ).all { !injectedSigning[it].isNullOrBlank() }
+    // 向导驱动判据 = 文件顶层的 `wizardDriven`（单一来源，三处闸门共用）。
+    // 另有 `android.injected.signing.store.file` / `store.type` / `v1` / `v2` 等键可做更细的判断。
 
     // 闸门一（配置期，任务名启发式）：对显式点名 release 打包的任务最快失败。
     // ⚠️ 已知盲区：`./gradlew build` / `./gradlew assemble` 这类汇总任务名不含
@@ -422,10 +426,13 @@ androidComponents {
 // 的两面待遇不一致 —— 现在缺失时也默认硬失败，明确传
 // -Ptangsnow.allowDebugSignedRelease 才放行（贡献者本地自查用；产物仍不可分发）。
 // doFirst 而非配置期：贡献者跑 assembleDebug / 测试时完全不受影响。
+// ⚠️ 与其他两道闸门同口径：**向导驱动时跳过**（`-Pandroid.injected.signing.*` 就是真凭据，
+// 而向导不产生 keystore.properties）—— 缺这一条会把"全新 clone + 向导"这条合法路径拦下
+// （2026-10-01 修正）。本机不受影响（该文件存在），此改动只影响"文件缺失 + 向导"这一种组合。
 val allowDebugSignedRelease =
     providers.gradleProperty("tangsnow.allowDebugSignedRelease").isPresent
 tasks.matching { it.name in setOf("assembleRelease", "bundleRelease") }.configureEach {
-    if (!keystorePropsFile.exists() && !allowDebugSignedRelease) {
+    if (!keystorePropsFile.exists() && !allowDebugSignedRelease && !wizardDriven) {
         doFirst {
             throw GradleException(
                 "未找到 keystore.properties：release 产物将回退 debug 证书签名，不可分发。"
