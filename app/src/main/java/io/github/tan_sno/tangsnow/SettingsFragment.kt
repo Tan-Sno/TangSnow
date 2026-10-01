@@ -17,6 +17,7 @@ import androidx.preference.SwitchPreferenceCompat
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tan_sno.tangsnow.data.ClearDataUseCase
 import io.github.tan_sno.tangsnow.data.PreferenceStore
+import io.github.tan_sno.tangsnow.data.repo.ApplicationScope
 import io.github.tan_sno.tangsnow.data.Theme
 import io.github.tan_sno.tangsnow.data.ThemeController
 import io.github.tan_sno.tangsnow.update.UpdateChecker
@@ -130,6 +131,8 @@ class SettingsFragment : PreferenceFragmentCompat() {
         refreshDefaultBrowserSummary()
         // 设置从别的页面返回时，按当前模式刷新自定义开关的可点态
         refreshTrackingCustomEnabled()
+        // 清除浏览数据可能在界面重建期间完成 ⇒ 取走进程级结果补提示（CR-004：不因重建而丢掉反馈）
+        consumePendingClearOutcome()
     }
 
     private fun refreshDefaultBrowserSummary() {
@@ -427,18 +430,35 @@ class SettingsFragment : PreferenceFragmentCompat() {
     }
 
     private fun clearBrowsingData(options: ClearDataUseCase.Options) {
-        val ctx = requireContext()
-        lifecycleScope.launch {
+        // ⚠️ 跑在**进程级作用域**，不是 `lifecycleScope`（2026-10-01 CR-004）：清除是"必须完成"的操作，
+        // 而本页的 `configChanges` 不含 uiMode/locale ⇒ 切主题/语言会重建本页、`lifecycleScope` 立刻取消它；
+        // 又因为 `ClearDataUseCase` **刻意原样传播取消**（它自己的 KDoc 写明了理由），结果就是
+        // 「内核已清、本地未清、零提示」。换个作用域后重建不再打断它，结果也不会丢：
+        // 界面还在 ⇒ 当场提示；界面已经不在 ⇒ 留在进程级，由下次 `onResume` 取走补报。
+        // 用 **application context**（不是 requireContext）：这样协程不会持有任何 Activity。
+        val ctx = ApplicationScope.context
+        ApplicationScope.scope.launch {
             val result = ClearDataUseCase.clear(ctx, options)
-            if (!isAdded) return@launch
-            // 三种结果分开提示：本地有一项没清掉时绝不能报「已清除」
-            val msgRes = when {
-                result.allOk -> R.string.toast_data_cleared
-                result.kernelOk -> R.string.toast_data_partially_cleared
-                else -> R.string.toast_data_clear_failed
+            if (isAdded && view != null) {
+                ctx.toast(outcomeMessage(result))
+            } else {
+                ClearDataUseCase.rememberOutcome(result)
             }
-            ctx.toast(msgRes)
         }
+    }
+
+    /** 三种结果分开提示：本地有一项没清掉时绝不能报「已清除」 */
+    private fun outcomeMessage(result: ClearDataUseCase.Result): Int = when {
+        result.allOk -> R.string.toast_data_cleared
+        result.kernelOk -> R.string.toast_data_partially_cleared
+        else -> R.string.toast_data_clear_failed
+    }
+
+    /** 取走「清除完成时界面上没人」的结果并补提示（取即清 ⇒ 只提示一次） */
+    private fun consumePendingClearOutcome() {
+        val result = ClearDataUseCase.takeOutcome() ?: return
+        // 用 application context：此刻可能正是本页刚重建完，不依赖任何旧实例
+        ApplicationScope.context.toast(outcomeMessage(result))
     }
 
     // ------------------------------------------------------------- 检查更新

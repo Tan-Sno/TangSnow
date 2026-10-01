@@ -67,6 +67,27 @@ object ClearDataUseCase {
         return mask
     }
 
+    /**
+     * 清除完成后**尚未被界面取走**的结果（进程级；取即清）。
+     *
+     * 为什么需要它：清除跑在进程级作用域（见 `ApplicationScope.scope` 的说明，理由：不能因设置页
+     * 重建而被取消），因此它可能在**发起它的界面已经重建/消失之后**才完成 —— 那时若只在旧
+     * Fragment 里 toast，用户永远看不到结果，等于把"零提示"那半个缺陷从取消换成了丢失。
+     * 这里把结果留在进程级，由设置页下一次 `onResume` 取走并如实提示：**结果不因界面重建而丢**。
+     *
+     * ⚠️ 只保留最后一次（清除是幂等操作，旧结果没有提示价值）。
+     */
+    @Volatile
+    private var pendingOutcome: Result? = null
+
+    /** 存放待提示的结果（覆盖旧的） */
+    internal fun rememberOutcome(result: Result) {
+        pendingOutcome = result
+    }
+
+    /** 取走并清空待提示的结果（取即清 ⇒ 只提示一次） */
+    internal fun takeOutcome(): Result? = pendingOutcome.also { pendingOutcome = null }
+
     suspend fun clear(context: Context, options: Options): Result {
         var kernelOk = true
 
