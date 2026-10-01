@@ -16,13 +16,18 @@ import androidx.recyclerview.widget.RecyclerView
  * ⚠️ 只适用于**行内无图片**的列表。行内含异步加载图片的列表不要预热：
  * 预绑会触发用户根本看不到的图片加载，白费流量与内存。
  *
+ * ⚠️ [poolCapacityPerType] 必须 **≥ [warmPositions]**：`RecycledViewPool.putRecycledView`
+ * 在该类型的堆已满时**静默丢弃**（不抛异常、不返回失败），超出的预建行等于白建。
+ * 原先默认 14 行 / 每类上限 8，同一 viewType 连续 9 行起的预建全被丢掉。
+ * 故这里让容量**由行数派生**，两个默认值不可能再各自漂移。
+ *
  * 实现只用 `RecyclerView.Adapter` / `RecycledViewPool` 的公开 API。
  * 注意 `androidx.preference.PreferenceGroupAdapter` 是 `@RestrictTo`（库内私有），
  * 应用代码不可引用 —— `lintDebug` 的 `RestrictedApi` 会拦。
  */
 fun RecyclerView.warmUpFirstRows(
-    warmPositions: Int = 14,
-    poolCapacityPerType: Int = 8,
+    warmPositions: Int = 8,
+    poolCapacityPerType: Int = warmPositions,
 ) {
     val adapter = adapter ?: return
     val limit = minOf(adapter.itemCount, warmPositions)
