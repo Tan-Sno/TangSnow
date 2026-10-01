@@ -272,6 +272,13 @@ object UrlUtils {
      * 两处各维护一份必然漂移 —— 漂成「一处放行」就是安全缺口（`window.open('file://…')`
      * 直达应用私有文件），漂成「一处多挡」就是功能回归（`window.open('data:text/html,…')`
      * 明明合规却打不开）。判据只有一处，改也只改一处。
+     *
+     * ⚠️ 别把它与「网络地址白名单」混用：本函数是**内核导航语义**（含 `about`/`data`/`blob`，
+     * 即"内核会自行渲染它"）；而「能否作为**网络地址**交付/加载」在几处是**更窄**的
+     * `scheme == "http" || scheme == "https"`（`BookmarkHtml.isHttpUrl` 的导入过滤、
+     * `MainActivity` 从 intent 提取 URL、`openExternalUrl` 的兜底判据）。
+     * 两者含义不同、**不能互相替换** —— 换过去会让 `data:` 之类被当成可交付的网络地址。
+     * （2026-10-01 巡检时我一度以为这是"口径分散"，读了本函数实现才发现是**两种不同判据**。）
      */
     internal fun isWebNavigationScheme(scheme: String?): Boolean =
         scheme == "http" || scheme == "https" || scheme == "about" ||
