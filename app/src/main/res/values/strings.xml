@@ -191,6 +191,7 @@
     <string name="extension_version">版本 %1$s</string>
     <string name="extension_uninstall_confirm">卸载扩展</string>
     <string name="extension_uninstall_message">确定卸载「%1$s」吗？其保存的数据将一并删除。</string>
+    <string name="extension_uninstall_failed">卸载扩展失败，请重试</string>
     <string name="extension_list_empty">暂无已安装扩展\n去「可安装」挑一个试试</string>
     <string name="extension_custom_install">自定义安装</string>
     <string name="extension_custom_url">从官方链接安装</string>
@@ -249,6 +250,7 @@
     <string name="extension_creator">开发者：%1$s</string>
     <string name="extension_no_settings_hint">%1$s 未提供内置管理页，可前往官方页查看详情</string>
     <string name="extension_manage_enable_failed">启用扩展失败，请重试</string>
+    <string name="extension_manage_disable_failed">停用扩展失败，请重试</string>
     <string name="extension_list_load_failed">读取扩展列表失败，当前显示的可能不是最新状态，请稍后重试</string>
     <!-- 安装链路的即时反馈：任何路径都不允许"点了没反应" -->
     <string name="extension_install_started">已开始安装，请稍候…</string>

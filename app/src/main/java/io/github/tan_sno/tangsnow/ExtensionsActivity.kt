@@ -791,18 +791,21 @@ class ExtensionsActivity : AppCompatActivity() {
     }
 
     private fun toggleExtension(row: InstalledRow, enable: Boolean) {
-        val extController = controller() ?: return
+        val extController = controller() ?: run { toast(R.string.extension_need_runtime); return }
         val source = WebExtensionController.EnableSource.USER
         val result = if (enable) extController.enable(row.ext, source)
         else extController.disable(row.ext, source)
+        val failMsg =
+            if (enable) R.string.extension_manage_enable_failed
+            else R.string.extension_manage_disable_failed
         result.accept(
             { _ -> runOnUiThread { refreshInstalled() } },
-            { _ -> runOnUiThread { refreshInstalled() } }
+            { _ -> runOnUiThread { refreshInstalled(); toast(failMsg) } }
         )
     }
 
     private fun uninstall(row: InstalledRow) {
-        val extController = controller() ?: return
+        val extController = controller() ?: run { toast(R.string.extension_need_runtime); return }
         val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.extension_uninstall_confirm)
             .setMessage(getString(R.string.extension_uninstall_message, row.name))
@@ -816,7 +819,7 @@ class ExtensionsActivity : AppCompatActivity() {
                             refreshInstalled()
                         }
                     },
-                    { _ -> runOnUiThread { refreshInstalled() } }
+                    { _ -> runOnUiThread { refreshInstalled(); toast(R.string.extension_uninstall_failed) } }
                 )
             }
             .create()
