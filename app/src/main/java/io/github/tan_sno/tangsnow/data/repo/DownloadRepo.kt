@@ -738,7 +738,22 @@ object DownloadRepo {
             // input.use 保证内核给的响应体在任何早退路径上都会被关闭
             // （insert 失败时压根走不到 write 里，那里没有机会关它）。
             input.use { body ->
-                val saved = saveAndRegister(context, safeName, mime) { out -> body.copyTo(out) }
+                // ⚠️ 取消必须在**复制途中**也能被观察到（2026-10-01 外部审查）：`InputStream.copyTo`
+                // 是阻塞循环、中途不检查取消 ⇒ 用户点「取消」之后仍要把整段拷完才停，与取消语义相悖。
+                // 这里按块检查协程 Job 的活性：取消时抛 CE，交给 [writeToDownloads] 的 CE 分支清掉占位
+                // （不留半截文件）。缓冲区 64 KB：与别处复制同量级，够大以摊薄系统调用。
+                val copyJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
+                val saved = saveAndRegister(context, safeName, mime) { out ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        if (copyJob?.isActive == false) {
+                            throw kotlinx.coroutines.CancellationException("download cancelled during copy")
+                        }
+                        val n = body.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                    }
+                }
                 if (!saved) return@withContext SaveOutcome.FAILED
                 SaveOutcome.SAVED
             }
