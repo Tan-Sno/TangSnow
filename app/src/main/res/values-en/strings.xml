@@ -189,6 +189,7 @@
     <string name="extension_version">Version %1$s</string>
     <string name="extension_uninstall_confirm">Remove extension</string>
     <string name="extension_uninstall_message">Remove “%1$s”? Its saved data will be deleted.</string>
+    <string name="extension_uninstall_failed">Could not remove the extension, please retry</string>
     <string name="extension_list_empty">No installed extensions yet\nPick one in “Installable”</string>
     <string name="extension_custom_install">Custom install</string>
     <string name="extension_custom_url">Install from an official link</string>
@@ -247,6 +248,7 @@
     <string name="extension_creator">Developer: %1$s</string>
     <string name="extension_no_settings_hint">%1$s provides no built-in management page. See its official page for details.</string>
     <string name="extension_manage_enable_failed">Could not enable the extension, please retry</string>
+    <string name="extension_manage_disable_failed">Could not disable the extension, please retry</string>
     <string name="extension_list_load_failed">Couldn\'t read the extension list — what you see may be out of date. Please try again.</string>
     <!-- Install-chain immediate feedback: no path may end in a silent no-op -->
     <string name="extension_install_started">Install started, please wait…</string>
