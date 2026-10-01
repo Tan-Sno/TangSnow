@@ -60,6 +60,7 @@ import io.github.tan_sno.tangsnow.util.HomeImageFile
 import io.github.tan_sno.tangsnow.util.SecureScreen
 import io.github.tan_sno.tangsnow.util.UrlUtils
 import io.github.tan_sno.tangsnow.util.dp
+import io.github.tan_sno.tangsnow.data.repo.ApplicationScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -2721,20 +2722,26 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      *    onPause → saveState 会跳过，刚清掉的快照不会被写回。
      * 退出动作不受清除结果影响：清除只负责如实报告，退出必然执行。
      *
-     * 清除跑在本 Activity 的 lifecycleScope 是刻意的：内核清除必须在 runtime 存活
-     * 期间、先于 finishAffinity 完成；进程被系统杀掉的中途态换任何作用域都救不了，
-     * 不为此引入应用级作用域。触发面与设置文案一致（仅两个应用内退出路径，
-     * 文案已如实枚举）——系统最近任务划掉等外部退出不在此列。
+     * ## 为什么跑在**进程级作用域**（2026-10-01，原施工待办 #27）
+     *
+     * 此前跑在 `lifecycleScope`，理由是"内核清除必须在 runtime 存活期间、先于 `finishAffinity()`
+     * 完成"。那个约束仍然成立，但它漏了另一面：`lifecycleScope` **也会被配置变更取消**
+     * （清单的 configChanges 不含 uiMode/locale）⇒ 清除被打断，且 `shutdown()`/`finishAffinity()`
+     * 都不再执行 ⇒ **「退出被静默放弃」**（比"清了一半"更糟：应用既没退出、也没清完）。
+     *
+     * 现按 Mozilla 处理同一类问题的口径改（Fenix issue #5279「退出时删数据导致 ANR」的修法是
+     * **不要在退出路径里阻塞/等待**；Fennec 的 Shutdown 文档同样强调"清理与 UI 关闭之间存在竞态"）：
+     *  ① 清除 + 关停放进**进程级作用域**（不再被重建取消）；
+     *  ② `finishAffinity()` **立刻**执行 —— 用户马上看到"已退出"，不产生 ANR；
+     *  ③ 顺序仍是 **清 → shutdown()**（先关内核会把清理踩断）；
+     *  ④ 残留风险如实记：进程若在清理完成前被系统杀掉，清理可能只完成一部分 —— 这与 Mozilla 的
+     *    结论一致（"划掉最近任务"那条路他们也没有可靠解法）。本应用只有"应用内主动退出"走这里
+     *    （设置文案已如实枚举）；系统最近任务划掉等外部退出不在此列。
      */
     private fun performExit() {
         if (exiting) return
         exiting = true
         if (!prefs.exitClearBrowsingData) {
-            // 先落盘当前会话再关停，顺序不可颠倒：shutdown 清空 tabs 后，紧随
-            // finishAffinity 而来的 onPause → saveState 会走「无普通标签 → 清空
-            // 快照」分支，把刚存的快照删掉（表现：开着「恢复上次的标签页」，
-            // 一次正常退出就丢掉全部标签）。markPurged 压制 onPause 那一笔，
-            // 冷启动后的新浏览活动会自然复位该标志。
             sessionManager.saveState()
             SessionStore.markPurged()
             detachActiveSession()
@@ -2742,10 +2749,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             finishAffinity()
             return
         }
-        lifecycleScope.launch {
+        val ctx = applicationContext
+        ApplicationScope.scope.launch {
             val result: ClearDataUseCase.Result? = try {
                 ClearDataUseCase.clear(
-                    applicationContext,
+                    ctx,
                     ClearDataUseCase.Options(
                         cookiesAndSiteData = true,
                         cache = true,
@@ -2758,17 +2766,22 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             } catch (_: Throwable) {
                 null
             }
-            toast(
-                when {
-                    result == null || !result.kernelOk -> R.string.toast_data_clear_failed
-                    result.localFailedCount > 0 -> R.string.toast_data_partially_cleared
-                    else -> R.string.toast_data_cleared
-                }
-            )
-            detachActiveSession()
-            sessionManager.shutdown()
-            finishAffinity()
+            // 提示与关停都要回主线程：Toast 需要主线程 Looper，内核关停也按主线程口径设计。
+            // 用 application context：此时界面可能已经 finish。
+            withContext(Dispatchers.Main) {
+                ctx.toast(
+                    when {
+                        result == null || !result.kernelOk -> R.string.toast_data_clear_failed
+                        result.localFailedCount > 0 -> R.string.toast_data_partially_cleared
+                        else -> R.string.toast_data_cleared
+                    }
+                )
+                detachActiveSession()
+                sessionManager.shutdown()
+            }
         }
+        // 立刻退出界面：不等待清理（Fenix 的 ANR 修法就是这个方向）
+        finishAffinity()
     }
 
     // ------------------------------------------------------------- 工具
