@@ -179,15 +179,16 @@ object SessionStore {
      * 「清除浏览数据 → 标签页会话快照」之后，一旦 Activity 重建就可能把
      * **已清除的标签**又恢复出来 —— 那与隐私承诺直接冲突。
      *
-     * 预读尚未完成时**有界等待**它，而不是在主线程重做一次「读盘 + JSON 解析」——
-     * 本函数的唯一调用方是 `MainActivity.onCreate`（主线程），而 [preload] 早在
-     * `TangSnowApplication` / `ConsentActivity` 就已发起，正常情况下到这一刻早已完成，
-     * 等待通常只有零点几毫秒。真正会撞上「未就绪」的是**进程冷启动后由外部 intent
-     * 直接调起主界面**（本应用是默认浏览器，点链接即是此路径）—— 那时等这几十毫秒
-     * 仍远快于主线程自己读盘解析。等到超时（极慢盘 / 串行队列被在途写任务占住）就放弃
-     * 本次恢复、退回同步 [read]，与改造前行为一致，不会更差，也绝不无限等待。
+     * 预读尚未完成时**有界等待**它（等的是后台任务，不是自己读盘）；等到超时（极慢盘 /
+     * 串行队列被在途写占住）就返回 null —— **绝不在主线程读盘**。
+     *
+     * ⚠️ 2026-10-01（CR-012）去掉了原来的兜底 `read(context)`：那时是"超时就自己同步读"，
+     * 于是主线程上出现**无上界**的读盘 + JSON 解析 —— Mozilla 官方的《Fenix Best Practices》
+     * 把"启动期主线程 IO"列为禁止项（Fenix 还用 `StartupExcessiveResourceUseTest` 拦 `runBlocking`）。
+     * 现在超时即返回 null，由调用方走 **Fenix 式异步恢复**（先出首帧，快照在 IO 线程到位后整表恢复）
+     * —— 既不卡首帧，也不会像"直接放弃"那样把会话丢掉。
      */
-    fun consume(context: Context): Snapshot? {
+    fun consume(): Snapshot? {
         if (!cachedReady) {
             runCatching {
                 preloadTask?.get(CONSUME_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -199,8 +200,18 @@ object SessionStore {
             cachedReady = false
             return snapshot
         }
-        return read(context)
+        return null
     }
+
+    /**
+     * 冷启动**异步恢复**用的读盘入口（IO 线程）。
+     *
+     * 为什么需要它：`consume()` 的超时兜底不能再在主线程读盘（见其注释），于是"预读没赶上"
+     * 那一种情况改由调用方在后台读。这条路径只在极慢盘 / 队列被占时走到；一次额外读盘
+     * 换来"主线程零 IO"，值得。
+     */
+    suspend fun readAsync(context: Context): Snapshot? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { read(context) }
 
     private fun invalidatePreload() {
         cached = null
