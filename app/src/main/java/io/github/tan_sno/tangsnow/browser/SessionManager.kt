@@ -260,14 +260,25 @@ class BrowserSessionManager private constructor(
         /**
          * 覆盖文件的落盘名（filesDir 下）。内容见 [GECKO_EGRESS_OVERRIDE_PREFS]。
          */
-        internal const val GECKO_EGRESS_OVERRIDE_FILE = "gecko-egress-overrides.js"
+        internal const val GECKO_EGRESS_OVERRIDE_FILE = "gecko-egress-overrides.yaml"
+
+        /** 历史遗留的错误格式文件名（JS 语法、内核必然忽略）—— 写入新文件时顺手清掉 */
+        private const val LEGACY_EGRESS_OVERRIDE_FILE = "gecko-egress-overrides.js"
 
         /**
-         * 内核默认出网点的**最小覆盖**：仅关「隐私政策 §4 未披露」的自动出网。
+         * 覆盖文件内容。**格式 = geckoview 的 `geckoview-config.yaml`（YAML）**。
+         *
+         * 依据（官方文档 firefox-source-docs.mozilla.org → mobile/android/geckoview/consumer/automation.html）：
+         * 「配置文件的格式是 YAML，可识别的键有 `env`（映射）、`args`（列表）、
+         *  **`prefs`（从 Gecko 首选项名到 boolean / string / integer 的映射）**」；
+         * 且「**找到文件但无法解析时记一条错误并完全忽略它**」—— 所以格式写错不会报错到应用层，只会静默失效。
+         *
+         * ⚠️ 只允许 **false / 空串**（收窄方向）：这个文件的职责是「关」，不是「配」；
+         * 要开新能力请走公开 API，别把它当后门。文件落在 `filesDir`（应用私有，第三方写不进来）。
+         * 配套哨兵 `GeckoEgressOverrideConsistencyTest` 会解析本常量并逐条核对（含"不许出现 JS 语法"）。
          *
          * ## 取证（geckoview 157，`assets/omni.ja` 的 `arm64-v8a/greprefs.js`
          *    与 `defaults/pref/arm64-v8a/geckoview-prefs.js` 逐条核对）
-         *
          * 政策 §4 的封闭式枚举只覆盖了 addons.mozilla.org（含其子域 versioncheck）、
          * firefox.settings.services.mozilla.com（跟踪保护名单）、api.github.com（检查更新）。
          * 默认值里还有三类**会自动发起**且未披露的出网，逐条关掉：
@@ -276,26 +287,32 @@ class BrowserSessionManager private constructor(
          *     （`captivedetect.canonicalURL` 同为一个明文 generate_204 探测）——
          *     旧名 detectportal.firefox.com 在 157 的全部制品里已不存在，勿再引用；
          *  2. `browser.region.network.url` 指向 location.services.mozilla.com 的区域探测；
-         *  3. `extensions.systemAddon.update.url` / `media.gmp-manager.url` 指向
-         *     aus5.mozilla.org（本应用不内置任何系统扩展与 GMP，这两条检查没有意义）。
+         *  3. `extensions.systemAddon.update.url` / `media.gmp-manager.url` 指向 aus5.mozilla.org
+         *     （本应用不内置任何系统扩展与 GMP，这两条检查没有意义）。
          *
          * **刻意不动**：`extensions.update(.background).url`（versioncheck.addons.mozilla.org）
          * —— 属政策已披露的 AMO 域；安全浏览（contentBlocking 已整体关闭）；崩溃上报
-         * （需嵌入方显式启用，本应用从未启用）。全部为「关掉即无流量」的收窄，无功能损失，
+         * （需嵌入方显式启用，本应用从未启用）。全部为「关掉即无流量」的收窄、无功能损失，
          * 故**不需要**为此动 `POLICY_VERSION`（枚举本来就该成立）。
          *
-         * 经 `GeckoRuntimeSettings.Builder.configFilePath` 注入（javap 实测 157 存在该 API；
-         * 此前「应用侧关不掉内核默认」的结论不成立）。真机抓包核验项见施工笔记 ⑥。
+         * 注入方式：`GeckoRuntimeSettings.Builder.configFilePath` —— **官方文档里"强制读取配置文件"的正规出口**
+         *（release 构建默认不读，仅 debuggable / 被设为 debug app 时才读默认路径）。
+         * ⚠️ 它要求 **YAML**，且「找到文件但无法解析时记一条错误并**整体忽略**」——
+         * 所以格式写错只会静默失效：既没关掉出网，也不报错到应用层（2026-10-01 实测修正，原先写成 JS 语法）。
+         * 真机抓包核验项见施工笔记 ⑥（"关掉了"这句话在真机抓到不存在该请求之前都只是**设计意图**）。
          */
-        internal const val GECKO_EGRESS_OVERRIDE_PREFS = """// TangSnow: kernel default egress override (forensics: geckoview 157 greprefs.js)
-pref("network.connectivity-service.enabled", false);
-pref("captivedetect.canonicalURL", "");
-pref("network.connectivity-service.IPv4.url", "");
-pref("network.connectivity-service.IPv6.url", "");
-pref("browser.region.network.url", "");
-pref("extensions.systemAddon.update.enabled", false);
-pref("extensions.systemAddon.update.url", "");
-pref("media.gmp-manager.url", "");"""
+        internal const val GECKO_EGRESS_OVERRIDE_PREFS = """# TangSnow: kernel default egress override
+# forensics: geckoview 157 greprefs.js / geckoview-prefs.js
+prefs:
+  network.connectivity-service.enabled: false
+  captivedetect.canonicalURL: ""
+  network.connectivity-service.IPv4.url: ""
+  network.connectivity-service.IPv6.url: ""
+  browser.region.network.url: ""
+  extensions.systemAddon.update.enabled: false
+  extensions.systemAddon.update.url: ""
+  media.gmp-manager.url: ""
+"""
 
         @Volatile
         private var instance: BrowserSessionManager? = null
@@ -726,7 +743,12 @@ pref("media.gmp-manager.url", "");"""
             // （同文件其它事件都有 isAlive 守卫，唯独这条链漏了）。后台标签的
             // window.open 按弹窗拦截处理：直接忽略（多数移动浏览器的同款行为）。
             if (!isAlive(tab) || tab !== active) return null
-            post { events?.onOpenInCurrentTab(uri) }
+            post {
+                // post 之后**必须复查**（2026-10-01 外部审查）：入口那次判定与本次执行之间隔着一次
+                // 消息循环，期间用户可能切标签、标签可能被关；原先注释宣称"已防住"属过度承诺。
+                if (!isAlive(tab) || tab !== active) return@post
+                events?.onOpenInCurrentTab(uri)
+            }
             return null
         }
 
@@ -1668,6 +1690,9 @@ pref("media.gmp-manager.url", "");"""
      */
     private fun writeEgressOverrideFile(): java.io.File? = runCatching {
         val f = java.io.File(appContext.filesDir, GECKO_EGRESS_OVERRIDE_FILE)
+        // 清掉历史遗留的 `.js` 覆盖文件：那个版本写的是 JS 语法，内核按 YAML 解析必然失败、
+        // 整体忽略 —— 留着它只会让人以为"关掉的是它"。
+        runCatching { java.io.File(appContext.filesDir, LEGACY_EGRESS_OVERRIDE_FILE).delete() }
         if (!f.isFile || f.readText() != GECKO_EGRESS_OVERRIDE_PREFS) {
             f.writeText(GECKO_EGRESS_OVERRIDE_PREFS)
         }
