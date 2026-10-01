@@ -37,7 +37,7 @@ class TestCountCommentTest {
         )
         assertEquals(
             "版本史注释里的测试数 ≠ app/src/test 下实际的 @Test 数 —— 加了/删了测试就同步那句注释",
-            found!!.groupValues[1].toInt(),
+            (found ?: error("计数注释缺失")).groupValues[1].toInt(),
             actual,
         )
     }
