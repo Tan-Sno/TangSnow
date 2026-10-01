@@ -669,12 +669,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
         val active = sessionManager.activeTab
         if (active == null) {
-            // 冷启动：若用户在设置中开启了「恢复上次的标签页」，尝试恢复上次会话
-            // （进程回收前保存的快照）；关闭或无快照则新建空白标签。
-            // 快照由 TangSnowApplication 在后台预读（见 SessionStore.preload），
-            // 这里取用几乎无 I/O 开销，不会把冷启动首帧卡在读盘 + JSON 解析上。
+            // 冷启动的两条路径（2026-10-01 CR-012 起）：
+            //  ① **快路径**（绝大多数）：应用启动时已在后台预读（`SessionStore.preload`），
+            //     到这一刻通常已就绪 ⇒ 与原先完全一致：首帧就是恢复好的标签。
+            //  ② **慢路径**（极慢盘 / 串行队列被在途写占住）：预读没赶上 ⇒ **不再在主线程读盘**
+            //     （Mozilla 官方把"启动期主线程 IO"列为禁止项），改为先建空白标签 + 首页让首帧
+            //     立刻可见，快照随后在 IO 线程到位后整表恢复 —— 这正是 Fenix 的实际行为。
             val snapshot = if (prefs.sessionRestoreEnabled) {
-                runCatching { SessionStore.consume(this) }.getOrNull()
+                runCatching { SessionStore.consume() }.getOrNull()
             } else null
             val restored = snapshot?.let { sessionManager.restoreSession(it) }
             if (restored != null) {
@@ -684,6 +686,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             } else {
                 createTab(url = null) // 首个空白标签
                 showHome()
+                // 预读没赶上且开关是开的：交给后台补恢复（顺序与活动标签与快路径一致）
+                if (prefs.sessionRestoreEnabled) restoreSnapshotAsync()
             }
         } else {
             // Activity 重建：恢复到原有活动标签
@@ -2782,6 +2786,40 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         }
         // 立刻退出界面：不等待清理（Fenix 的 ANR 修法就是这个方向）
         finishAffinity()
+    }
+
+    /**
+     * 冷启动的**异步**会话恢复（Fenix 口径，2026-10-01 CR-012）。
+     *
+     * 只在前一条路径（内存里的预读结果）没赶上时调用：先在 IO 线程读快照，回到主线程后
+     * **只在用户还没动过**的前提下整表恢复。判据取最保守的一种 —— 仍只有最初那个空白标签、
+     * 它仍是活动标签、且它没有导航过；否则用户自己开的页面会被顶掉（这是异步化必须付的代价）。
+     * 恢复顺序与活动标签由 [SessionManager.restoreSession] 保证，与快路径一致。
+     */
+    private fun restoreSnapshotAsync() {
+        ApplicationScope.scope.launch {
+            val snapshot = runCatching { SessionStore.readAsync(applicationContext) }.getOrNull()
+                ?: return@launch
+            withContext(Dispatchers.Main) {
+                if (isFinishing || isDestroyed) return@withContext
+                val only = sessionManager.tabs.singleOrNull() ?: return@withContext
+                if (sessionManager.activeTab !== only) return@withContext
+                val url = only.url
+                if (!url.isNullOrBlank() && !url.startsWith("about:")) return@withContext
+                // restoreSession 要求会话池为空 ⇒ 先关掉这个占位标签；恢复失败则补回空白标签，
+                // 绝不留下"零标签"的空窗。
+                sessionManager.closeTab(only)
+                val restored = sessionManager.restoreSession(snapshot)
+                if (restored == null) {
+                    createTab(url = null)
+                    showHome()
+                    return@withContext
+                }
+                binding.geckoView.setSession(restored.session)
+                syncViewWithTab(restored)
+                updateTabsBadge()
+            }
+        }
     }
 
     // ------------------------------------------------------------- 工具
