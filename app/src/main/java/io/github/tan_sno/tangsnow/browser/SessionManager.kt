@@ -815,6 +815,10 @@ prefs:
             session: GeckoSession,
             selection: GeckoSession.SelectionActionDelegate.Selection,
         ) {
+            // ⚠️ 归属/活性守卫（2026-10-01 CR-003）：选择菜单是"当前这个标签"的操作条，
+            // 后台或已关闭标签的迟到请求不该在别的页面上弹出来（同文件 onLoadRequest 有同款三维守卫）。
+            // 刻意**不调** selection.hide()：这里没有任何 UI 展示，hide 交给内核自己的生命周期。
+            if (!isAlive(tab) || tab !== active) return
             val text = selection.text.orEmpty()
             val actions = selection.availableActions
             post {
@@ -833,6 +837,8 @@ prefs:
         }
 
         override fun onHideAction(session: GeckoSession, reason: Int) {
+            // ⚠️ 这里**刻意不加**归属/活性守卫（与上面 onShow* 的不对称是刻意的）：
+            // 隐藏是「收口」方向，漏掉会导致菜单留在屏幕上；而展示是「开新面」方向，漏掉最多是不显示。
             post { selectionHandler?.onHide() }
         }
 
@@ -844,6 +850,14 @@ prefs:
             // 未注入处理器时一律拒绝（安全默认，等价 GeckoView 默认 deny）。
             val result = GeckoResult<AllowOrDeny>()
             post {
+                // ⚠️ 归属/活性守卫（2026-10-01 CR-003）：口径与同文件 onLoadRequest 的
+                // `if (!isAlive(tab) || tab !== active)` 一致。剪贴板读取受内核"用户手势"约束，
+                // 后台标签能否在无手势下触发本回调**静态无法判定** ⇒ 一律按安全默认**拒绝**，
+                // 而不是把无主请求交给界面层弹框（用户会看到一个不知道属于哪个页面的询问框）。
+                if (!isAlive(tab) || tab !== active) {
+                    settleResult(result, AllowOrDeny.DENY)
+                    return@post
+                }
                 val handler = selectionHandler
                 if (handler == null) {
                     settleResult(result, AllowOrDeny.DENY)
@@ -925,6 +939,12 @@ prefs:
             // **未作任何说明**（已查证），因此这里必须显式拦掉，否则一旦引擎回调，
             // 无痕访问就会被写进应用自有历史表，与隐私政策「无痕标签不落盘」直接冲突。
             if (tab.isPrivate) return GeckoResult.fromValue(false)
+
+            // ⚠️ 活性守卫（与同委托 `onHistoryStateChange` 的 `if (!isAlive(tab)) return` 同口径）：
+            // 标签关闭/重建后，旧会话**迟到**的 onVisited 会把已关闭页面的 URL 写进应用自有历史表
+            //（`:visited` 着色源），留下脏数据且无界面兜底。已不在册的标签一律不写、如实回 false。
+            // 2026-10-01 CR-002：原先只有 private 一维，同一委托里两个回调的活性口径不一致。
+            if (!isAlive(tab)) return GeckoResult.fromValue(false)
 
             // 内核告知某 URL 被访问：写进应用自有历史表（应用写、内核读），
             // 供 getVisited 反向喂给内核，使网页内“已访问链接”正确着色。
