@@ -471,7 +471,7 @@ class WebPrompts(
                     background = if (isCurrent) {
                         android.graphics.drawable.GradientDrawable().apply {
                             setColor(runCatching { Color.parseColor(hex) }.getOrDefault(Color.BLACK))
-                            setStroke(activity.dp(2), 0xFF1F1F1F.toInt())
+                            setStroke(activity.dp(2), activity.getColor(R.color.swatch_stroke))
                         }
                     } else {
                         ColorDrawable(runCatching { Color.parseColor(hex) }.getOrDefault(Color.BLACK))
