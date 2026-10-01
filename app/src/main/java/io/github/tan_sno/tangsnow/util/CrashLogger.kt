@@ -68,6 +68,22 @@ object CrashLogger {
      */
     internal fun lastHostOrNull(): String? = lastHost
 
+    /** 崩溃日志文件名的时间戳段（`yyyyMMdd-HHmmss`，毫秒 `-SSS` 可选）；解析见 [displayStamp] */
+    private val CRASH_NAME_STAMP = Regex("""^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d{3})?$""")
+
+    /**
+     * 崩溃日志**文件名** → 展示用时间戳：`crash-20261001-121500-123.txt` → `2026-10-01 12:15:00`。
+     *
+     * 写名（本对象 [write] 里的 `stamp`）与读名同源；含毫秒（2212d96 起）与不含毫秒两代都能解析，
+     * 毫秒在展示中丢弃。解析不了时返回「去掉前缀/后缀的原始串」（与旧回退一致）。
+     */
+    internal fun displayStamp(fileName: String): String {
+        val core = fileName.removePrefix("crash-").removeSuffix(".txt")
+        val m = CRASH_NAME_STAMP.find(core) ?: return core
+        return "${m.groupValues[1]}-${m.groupValues[2]}-${m.groupValues[3]} " +
+            "${m.groupValues[4]}:${m.groupValues[5]}:${m.groupValues[6]}"
+    }
+
     /**
      * 写盘前的 URL 脱敏：把文本里的 **`scheme://` 形式的 URL** 收敛成 `scheme://host[:port]/…`。
      *
