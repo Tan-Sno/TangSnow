@@ -170,14 +170,34 @@ class WebPrompts(
     private val requestAndroidPermissions: ActivityResultLauncher<Array<String>>,
 ) : PromptHandler, PermissionHandler {
 
-    /** 进行中的文件选择回调（同时只允许一个；新的请求会取消旧的） */
-    private var pendingFileDone: ((List<Uri>?) -> Unit)? = null
+    // ⚠️ 这三个挂起回调**存在进程级 companion 里，不是实例字段**（2026-10-01 外部审查 M1）：
+    // 配置变更（切主题 / 切语言）会重建 Activity、连带重建 WebPrompts，而系统对话框（文件选择、
+    // 权限申请）的结果随后派发给**新实例** —— 回调若随实例消失，用户点了"允许 / 已选文件"就无人应答，
+    // 页面收到的是"拒绝"且零提示。放进程级后新实例的入口能直接取到旧实例登记的回调并完成它
+    //（这些回调只做 GeckoResult 结算、不碰 Activity，故跨实例调用安全）。
+    // 真销毁才由 MainActivity 调 cancelPending() 收口（配置变更时不收）。
+    private var pendingFileDone: ((List<Uri>?) -> Unit)?
+        get() = Pending.file
+        set(value) { Pending.file = value }
 
     /** 进行中的 Android 权限申请回调 */
-    private var pendingPermDone: ((Boolean) -> Unit)? = null
+    private var pendingPermDone: ((Boolean) -> Unit)?
+        get() = Pending.perm
+        set(value) { Pending.perm = value }
 
     /** 进行中的文件夹上传回调（true=已选目录 / null=取消） */
-    private var pendingFolderDone: ((Boolean?) -> Unit)? = null
+    private var pendingFolderDone: ((Boolean?) -> Unit)?
+        get() = Pending.folder
+        set(value) { Pending.folder = value }
+
+    private companion object {
+        /** 跨实例存活的挂起回调（理由见上）。@Volatile：读写可能来自不同线程的回调入口。 */
+        object Pending {
+            @Volatile var file: ((List<Uri>?) -> Unit)? = null
+            @Volatile var perm: ((Boolean) -> Unit)? = null
+            @Volatile var folder: ((Boolean?) -> Unit)? = null
+        }
+    }
 
     /**
      * 上传整个文件夹：复用 [ActivityResultContracts.OpenDocumentTree] 让用户选目录。

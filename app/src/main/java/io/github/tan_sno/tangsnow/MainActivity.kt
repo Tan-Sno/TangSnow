@@ -819,7 +819,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 sessionManager.permissionHandler = null
             }
         }
-        if (::webPrompts.isInitialized) webPrompts.cancelPending()
+        // ⚠️ 配置变更（切主题 / 切语言等）会重建 Activity，此时**不能**把挂起的弹窗应答成"拒绝"
+        // （外部审查 M1）：系统对话框的结果随后会派发给新实例，而应答已被提前消耗 ⇒ 用户点了
+        // "允许 / 已选文件"却被当成拒绝且零提示。与下方"下载确认"同一口径：只在真销毁时收口。
+        if (!isChangingConfigurations && ::webPrompts.isInitialized) webPrompts.cancelPending()
         // 挂起的下载确认：队列在进程级 companion，**配置变更重建**时由新实例的 onResume
         // 接手补弹，不能在这里关流；**真销毁**（返回键退出等，内核仍在后台）时必须逐个
         // 关掉，否则内核连接悬挂到超时（外部审查 M4）。
