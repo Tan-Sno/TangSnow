@@ -44,6 +44,7 @@
     <string name="more_scan_image">Scan QR from image</string>
 
     <string name="scan_no_qr_found">No QR code found in this image</string>
+    <string name="scan_image_too_large">This image is too large to decode. Please try a smaller one</string>
 
     <!-- Bookmark / share toast -->
     <string name="toast_bookmarked">Added to bookmarks</string>

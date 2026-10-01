@@ -90,42 +90,65 @@ class ScanImageActivity : CaptureActivity() {
             val text = withContext(Dispatchers.IO) { decode(uri) }
             if (isFinishing || isDestroyed) return@launch
             if (text == null) {
-                toast(R.string.scan_no_qr_found)
+                // 如实归因：内存不足 ≠ 图里没有码
+                toast(if (lastDecodeOutOfMemory) R.string.scan_image_too_large else R.string.scan_no_qr_found)
             } else {
                 returnResult(text)
             }
         }
     }
 
+    /**
+     * 上一次 [decode] 是否因**内存不足**失败。
+     * 用途：把「图像过大导致内存不足」与「图里没有二维码」分开提示（2026-10-01 CR-014）——
+     * 此前 `catch (_: Throwable)` 把 `OutOfMemoryError` 也吞成「未找到二维码」，
+     * 用户会以为是图里没有码而反复换图重试。**仅在本页内使用**（IO 线程写、主线程读 ⇒ @Volatile）。
+     */
+    @Volatile
+    private var lastDecodeOutOfMemory = false
+
     private fun decode(uri: android.net.Uri): String? {
+        lastDecodeOutOfMemory = false
         return try {
             val bmp = io.github.tan_sno.tangsnow.util.Bitmaps.decodeSampled(contentResolver, uri, 1600, 1600)
             if (bmp == null) {
                 null
             } else {
-                val w = bmp.width
-                val h = bmp.height
-                if (w <= 0 || h <= 0) {
-                    null
-                } else {
-                    val pixels = IntArray(w * h)
-                    bmp.getPixels(pixels, 0, w, 0, 0, w, h)
-                    val reader = com.google.zxing.MultiFormatReader()
-                    reader.setHints(
-                        mapOf(
-                            com.google.zxing.DecodeHintType.POSSIBLE_FORMATS to
-                                listOf(com.google.zxing.BarcodeFormat.QR_CODE),
-                            com.google.zxing.DecodeHintType.TRY_HARDER to true,
+                // CR-010：位图用完必须回收 —— 1600×1600 的 ARGB_8888 约 10 MB，此前靠 GC 才释放，
+                // 内存峰值被无谓抬高。`try/finally` 保证任何早退路径（宽高非法、解码失败）都回收到。
+                try {
+                    val w = bmp.width
+                    val h = bmp.height
+                    if (w <= 0 || h <= 0) {
+                        null
+                    } else {
+                        val pixels = IntArray(w * h)
+                        bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+                        val reader = com.google.zxing.MultiFormatReader()
+                        reader.setHints(
+                            mapOf(
+                                com.google.zxing.DecodeHintType.POSSIBLE_FORMATS to
+                                    listOf(com.google.zxing.BarcodeFormat.QR_CODE),
+                                com.google.zxing.DecodeHintType.TRY_HARDER to true,
+                            )
                         )
-                    )
-                    val source = com.google.zxing.RGBLuminanceSource(w, h, pixels)
-                    reader.decodeWithState(
-                        com.google.zxing.BinaryBitmap(
-                            com.google.zxing.common.HybridBinarizer(source)
-                        )
-                    ).text
+                        val source = com.google.zxing.RGBLuminanceSource(w, h, pixels)
+                        reader.decodeWithState(
+                            com.google.zxing.BinaryBitmap(
+                                com.google.zxing.common.HybridBinarizer(source)
+                            )
+                        ).text
+                    }
+                } finally {
+                    // CR-010：位图用完立刻回收（1600² ARGB_8888 ≈ 10 MB），不靠 GC；
+                    // try/finally 保证任何早退路径（宽高非法、解码抛异常）都会回收。
+                    runCatching { bmp.recycle() }
                 }
             }
+        } catch (_: OutOfMemoryError) {
+            // 与"没找到二维码"分开（见 [lastDecodeOutOfMemory] 的说明）
+            lastDecodeOutOfMemory = true
+            null
         } catch (_: Throwable) {
             null
         }
