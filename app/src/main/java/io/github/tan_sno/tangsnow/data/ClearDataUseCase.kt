@@ -33,39 +33,53 @@ object ClearDataUseCase {
      * 任一项失败若被并进「成功」里，用户就会看到「已清除」而数据其实还在。
      * 所以把「内核结果」与「本地失败项数」分开回报，让界面能如实提示「部分未清除」。
      */
+    /**
+     * 「清除浏览数据」**实际下发给内核**的位组合（纯函数，便于 JVM 单测）。
+     *
+     * 位值已核对（`javap -p -constants` 读 geckoview 制品的 ClearFlags，不是推算）：
+     *   COOKIES=1、NETWORK_CACHE=2、IMAGE_CACHE=4、DOM_STORAGES=16、
+     *   AUTH_SESSIONS=32、PERMISSIONS=64、ALL_CACHES=6、SITE_SETTINGS=192、
+     *   SITE_DATA=471（= 1|2|4|16|64|128|256）、ALL=512
+     * 由此得出两条结论：
+     *  ① SITE_DATA **已含 PERMISSIONS 与 DOM 存储** ⇒ 站点权限不必再单独列举；
+     *     唯 AUTH_SESSIONS(32) 不在其中 —— HTTP Basic/Digest 登录态会残留，而用户勾
+     *     「Cookie 与站点数据」时的预期就是「登出这些站点」，故显式补上它。
+     *  ② SITE_DATA 同时含两个缓存位（2|4）⇒ 勾了它必然**连带清缓存**：在当前的位
+     *     定义下「只清 Cookie 不起缓存」做不到。界面上取消勾选「缓存」只能保证
+     *     「没勾 Cookie 时不动缓存」，拦不住这条连带。
+     * 这两条事实由 `ClearFlagsGuardTest` 兜着：内核一改位值，单测立刻变红。
+     *
+     * ⚠️ 抽成函数的理由（2026-10-01 CR-005）：这段组合是「登出这些站点」这条**对用户的承诺**的
+     * 实现，而原先它只存在于 [clear] 的协程体内 —— 于是删掉 `AUTH_SESSIONS`（HTTP Basic/Digest
+     * 登录态）之后 `ClearFlagsGuardTest` 仍全绿（那条测试只校验内核位值关系、从不引用本类）。
+     * 现在**组合本身可被断言**：少一位就红灯。
+     */
+    internal fun kernelMaskFor(options: Options): Long {
+        var mask = 0L
+        if (options.cookiesAndSiteData) {
+            mask = mask or StorageController.ClearFlags.COOKIES or
+                StorageController.ClearFlags.SITE_DATA or
+                StorageController.ClearFlags.AUTH_SESSIONS
+        }
+        if (options.cache) {
+            mask = mask or StorageController.ClearFlags.ALL_CACHES
+        }
+        return mask
+    }
+
     suspend fun clear(context: Context, options: Options): Result {
         var kernelOk = true
 
         val runtime = GeckoHolder.runtime
-        val flags = mutableListOf<Long>()
-        if (options.cookiesAndSiteData) {
-            // 位值已核对（`javap -p -constants` 读 geckoview 制品的 ClearFlags，不是推算）：
-            //   COOKIES=1、NETWORK_CACHE=2、IMAGE_CACHE=4、DOM_STORAGES=16、
-            //   AUTH_SESSIONS=32、PERMISSIONS=64、ALL_CACHES=6、SITE_SETTINGS=192、
-            //   SITE_DATA=471（= 1|2|4|16|64|128|256）、ALL=512
-            // 由此得出两条结论：
-            //  ① SITE_DATA **已含 PERMISSIONS 与 DOM 存储** ⇒ 站点权限不必再单独列举；
-            //     唯 AUTH_SESSIONS(32) 不在其中 —— HTTP Basic/Digest 登录态会残留，而用户勾
-            //     「Cookie 与站点数据」时的预期就是「登出这些站点」，故显式补上它。
-            //  ② SITE_DATA 同时含两个缓存位（2|4）⇒ 勾了它必然**连带清缓存**：在当前的位
-            //     定义下「只清 Cookie 不起缓存」做不到。界面上取消勾选「缓存」只能保证
-            //     「没勾 Cookie 时不动缓存」，拦不住这条连带。
-            // 这两条事实由 `ClearFlagsGuardTest` 兜着：内核一改位值，单测立刻变红。
-            flags += StorageController.ClearFlags.COOKIES
-            flags += StorageController.ClearFlags.SITE_DATA
-            flags += StorageController.ClearFlags.AUTH_SESSIONS
-        }
-        if (options.cache) {
-            flags += StorageController.ClearFlags.ALL_CACHES
-        }
-        if (flags.isNotEmpty()) {
+        // 位组合见 [kernelMaskFor]（纯函数，单测钉住"必须含 AUTH_SESSIONS"这条承诺）
+        val mask = kernelMaskFor(options)
+        if (mask != 0L) {
             kernelOk = if (runtime == null) {
                 // 内核尚未初始化却勾了内核数据 ⇒ 这次清除**根本没有发生**。此前静默跳过、
                 // kernelOk 仍为 true，界面会报「已清除」—— 典型假反馈。如实计入失败。
                 // （runtime 为 null 只会出现在内核尚未 warmUp 的极早期；正常路径到不了这里。）
                 false
             } else {
-                val mask = flags.reduce(Long::or)
                 // awaitResult 正常返回即成功（GeckoResult<Void> 成功值为 null）；抛异常即失败。
                 // ⚠️ 刻意不用 runCatching：它会把 CancellationException 一并吞掉 ⇒ 被取消的
                 // 协程不但不中止，还接着往下清本地数据 —— 与下方 locally{} 自己立的规矩

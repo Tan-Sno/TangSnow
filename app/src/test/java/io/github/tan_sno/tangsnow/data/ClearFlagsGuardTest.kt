@@ -70,4 +70,43 @@ class ClearFlagsGuardTest {
             clearFlag("SITE_DATA") and clearFlag("ALL_CACHES"),
         )
     }
+
+    @Test
+    fun `实际下发的位组合必须含 AUTH_SESSIONS（登出承诺的回归网）`() {
+        // CR-005：上面三条只校验**内核位值关系**，从不引用 ClearDataUseCase ⇒ 把
+        // `kernelMaskFor` 里的 `AUTH_SESSIONS` 删掉，三条仍全绿，而「勾了 Cookie 与站点数据
+        // 就等于登出这些站点」的承诺就失效了（HTTP Basic/Digest 登录态残留、用户以为已登出）。
+        // 这里断言**实际下发的组合**（纯函数，JVM 可测）。
+        val onlyCookies = ClearDataUseCase.kernelMaskFor(
+            ClearDataUseCase.Options(cookiesAndSiteData = true, cache = false)
+        )
+        assertEquals(
+            "勾「Cookie 与站点数据」时必须显式补上 AUTH_SESSIONS：否则登出承诺失效",
+            clearFlag("AUTH_SESSIONS"),
+            onlyCookies and clearFlag("AUTH_SESSIONS"),
+        )
+        assertEquals("必须含 COOKIES", clearFlag("COOKIES"), onlyCookies and clearFlag("COOKIES"))
+        assertEquals("必须含 SITE_DATA", clearFlag("SITE_DATA"), onlyCookies and clearFlag("SITE_DATA"))
+        // ⚠️ 与我第一版写法相反（2026-10-01 实测纠正）：`SITE_DATA` 自带两个缓存位（2|4），
+        // 所以"只勾 Cookie 不动缓存"**在当前的位定义下根本做不到** —— 这是内核决定的已知耦合
+        //（上面第三条测试与 ClearDataUseCase 的注释都写明了）。这里把这条耦合也钉住：
+        assertEquals(
+            "SITE_DATA 自带缓存位 ⇒ 勾「Cookie 与站点数据」必然连带清缓存（已知耦合，不是缺陷）",
+            clearFlag("ALL_CACHES"),
+            onlyCookies and clearFlag("ALL_CACHES"),
+        )
+
+        val withCache = ClearDataUseCase.kernelMaskFor(
+            ClearDataUseCase.Options(cookiesAndSiteData = true, cache = true)
+        )
+        assertEquals("勾缓存时必须含 ALL_CACHES", clearFlag("ALL_CACHES"), withCache and clearFlag("ALL_CACHES"))
+
+        assertEquals(
+            "两个内核项都没勾时不应下发任何位（调用方据此跳过 clearData）",
+            0L,
+            ClearDataUseCase.kernelMaskFor(
+                ClearDataUseCase.Options(cookiesAndSiteData = false, cache = false)
+            ),
+        )
+    }
 }
