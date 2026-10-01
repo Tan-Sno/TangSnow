@@ -2426,7 +2426,6 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         val url = old?.url
         val canApply = url != null && !url.isBlank() && !url.startsWith("about:")
         prefs.desktopMode = !prefs.desktopMode
-        lastKnownDesktopMode = prefs.desktopMode
         rebuildAllTabsForDesktop()
         toast(
             if (prefs.desktopMode) {
@@ -2465,14 +2464,13 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     /**
      * 设置页「桌面版网站」开关与更多面板快捷格是同一功能的两个入口：
      * 设置页改完回到主界面时，在这里检测变化并对所有标签重建会话（行为对齐）。
+     * 判据用「会话实际构建时的值」（BrowserSessionManager.sessionsDesktopMode）：
+     * 会话由进程级单例持有、Activity 重建不重建会话——用实例字段会在重建后漏判（曾经如此）。
      */
-    private var lastKnownDesktopMode: Boolean? = null
-
     private fun applyDesktopModeIfChanged() {
         val current = prefs.desktopMode
-        val last = lastKnownDesktopMode
-        lastKnownDesktopMode = current
-        if (last == null || last == current) return
+        val built = sessionManager.sessionsDesktopMode
+        if (built == null || built == current) return
         rebuildAllTabsForDesktop()
         toast(if (current) R.string.toast_desktop_on else R.string.toast_desktop_off)
     }

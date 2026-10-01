@@ -382,6 +382,14 @@ prefs:
     /** 上一次 live 设置的指纹；未变化时跳过整段循环，减少无谓的系统调用 */
     private var lastLiveKey: String? = null
 
+    /**
+     * 最近一次构建会话时 `prefs.desktopMode` 的取值（进程级；本管理器状态仅主线程访问）。
+     * 主界面 onResume 用它判断「会话是否需要因桌面版开关变化而重建」——不能用 Activity
+     * 实例字段：重建后的新实例字段为 null，会对已发生的变化视而不见（漏重建）。
+     */
+    var sessionsDesktopMode: Boolean? = null
+        private set
+
     private var nextId = 1
     private var active: Tab? = null
 
@@ -637,8 +645,10 @@ prefs:
      * 构建会话级设置（UA/视口/无痕/JS/跟踪保护/媒体挂起）。
      * 这些项只在会话创建时生效一次。
      */
-    private fun buildSessionSettings(isPrivate: Boolean): GeckoSessionSettings =
-        GeckoSessionSettings.Builder()
+    private fun buildSessionSettings(isPrivate: Boolean): GeckoSessionSettings {
+        // 记录「会话实际用什么建的」：主界面据此判断桌面版开关变化后是否需要整表重建
+        sessionsDesktopMode = prefs.desktopMode
+        return GeckoSessionSettings.Builder()
             .usePrivateMode(isPrivate)
             .useTrackingProtection(prefs.trackingProtection)
             .allowJavascript(prefs.javaScript)
@@ -647,6 +657,7 @@ prefs:
             // 后台标签的媒体自动挂起（省电；主流浏览器默认行为，GeckoView 原生支持）
             .suspendMediaWhenInactive(true)
             .build()
+    }
 
     private fun buildSession(isPrivate: Boolean): GeckoSession {
         val rt = runtime()
