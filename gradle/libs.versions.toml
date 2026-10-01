@@ -1,5 +1,8 @@
 [versions]
 agp = "9.4.1"
+# AGP 9.x 内置 Kotlin 运行时依赖 KGP；显式升 KGP 即可让内置 Kotlin 编译器跟随升级。
+# 原先该版本硬编码在根 buildscript 的 classpath 里，升级要改两处 —— 收口到本文件。
+kotlin = "2.4.10"
 # GeckoView 只跟 **Release 通道**：Mozilla 官方 product-details 显示当前 Release = 157.0
 #（FIREFOX_NIGHTLY=159.0a1、DEVEL/Beta=158.0b1），155 已落后两个 release ⇒ 取 157 的最新构建。
 geckoView = "157.0.20260924084938"
@@ -34,6 +37,9 @@ zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCo
 zxing-embed = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbed" }
 geckoview = { group = "org.mozilla.geckoview", name = "geckoview", version.ref = "geckoView" }
 json = { group = "org.json", name = "json", version.ref = "json" }
+# KGP 走 buildscript classpath（不是 plugins{} 块），故用 libraries 别名而非 plugins 别名：
+# plugins 段的别名会被解析成插件 marker，而这里要的是插件**构件**本身。
+kotlin-gradle-plugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 
