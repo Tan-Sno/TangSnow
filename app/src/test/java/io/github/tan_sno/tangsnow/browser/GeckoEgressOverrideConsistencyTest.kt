@@ -3,6 +3,7 @@ package io.github.tan_sno.tangsnow.browser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * **内核默认出网点覆盖文件的哨兵**（配套 `SessionManager.GECKO_EGRESS_OVERRIDE_PREFS`）。
@@ -80,5 +81,43 @@ class GeckoEgressOverrideConsistencyTest {
                 value == "false" || value == "\"\"",
             )
         }
+    }
+
+    @Test
+    fun `覆盖文件必须真的被交给内核（注入路径哨兵）`() {
+        // CR-006：上面三条只校验**常量内容与形状**，测不到"接线"—— 把
+        // `writeEgressOverrideFile()?.let { b.configFilePath(...) }` 删掉（文件照写、永不注入内核）时，
+        // 上面三条仍全绿，而隐私承诺「政策 §4 之外内核不再自动出网」就失去了回归保护。
+        // 这里用**源码扫描**做廉价但有效的接线检查（与 `ProguardLogRuleConsistencyTest` 同一手法）。
+        val src = File(repoRoot(), SESSION_MANAGER_SRC).readText()
+        assertTrue(
+            "SessionManager 里找不到 `.configFilePath(`：覆盖文件不会被注入内核运行时设置",
+            src.contains(".configFilePath("),
+        )
+        assertTrue(
+            "configFilePath 必须接在 writeEgressOverrideFile() 的结果上（否则注入的是别的路径）",
+            Regex("""writeEgressOverrideFile\(\)\?\.let\s*\{\s*\w+\.configFilePath\(""").containsMatchIn(src),
+        )
+        assertTrue(
+            "覆盖文件名必须是 .yaml：原先的 .js（JS 语法）会被内核整体忽略",
+            src.contains("\"$EXPECTED_FILE_NAME\""),
+        )
+    }
+
+    private fun repoRoot(): File {
+        var dir: File? = File(".").absoluteFile
+        while (dir != null) {
+            if (File(dir, "settings.gradle.kts").isFile) return dir
+            dir = dir.parentFile
+        }
+        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
+    }
+
+    private companion object {
+        const val SESSION_MANAGER_SRC =
+            "app/src/main/java/io/github/tan_sno/tangsnow/browser/SessionManager.kt"
+
+        /** 与 `SessionManager.GECKO_EGRESS_OVERRIDE_FILE` 同值；改了那边这条会红（刻意的双写） */
+        const val EXPECTED_FILE_NAME = "gecko-egress-overrides.yaml"
     }
 }
