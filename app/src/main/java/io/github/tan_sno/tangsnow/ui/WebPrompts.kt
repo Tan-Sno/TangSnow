@@ -338,9 +338,21 @@ class WebPrompts(
         // 页面**没给**预选项时（`items` 里没有任何 `third == true`）取 -1，表示"无选中"。
         // ⚠️ 不能再用 `coerceAtLeast(0)` 退回第一项：那样点「确定」会提交一个用户从未点过的选项。
         var chosen = items.indexOfFirst { it.third }
+        // 「确定」的可用性只取决于「当前是否已选中」，所以**每一条**改变 `chosen` 的路径
+        // 都要刷新它。⚠️ 早期只在下面的 setOnShowListener 里算一次 ⇒ 页面没给预选项时
+        // 按钮被置灰后再无任何路径恢复，用户永远提交不了（CR-001）。
+        // 该局部函数只会在 dialog 已创建并显示后才被调用，故 `dialog` 必然已赋值。
+        lateinit var dialog: AlertDialog
+        fun refreshOkEnabled() {
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)
+                .isEnabled = chosen >= 0
+        }
         if (!multiple) {
             builder
-                .setSingleChoiceItems(labels, chosen) { _, which -> chosen = which }
+                .setSingleChoiceItems(labels, chosen) { _, which ->
+                    chosen = which
+                    refreshOkEnabled()
+                }
                 .setPositiveButton(R.string.dlg_ok) { _, _ ->
                     if (chosen >= 0) once(listOf(items[chosen].first))
                 }
@@ -354,17 +366,14 @@ class WebPrompts(
                     once(items.filterIndexed { i, _ -> checked[i] }.map { it.first })
                 }
         }
-        val dialog = builder
+        dialog = builder
             .setNegativeButton(R.string.dlg_cancel) { _, _ -> once(null) }
             .setOnCancelListener { once(null) }
             .create()
         if (!multiple) {
             // 未预选时把「确定」置灰，直到用户真的选了一项。
             // ⚠️ 必须挂在**创建出来的 dialog** 上：`AlertDialog.Builder` 没有 setOnShowListener。
-            dialog.setOnShowListener {
-                dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)
-                    .isEnabled = chosen >= 0
-            }
+            dialog.setOnShowListener { refreshOkEnabled() }
         }
         tracked(dialog)
     }
