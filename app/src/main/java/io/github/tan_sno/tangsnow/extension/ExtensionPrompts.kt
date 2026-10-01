@@ -31,14 +31,6 @@ import io.github.tan_sno.tangsnow.data.PreferenceStore
 object ExtensionPrompts {
 
     /**
-     * 展示中的扩展提示弹窗。Activity 销毁（切主题 / 切语言 / 进程回收）时必须关闭，
-     * 否则会有两个后果：① 对应的 GeckoResult 永不完成 → 安装或权限流程**永久挂起**；
-     * ② 对话框挂在已销毁的 Activity 上造成窗口泄漏（WindowLeaked）。
-     *
-     * 关闭一律走 `Dialog.cancel()`：它会触发 OnCancelListener，而那里正是
-     * `once.complete(拒绝)`，因此应答恰好完成一次、窗口同时被移除。
-     */
-    /**
      * 展示中的提示弹窗，连带记录其归属 Activity。
      *
      * 记录归属是必要的：本对象是**进程级**的，MainActivity 与 ExtensionsActivity 共用
@@ -48,6 +40,14 @@ object ExtensionPrompts {
      */
     private class Owned(val owner: AppCompatActivity, val dialog: AlertDialog)
 
+    /**
+     * 展示中的扩展提示弹窗。Activity 销毁（切主题 / 切语言 / 进程回收）时必须关闭，
+     * 否则会有两个后果：① 对应的 GeckoResult 永不完成 → 安装或权限流程**永久挂起**；
+     * ② 对话框挂在已销毁的 Activity 上造成窗口泄漏（WindowLeaked）。
+     *
+     * 关闭一律走 `Dialog.cancel()`：它会触发 OnCancelListener，而那里正是
+     * `once.complete(拒绝)`，因此应答恰好完成一次、窗口同时被移除。
+     */
     private val openDialogs = mutableListOf<Owned>()
 
     /**

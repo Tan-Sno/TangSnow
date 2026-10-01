@@ -157,15 +157,6 @@ object SearchEngines {
     }
 
     /**
-     * 该主机是否属于这个搜索引擎。
-     *
-     * 除模板主机与其子域外，还要认"同一引擎的其它官方主机"：用户实际在
-     * `www.bing.com` 上搜索，而模板写的是 `cn.bing.com`——只比对模板的话，
-     * 地址栏会显示整条 URL 而不是关键词，与"搜完只显示关键词"的目标不符。
-     *
-     * 纯字符串运算（不碰 android.net.Uri），故声明为 internal 以便单元测试直接覆盖。
-     */
-    /**
      * 从模板里取出主机（**纯字符串运算**，不碰 `android.net.Uri`）。
      *
      * 为什么不用 `Uri.parse(template).host`：
@@ -185,6 +176,15 @@ object SearchEngines {
         return host.takeIf { it.isNotBlank() }?.lowercase()
     }
 
+    /**
+     * 该主机是否属于这个搜索引擎。
+     *
+     * 除模板主机与其子域外，还要认"同一引擎的其它官方主机"：用户实际在
+     * `www.bing.com` 上搜索，而模板写的是 `cn.bing.com`——只比对模板的话，
+     * 地址栏会显示整条 URL 而不是关键词，与"搜完只显示关键词"的目标不符。
+     *
+     * 纯字符串运算（不碰 android.net.Uri），故声明为 internal 以便单元测试直接覆盖。
+     */
     internal fun hostMatches(host: String, engineId: String, templateHost: String): Boolean {
         val bare = host.removePrefix("www.")
         val candidates = buildList {
