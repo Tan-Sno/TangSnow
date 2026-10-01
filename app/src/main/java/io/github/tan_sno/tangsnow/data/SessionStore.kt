@@ -37,7 +37,15 @@ object SessionStore {
      */
     private const val CONSUME_WAIT_MS = 200L
 
-    /** [preload] 的预读结果与就绪标记（仅主线程读、io 线程写，故用 @Volatile） */
+    /**
+     * [preload] 的预读结果与就绪标记（仅主线程读、io 线程写，故用 @Volatile）。
+     *
+     * ⚠️ **两个字段的读写顺序是不变量，别重排**（外部审查 CR-014 曾担心"双 @Volatile 非原子"):
+     * 写侧先写 [cached] 再置 [cachedReady] = true，读侧**先读 [cachedReady]** ——
+     * 对 volatile 变量的写 happens-before 之后的读，因此读到 `cachedReady == true` 时，
+     * 对应的 [cached] 一定已可见 ⇒ 不需要把它们合成一个对象（合成反而会多一次分配）。
+     * 反过来说：**先读 [cached] 再判 [cachedReady]** 就会引入真实的竞态。
+     */
     @Volatile
     private var cached: Snapshot? = null
 
