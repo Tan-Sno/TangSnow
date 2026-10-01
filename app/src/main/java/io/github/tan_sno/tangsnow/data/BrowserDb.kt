@@ -121,7 +121,11 @@ class BrowserDb private constructor(context: Context) :
      * 批量插入书签（书签导入路径）：整批包在一个写事务里。此前导入逐条调
      * [insertBookmark]，每条各自落盘 —— 一次 ≤1000 条的导入就是 ≤1000 次独立
      * 事务（每次都带 fsync 语义），事务化后一次提交。
-     * 复用 [insertBookmark] 的「已存在只刷新标题」upsert 语义，导入天然幂等。
+     * ⚠️ 导入的幂等性来自**上游去重**，不是这里的 upsert：[BookmarkHtml.sanitize] 已用
+     * `existingUrls` 把库中已存在的 URL 全部滤掉，因此常规导入路径**只会走新建分支**，
+     * [insertBookmark] 里「已存在只刷新标题」那条 UPDATE 分支在导入场景下仅在并发竞态
+     * （去重与落库之间又挤进别的写入）时可达。保留该分支是为覆盖那条竞态与逐条收藏入口，
+     * 导入路径并不依赖它 —— 别把这条注释读成「导入靠 upsert 幂等」。
      * 第三位是原始收藏时间（`ADD_DATE`，epoch 毫秒；null = 导入时刻）—— 此前导入
      * 统一写当前时间，导出→导入往返丢时间、整批浮到列表最前且批内乱序。
      */
