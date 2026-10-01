@@ -1128,7 +1128,13 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                         )
                     }
                     io.github.tan_sno.tangsnow.util.Bitmaps.decodeSampled(contentResolver, uri, w, h)
-                        ?.let { io.github.tan_sno.tangsnow.util.Bitmaps.cover(it, w, h) }
+                        ?.let { src ->
+                            // CR-010：`cover` 刻意不回收入参（它可能原样返回 src）⇒ 回收责任在调用方。
+                            // 仅当它返回的是**新图**时才回收源图，否则会把正在用的位图回收掉。
+                            val out = io.github.tan_sno.tangsnow.util.Bitmaps.cover(src, w, h)
+                            if (out !== src) runCatching { src.recycle() }
+                            out
+                        }
                 }
             }
             if (isDestroyed) return@launch

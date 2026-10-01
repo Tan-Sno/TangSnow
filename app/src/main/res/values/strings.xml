@@ -309,6 +309,7 @@
     <string name="pref_default_browser_unavailable">当前设备不支持此操作</string>
 
     <string name="scan_no_qr_found">这张图片中没有识别到二维码</string>
+    <string name="scan_image_too_large">图片过大，内存不足，无法识别。请换一张小一些的图片</string>
 
     <string name="pref_engine_title">搜索引擎</string>
     <string name="pref_engine_summary">内置 + 自定义搜索引擎</string>
