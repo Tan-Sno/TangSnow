@@ -62,6 +62,9 @@ object Bitmaps {
         maxPixels: Long = MAX_PIXELS,
     ): Int {
         if (outWidth <= 0 || outHeight <= 0) return 1
+        // CR-014：负数/零预算下 `maxPixels` 会让下面的循环除零或永不下降 —— 生产调用点传的是
+        // 常量 [MAX_PIXELS]，不可达；但这是纯函数、可被测试直接调用，加一行守卫成本为零。
+        if (maxPixels <= 0) return 1
         // 下界守卫：reqW / reqH 非正时「不小于目标尺寸」恒真，采样会一路翻倍到 Int 溢出，
         // 下一轮 `sample * 2 == 0` 触发除零（ArithmeticException）。当前三个调用点都传正值，
         // 这里防的是将来新增调用点时踩到。

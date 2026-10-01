@@ -288,9 +288,16 @@ class PreferenceStore(context: Context) {
 
     /** 自定义搜索引擎列表（最多 [Companion.MAX_CUSTOM_ENGINES] 个）。
      *  按原始 JSON 记忆化：地址栏联想/导航等高频路径不再每次重解析。 */
+    // ⚠️ 记忆化缓存的四个字段都要 @Volatile（2026-10-01 CR-014）：本类的 getter 可能被
+    // IO 线程（如主页图/快捷方式预热）与主线程同时调用，非 volatile 时可能读到"JSON 已更新、
+    // 解析结果还是旧的"这种交错。代价为零，故一律加上。
+    @Volatile
     private var cachedEnginesJson: String? = null
+    @Volatile
     private var cachedEngines: List<CustomEngine>? = null
+    @Volatile
     private var cachedShortcutsJson: String? = null
+    @Volatile
     private var cachedShortcuts: List<HomeShortcut>? = null
 
     val customEngines: List<CustomEngine>

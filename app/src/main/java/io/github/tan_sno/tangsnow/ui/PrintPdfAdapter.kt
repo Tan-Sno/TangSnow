@@ -126,8 +126,9 @@ internal class PrintPdfAdapter(
                 callback.onWriteCancelled()
                 throw e
             } catch (t: Throwable) {
-                // 不吞异常：把原因交给框架，系统打印界面会据此提示失败
-                callback.onWriteFailed(t.message)
+                // 不吞异常：把原因交给框架，系统打印界面会据此提示失败。
+                // CR-014：`t.message` 可为 null（如无参构造的 Throwable）⇒ 退回类名，别传 null 进去。
+                callback.onWriteFailed(t.message ?: t.javaClass.simpleName)
             }
         }
     }

@@ -139,6 +139,11 @@ object SearchEngines {
      * 非搜索结果页返回 null。
      */
     fun displayForUrl(url: String, engines: List<SearchEngine>): String? {
+        // ⚠️ 这个 `?: return null` 在生产里确实**不可达**（`android.net.Uri.parse` 标了 @NonNull，
+        // 解析失败也返回空 Uri 而不是 null）—— 外部审查 CR-014 把它报成死分支，结论对。
+        // **判定保留**：删掉省不下任何东西，而它标记了"这里依赖 parse 的非空契约"；
+        // 真正要防的是将来把 `Uri.parse` 换成纯实现（本项目为可测性已经在做这种替换）时漏补空分支。
+        // 本函数**不被 JVM 单测直接调用**（android.jar 的 `Uri` 是抛异常的桩），故这里也不会成为测试陷阱。
         val uri = Uri.parse(url) ?: return null
         val host = uri.host?.lowercase() ?: return null
         for (engine in engines) {
