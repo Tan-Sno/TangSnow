@@ -431,7 +431,18 @@ androidComponents {
 // （2026-10-01 修正）。本机不受影响（该文件存在），此改动只影响"文件缺失 + 向导"这一种组合。
 val allowDebugSignedRelease =
     providers.gradleProperty("tangsnow.allowDebugSignedRelease").isPresent
-tasks.matching { it.name in setOf("assembleRelease", "bundleRelease") }.configureEach {
+// 匹配口径：凡「以打包动词开头、且属于 release 变体」的任务都纳入（CR-008）。
+// 原先只认 assembleRelease / bundleRelease 两个名字。而本项目开了 ABI 分包，
+// 真正**产出** APK/AAB 的是 `packageReleaseUniversalApk` / `packageReleaseBundle`
+// （`assembleRelease` 只是挂在它们上面的汇总任务）⇒ 熔断在真正产包的那一步形同虚设。
+// ⚠️ 不用 `endsWith("Release")`：那会命中 compileReleaseKotlin / lintVitalRelease /
+// testReleaseUnitTest 等根本不产包的编译、检查任务，把熔断变成噪音（见 design 风险表）。
+// 这里锚定「打包动词 + 提到 Release」，实测（`:app:tasks --all`）覆盖
+//   assembleRelease / bundleRelease / packageRelease / packageReleaseUniversalApk /
+//   packageReleaseBundle / installRelease
+// 而 compileRelease* / lint*Release / test* 一律不命中；debug 任务名不含 Release，同样不命中。
+val releasePackagingTask = Regex("^(package|assemble|bundle|install).*Release")
+tasks.matching { releasePackagingTask.matches(it.name) }.configureEach {
     if (!keystorePropsFile.exists() && !allowDebugSignedRelease && !wizardDriven) {
         doFirst {
             throw GradleException(
