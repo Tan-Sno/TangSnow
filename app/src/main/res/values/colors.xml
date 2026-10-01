@@ -76,6 +76,8 @@
     <!-- ============ 控件中性色 ============ -->
     <!-- 风格卡片描边（未选中） -->
     <color name="style_stroke">#1E5F6368</color>
+    
+    <color name="swatch_stroke">#1F1F1F</color>
     <!-- 胶囊按钮禁用底（安装中） -->
     <color name="accent_disabled">#1E5F6368</color>
     <!-- 字母头像兜底底色 -->
