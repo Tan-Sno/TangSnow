@@ -348,7 +348,7 @@
     <string name="pref_clear_data_title">清除浏览数据</string>
     <string name="pref_clear_data_summary">清除 Cookie、缓存与站点数据</string>
     <string name="pref_exit_clear_title">退出时自动清除浏览数据</string>
-    <string name="pref_exit_clear_summary">在应用内退出（「更多 → 退出浏览器」或首页连按两次返回）时，自动清除 Cookie 与站点数据、缓存、历史与标签页快照；书签与下载不受影响，开启后「恢复上次的标签页」不再生效</string>
+    <string name="pref_exit_clear_summary">在应用内退出（「更多 → 退出浏览器」或首页连按两次返回）时，应用立刻退出并在后台自动清除 Cookie 与站点数据、缓存、历史与标签页快照（完成后提示结果）；书签与下载不受影响，开启后「恢复上次的标签页」不再生效</string>
 
     <string name="pref_version_title">版本</string>
     <string name="pref_about_title">关于棠雪</string>
