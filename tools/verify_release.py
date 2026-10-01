@@ -206,7 +206,10 @@ def find_build_tool(sdk, name):
         raise Fail("Android SDK 下没有 build-tools 目录：%s" % bt)
 
     def key(d):
-        return [int(x) for x in re.findall(r"\d+", d)] or [0]
+        # 预发布版本排在**稳定版之后**：纯数字比较会把 "36.0.0-rc1"（→[36,0,0,1]）排到
+        # "36.0.0"（→[36,0,0]）之上，从而选中一个预览版 build-tools（2026-10-01 外部审查指出的候选）。
+        stable = 0 if re.search(r"(rc|beta|alpha|preview|canary|dev)", d, re.IGNORECASE) else 1
+        return (stable, [int(x) for x in re.findall(r"\d+", d)] or [0])
 
     for ver in sorted(os.listdir(bt), key=key, reverse=True):
         for cand in ("%s.bat" % name, name, "%s.exe" % name) if os.name == "nt" else (name,):

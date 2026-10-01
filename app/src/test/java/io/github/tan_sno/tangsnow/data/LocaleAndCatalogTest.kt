@@ -94,8 +94,15 @@ class LocaleAndCatalogTest {
 
     @Test
     fun `目录不得收录广告拦截类扩展（合规回归）`() {
-        val forbidden = setOf("ublock-origin", "ublock", "adguard", "ghostery", "adblock-plus", "adblock")
-        val hits = ExtensionCatalog.all.map { it.slug }.filter { it.lowercase() in forbidden }
+        // 判据用**子串**而不是精确等值（2026-10-01 修）：精确匹配放走过 `adguard-vpn`、
+        // `ublock-origin-lite` 这类变体，而集合里恰恰漏了类注释自称要防的 `sponsorblock`。
+        val forbidden = listOf(
+            "ublock", "adguard", "ghostery", "adblock", "ad block", "sponsorblock", "sponsor block",
+        )
+        val hits = ExtensionCatalog.all.map { it.slug }.filter { slug ->
+            val s = slug.lowercase()
+            forbidden.any { s.contains(it) }
+        }
         assertTrue("精选目录出现了广告拦截类扩展：$hits", hits.isEmpty())
     }
 
