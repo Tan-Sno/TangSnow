@@ -32,8 +32,8 @@
 #    结算、本次应答丢弃」的留痕）与 Log.i ×1（SessionManager 的权限拒绝留痕，它另在
 #    BuildConfig.DEBUG 门内）：d / i / v 三级一律靠下面的剥离规则移除，release 不存在。
 #    Log.v 全仓 0 处。
-#  · 全仓 Log.w 调用点共 8 处 —— 上面会进 release 的 5 处之外，ExtensionCatalog 与
-#    ExtensionsActivity 的 3 处都在 BuildConfig.DEBUG 门内，release 不存在。
+#  · 全仓 Log.w 调用点共 9 处 —— 上面会进 release 的 5 处之外，ExtensionCatalog、
+#    ExtensionsActivity 与 DownloadRepo 的 4 处都在 BuildConfig.DEBUG 门内，release 不存在。
 #  · 以上数字由 ProguardLogRuleConsistencyTest 钉住：改了日志调用点却忘同步本段，
 #    testDebugUnitTest 会直接红。
 #  · **约定**：网络类异常的 message（常带完整下载 URL）不得进 w/e —— 网络失败

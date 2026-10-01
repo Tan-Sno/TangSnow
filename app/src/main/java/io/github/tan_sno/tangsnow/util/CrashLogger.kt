@@ -136,7 +136,7 @@ object CrashLogger {
         dir.mkdirs()
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         // 文件名精确到**毫秒**：原先只到秒，同一秒内的第二次崩溃会覆盖掉第一条（崩溃日志恰恰是
-        // 连崩时最需要的那条）。列表排序按文件名，仍保持时间序。
+        // 连崩时最需要的那条）。列表按修改时间（lastModified）倒序；毫秒后缀保证同秒两条也有稳定先后。
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())
         val sb = StringBuilder().apply {
             appendLine("棠雪 / TangSnow")

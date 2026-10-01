@@ -16,7 +16,7 @@
 # 若这里给 21，Gradle 会按该声明去 foojay 现拉一个 25 的 daemon ⇒ 多一次约 150MB 下载、多一个失败点，
 # 且"CI 绿"与"我本机能出包"之间就隔了一层版本差异。
 # 为什么不是 JBR 25：`actions/setup-java` 不提供 JetBrains Runtime，而本仓库自己的 toolchain 源
-# 就是 foojay 的通用 OpenJDK 构建（即那份文件里的 8 条 toolchainUrl）⇒ **本项目约束的是版本，不是厂商**。
+# 就是 foojay 的通用 OpenJDK 构建（即那份文件里列出的 toolchainUrl）⇒ **本项目约束的是版本，不是厂商**。
 # Temurin 25 已由 Adoptium 官方 API 实测存在（jdk-25.0.4.1+1，LTS，linux x64）。
 # 另：app/build.gradle.kts 的 `sourceCompatibility/targetCompatibility = 17` 不变 ⇒ 用 25 构建
 # 不会抬高产物的 Java/Android 要求（字节码仍是 17）。

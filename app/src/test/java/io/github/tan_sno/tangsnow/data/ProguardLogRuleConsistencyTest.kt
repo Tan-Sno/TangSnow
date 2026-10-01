@@ -83,9 +83,49 @@ class ProguardLogRuleConsistencyTest {
             .toList()
     }
 
+    /** 抠出注释里的指定数字（正则即「注释承诺了什么」的机器可读形式；措辞改了同步改这里） */
+    private fun declaredExtra(text: String, regex: Regex, what: String): Int {
+        val m = regex.find(text)
+            ?: throw AssertionError("proguard-rules.pro 里找不到「$what」。若该段被改写，请同步本测试的正则。")
+        return m.groupValues[1].toInt()
+    }
+
+    /** BuildConfig.DEBUG 门内的调用点（与 [releaseCallSites] 互补；判定口径完全一致） */
+    private fun guardedCallSites(level: String): List<String> {
+        val sourceRoot = File(repoRoot(), "app/src/main/java")
+        assertTrue("找不到主源码目录：${sourceRoot.absolutePath}", sourceRoot.isDirectory)
+        val needle = "Log.$level("
+        return sourceRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .flatMap { f ->
+                val lines = f.readLines()
+                lines.asSequence().mapIndexedNotNull { i, line ->
+                    if (!line.contains(needle)) return@mapIndexedNotNull null
+                    val from = (i - 6).coerceAtLeast(0)
+                    val guarded = lines.subList(from, i + 1).any { it.contains("BuildConfig.DEBUG") }
+                    if (guarded) "${f.relativeTo(sourceRoot)}:${i + 1}" else null
+                }
+            }
+            .sorted()
+            .toList()
+    }
+
     @Test
     fun `proguard 说明声明的 release 日志数量与代码一致`() {
         val declaredText = proguardText()
+
+        // 全仓总数与「门内数」同样要核对（2026-10-01 巡检发现这两处口径曾漂移）
+        assertEquals(
+            "proguard 说明的 Log.w 全仓总数与代码不一致",
+            declaredExtra(declaredText, Regex("""Log\.w 调用点共 (\d+) 处"""), "Log.w 调用点共 N 处"),
+            releaseCallSites("w").size + guardedCallSites("w").size,
+        )
+        assertEquals(
+            "proguard 说明的 Log.w 门内数与代码不一致",
+            declaredExtra(declaredText, Regex("""的 (\d+) 处都在 BuildConfig\.DEBUG 门内"""), "…的 N 处都在门内"),
+            guardedCallSites("w").size,
+        )
+
         for (level in listOf("w", "e")) {
             val sites = releaseCallSites(level)
             assertEquals(
