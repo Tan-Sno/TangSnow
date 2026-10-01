@@ -14,13 +14,11 @@ import io.github.tan_sno.tangsnow.R
 import io.github.tan_sno.tangsnow.util.dp
 import io.github.tan_sno.tangsnow.util.selectableRipple
 
-/**
- * 「更多」面板与快捷操作行的视图构建器（从 MainActivity 抽出）。
- *
- * 全部是无状态顶层函数：只依赖 [Context] 与点击回调，不再捕获 MainActivity。
- * [dismiss] 由调用方传入（MainActivity 传 ::hideMoreSheet），让构建器与具体 Activity 解耦。
- * 每个条目点击后都会先 [dismiss] 收起面板，再执行 [onClick]——与抽离前的行为完全一致。
- */
+// 「更多」面板与快捷操作行的视图构建器（从 MainActivity 抽出）。
+// 全部是无状态顶层函数：只依赖 Context 与点击回调，不再捕获 MainActivity。
+// dismiss 由调用方传入（MainActivity 传 ::hideMoreSheet），让构建器与具体 Activity 解耦。
+// 每个条目点击后都会先 dismiss 收起面板，再执行 onClick —— 与抽离前的行为完全一致。
+// （刻意用行注释而非 KDoc：紧邻下一个函数的 KDoc 会形成「两个连续 KDoc」，落单的那个不进文档。）
 
 /** 半透明分隔线：置于每行选项上方，左右各留 16dp（不触面板边缘） */
 fun addSheetDivider(context: Context, panel: LinearLayout) {
