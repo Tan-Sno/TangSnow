@@ -265,8 +265,13 @@ object DownloadRepo {
                     continue
                 }
             }
-            out.write(ch.toString().toByteArray(Charsets.UTF_8))
-            i++
+            // ⚠️ 必须按**码点**写，不能按 `char`（2026-10-01 CR-013）：星平面字符（如 emoji）在
+            // Kotlin/Java 字符串里占**两个 char（高/低代理）**，逐 char 走 `ch.toString().toByteArray(UTF_8)`
+            // 会让每个孤立代理各自编码成替换字节（`?`）⇒ 文件名**同时含 `%` 与 emoji** 时名字被破坏。
+            // 按码点写对 ASCII 与 BMP 字符结果不变（单个 char → 同样的字节），故不改变既有语义。
+            val codePoint = raw.codePointAt(i)
+            out.write(String(Character.toChars(codePoint)).toByteArray(Charsets.UTF_8))
+            i += Character.charCount(codePoint)
         }
         return String(out.toByteArray(), Charsets.UTF_8)
     }
