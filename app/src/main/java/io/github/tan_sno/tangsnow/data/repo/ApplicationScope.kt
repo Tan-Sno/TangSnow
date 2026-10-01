@@ -5,7 +5,6 @@ import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-
 /**
  * 全局可用的 Application context（由 [ApplicationScope.init] 注入）。
  *
@@ -49,9 +48,13 @@ object ApplicationScope {
      *    而且 `viewModelScope` 在导航离开时同样会被取消；
      *  · **用应用级作用域**：这正是官方推荐给"必须跑完、与界面无关"的活儿的位置。
      *    （若将来需要"进程被杀也要跑完"，再换 `WorkManager`。）
+     *  · 调度器用 **`Dispatchers.IO`** 而不是 `Default`：Fenix 的《Best Practices》明确写过
+     *    「`Dispatchers.Default` 不是好默认值 —— 它的队列被慢任务占满时，新任务必须等前面的跑完；
+     *    而 `Dispatchers.IO` 通常是更好的默认选择」。这里的活（SQLite / MediaStore / 内核 clearData）
+     *    都是 IO 型，故用 IO。（2026-10-01 自查修正：初版写的是 `Default`。）
      *
      * ⚠️ 普通 UI 相关协程仍用 `lifecycleScope` —— **别把这里当成随手可用的杂项作用域**，
      * 它会让协程活过发起它的界面。用 `SupervisorJob`：一个子任务失败不牵连其他。
      */
-    val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 }
