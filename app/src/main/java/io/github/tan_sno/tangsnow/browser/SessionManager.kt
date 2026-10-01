@@ -383,9 +383,10 @@ prefs:
     private var lastLiveKey: String? = null
 
     /**
-     * 最近一次构建会话时 `prefs.desktopMode` 的取值（进程级；本管理器状态仅主线程访问）。
+     * 会话池**整体**最近一次（重）建时 `prefs.desktopMode` 的取值（进程级；本管理器状态仅主线程访问）。
      * 主界面 onResume 用它判断「会话是否需要因桌面版开关变化而重建」——不能用 Activity
-     * 实例字段：重建后的新实例字段为 null，会对已发生的变化视而不见（漏重建）。
+     * 实例字段：重建后的新实例字段为 null，会对已发生的变化视而不见（漏重建）；
+     * 也**不**在每次追加标签时推进（追加单个标签不代表整池已切换）。
      */
     var sessionsDesktopMode: Boolean? = null
         private set
@@ -646,8 +647,9 @@ prefs:
      * 这些项只在会话创建时生效一次。
      */
     private fun buildSessionSettings(isPrivate: Boolean): GeckoSessionSettings {
-        // 记录「会话实际用什么建的」：主界面据此判断桌面版开关变化后是否需要整表重建
-        sessionsDesktopMode = prefs.desktopMode
+        // 记录「会话池整体用什么建的」（仅池为空时推进）：单次追加不动它，否则
+        // 「设置改动 + 停窗期间扩展建标签」会让返回时的整表重建比较误判为一致。
+        if (tabs.isEmpty()) sessionsDesktopMode = prefs.desktopMode
         return GeckoSessionSettings.Builder()
             .usePrivateMode(isPrivate)
             .useTrackingProtection(prefs.trackingProtection)
