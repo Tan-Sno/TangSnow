@@ -84,9 +84,6 @@ class AboutActivity : AppCompatActivity() {
         }
     }
 
-    /** 崩溃日志文件名 `crash-yyyyMMdd-HHmmss.txt` 的展示格式化；预编译，避免每次都编译正则 */
-    private val crashNamePattern = Regex("""^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$""")
-
     /** 崩溃日志选择（无日志时仅提示）。文件枚举在 IO 线程完成后回主线程弹窗 */
     private fun showCrashReports() {
         lifecycleScope.launch {
@@ -99,9 +96,8 @@ class AboutActivity : AppCompatActivity() {
                 return@launch
             }
             val names = files.map { f ->
-                // crash-20260908-101530.txt → 2026-09-08 10:15:30（仅展示用，删除仍用原文件）
-                f.name.removePrefix("crash-").removeSuffix(".txt")
-                    .replace(crashNamePattern, "$1-$2-$3 $4:$5:$6")
+                // 展示名由 CrashLogger 单源生成（新旧两代文件名都能解析）；删除仍用原文件
+                io.github.tan_sno.tangsnow.util.CrashLogger.displayStamp(f.name)
             }
             var chosen = 0
             val dialog = AlertDialog.Builder(this@AboutActivity)
