@@ -2772,6 +2772,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             finishAffinity()
             return
         }
+        // 清快照之前先置「已清」标志：否则退出过程中 onPause 的 saveState 会把刚清掉的会话快照又
+        // 写回去，若进程在「写回之后、清除完成之前」被系统杀掉，下次冷启动就会把标签与历史栈整表
+        // 恢复 —— 「退出不留痕」的承诺失效（2026-10-02 外部审查 P3-8）。
+        // markPurged 会被「新的浏览活动」自动抵消（见 SessionStore），故只影响这一次退出。
+        SessionStore.markPurged()
         val ctx = applicationContext
         ApplicationScope.scope.launch {
             val result: ClearDataUseCase.Result? = try {
