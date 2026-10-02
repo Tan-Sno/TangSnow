@@ -206,7 +206,11 @@ class AboutActivity : AppCompatActivity() {
             runCatching {
                 startActivity(android.content.Intent.createChooser(send, getString(R.string.about_crash_share_via)))
             }.onFailure {
-                toast(R.string.toast_share_empty)
+                // ⚠️ 不能复用 `toast_share_empty`（「当前没有可分享的**页面**」，2026-10-02 外部审查 P3）：
+                // 这里是"关于 → 崩溃报告 → 分享"，既没有"页面"、失败原因也不是"没内容"（是系统没有
+                // 可接收的应用 / chooser 起不来）⇒ 归因必须分开。本仓对同类区分一贯如此
+                // （download_start_failed vs download_save_failed、scan_image_unreadable vs scan_no_qr_found）。
+                toast(R.string.about_crash_share_failed)
             }
         }
     }

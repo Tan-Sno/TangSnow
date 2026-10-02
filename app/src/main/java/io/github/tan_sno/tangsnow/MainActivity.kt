@@ -2900,6 +2900,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             SessionStore.markPurged()
             detachActiveSession()
             sessionManager.shutdown()
+            // ⚠️ 本条流程**同步**做完了全部收尾 ⇒ 必须在这里就复位**进程级**标志（2026-10-02 外部审查 P1）。
+            // 不复位的后果（都已逐行复核）：① `exiting` 停在 true ⇒ 同进程内「从桌面重开 → 再退出」
+            // 会被上面 :2890 的早退挡成空操作 ⇒ 开着「退出即清除」也不清、**零提示**（本仓最不允许的
+            // 「承诺为假 + 无反馈」）；② `exitClearSettled` 停在 false ⇒ onDestroy 的关停判据
+            // `(!exiting || exitClearSettled)` **恒为假** ⇒ 此后任何销毁都不再 shutdown()，新起的
+            // GeckoRuntime 在无界面的进程里常驻。必须在 `finishAffinity()` **之前**置位 —— onDestroy 是它触发的。
+            exiting = false
+            exitClearSettled = true
             finishAffinity()
             return
         }

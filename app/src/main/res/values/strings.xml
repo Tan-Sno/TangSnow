@@ -377,6 +377,7 @@
     <string name="about_crash_view">查看</string>
     <string name="about_crash_share">分享</string>
     <string name="about_crash_share_via">分享崩溃日志到…</string>
+    <string name="about_crash_share_failed">无法分享崩溃报告，请稍后重试</string>
     <string name="about_crash_delete">删除</string>
     <string name="about_crash_delete_failed">删除失败，日志仍在本机</string>
     <string name="about_crash_empty_file">（该日志内容为空）</string>
