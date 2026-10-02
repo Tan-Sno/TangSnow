@@ -805,7 +805,13 @@ prefs:
             // 不该由后台标签的脚本或已关闭标签的迟到导航驱动 —— 用户正在看别的页面时突然被弹进另一个应用，
             // 既莫名其妙又像是自己点了什么。后台标签的外部协议一律按拒绝处理。
             if (!isAlive(tab) || tab !== active) return GeckoResult.deny()
-            post { events?.onExternalProtocol(uri) }
+            post {
+                // **执行瞬间复查**（与 promptStale / permissionStale 同一纪律）：从入队到执行隔着一次
+                // 主循环，标签完全可能在这中间被关掉或切走 —— 那时再拉起外部应用就是"没头没脑地
+                // 弹出另一个 app"，正是上面那条入口守卫想挡住的事。
+                if (!isAlive(tab) || tab !== active) return@post
+                events?.onExternalProtocol(uri)
+            }
             return GeckoResult.deny()
         }
     }
@@ -822,6 +828,9 @@ prefs:
             val text = selection.text.orEmpty()
             val actions = selection.availableActions
             post {
+                // **执行瞬间复查**（同上）：选择菜单是"当前这个标签"的操作条，入队后标签被关掉/切走时
+                // 不该再弹到别的页面上。
+                if (!isAlive(tab) || tab !== active) return@post
                 val handler = selectionHandler ?: return@post
                 handler.onSelection(
                     session,
