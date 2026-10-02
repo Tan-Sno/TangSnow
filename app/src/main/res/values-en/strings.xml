@@ -128,6 +128,7 @@
 
     <!-- Engine manager -->
     <string name="engine_manager_title">Search engines</string>
+    <string name="a11y_default_engine">Default engine</string>
     <string name="engine_settings_help">Pick a default engine; long-press a custom one to delete; add new ones below ({q} = keyword)</string>
     <string name="engine_add_title">Add custom engine</string>
     <string name="engine_name_hint">Name (e.g. My Search)</string>
