@@ -34,8 +34,11 @@
                 android:visibility="gone"
                 android:importantForAccessibility="no" />
 
+            <!-- 装饰性首字母头像：与紧邻的 tabTitle 内容重复，读屏不该多念一个字母
+                 （2026-10-02 外部审查报告 6 的可访问性项；同文件上方的 tabPreview 早已这么标） -->
             <TextView
                 android:id="@+id/tabGlyph"
+                android:importantForAccessibility="no"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_gravity="center"
