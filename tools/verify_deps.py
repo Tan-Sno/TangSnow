@@ -28,10 +28,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
+import socket
 import sys
+import urllib.parse
 import urllib.request
 
 
@@ -140,9 +143,52 @@ def digest(path: str, algo: str) -> str:
     return h.hexdigest()
 
 
-def fetch(url: str, timeout: int = 25) -> str | None:
+# fetch 允许访问的主机白名单：与上方 REPOS 的三个官方仓库一一对应。
+# URL 虽由 REPOS 常量拼装、不含任何用户输入，仍在出口做完整校验（协议 / 主机白名单 /
+# 解析后 IP 必须公网 / 限定重定向）——静态扫描把「变量进 urlopen」一律按 SSRF 处理
+# （2026-10-02 被 L3 扫描拦下），且将来改 REPOS 时这里同步兜底。
+ALLOWED_FETCH_HOSTS = frozenset({
+    "repo1.maven.org",
+    "dl.google.com",
+    "maven.mozilla.org",
+})
+
+
+def _is_public_https_url(url: str) -> bool:
+    """https + 白名单主机 + 解析出的**全部** IP 都是公网（拒内网/环回/链路本地/保留段）。"""
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
+        parts = urllib.parse.urlsplit(url)
+        if parts.scheme != "https":
+            return False
+        host = (parts.hostname or "").lower()
+        if host not in ALLOWED_FETCH_HOSTS:
+            return False
+        for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP):
+            if not ipaddress.ip_address(info[4][0]).is_global:
+                return False
+        return True
+    except Exception:
+        return False
+
+
+class _StrictRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """重定向的每一跳都重新过一遍白名单 + 公网校验；不允许则中止（返回 None = 不跟随）。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _is_public_https_url(newurl):
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_StrictRedirectHandler())
+
+
+def fetch(url: str, timeout: int = 25) -> str | None:
+    if not _is_public_https_url(url):
+        print("  ! 跳过非 https / 非白名单 / 非公网地址的请求：%s" % url)
+        return None
+    try:
+        with _OPENER.open(url, timeout=timeout) as r:
             return r.read().decode().strip().split()[0]
     except Exception:
         return None

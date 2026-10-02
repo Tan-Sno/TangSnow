@@ -1467,18 +1467,39 @@ prefs:
     // --------------------------------------------------------- 站点权限（A3）
 
     /**
-     * 本应用界面当前是否**对用户可见**（由 `MainActivity` 在 `onStart` / `onStop` 维护、
-     * 单点下发；**不是** onResume/onPause —— 分屏失焦的那一侧窗口仍在屏幕上，理由见 [promptStale]）。
+     * 本应用界面当前是否**对用户可见**（供 [promptStale] / [permissionStale] 判定）。
      *
      * 为什么走显式通道而不是「没有来路的裸 val」：本类 [attachDelegates] 的 KDoc 明言
      * 「经主线程转发给 events，**不捕获任何 Activity**」—— 让 Activity 直接写字段会破坏
-     * 这条约定（还得把 Activity 传进来）。[setHostVisible] 与既有的 events 转发同路数。
+     * 这条约定（还得把 Activity 传进来）。
+     *
+     * ⚠️ 这是一个**推导值**，不是单字段写入：MainActivity 的每个实例各自持有两个布尔
+     * （「窗口在屏幕上」= onStart/onStop、「画中画」= PiP 回调），经 [hostStartedChanged] /
+     * [hostPipChanged] 以**增量**上报，这里按「任一实例 started 或任一实例 pip」合成。
+     * 为什么不能用「后写者赢」的单布尔：被压实例的 `onStop` 系统性**晚于**压上实例的
+     * `onStart/onResume`（下方 [hasOtherHost] 的时序依据是同一事实）⇒ 后写者恒是**离开者**，
+     * 双实例每交接一次就把可见性写成 false 并卡死整个前台周期——网页弹窗被自动 dismiss、
+     * 权限被静默拒（2026-10-02 外部审查 N1，60a58b6 引入）。按计数推导则与书写顺序无关。
      */
     @Volatile
     private var hostVisible = true
 
-    fun setHostVisible(visible: Boolean) {
-        hostVisible = visible
+    /** 处于 `onStart..onStop` 之间的 MainActivity 实例数（主线程读写，与生命周期同线程） */
+    private var startedHosts = 0
+
+    /** 处于画中画中的 MainActivity 实例数 */
+    private var pipHosts = 0
+
+    /** 实例的「窗口在屏幕上」状态变化（onStart→true / onStop→false），增量上报 */
+    fun hostStartedChanged(started: Boolean) {
+        startedHosts = (startedHosts + if (started) 1 else -1).coerceAtLeast(0)
+        hostVisible = startedHosts > 0 || pipHosts > 0
+    }
+
+    /** 实例的画中画状态变化（进入→true / 退出→false），增量上报 */
+    fun hostPipChanged(active: Boolean) {
+        pipHosts = (pipHosts + if (active) 1 else -1).coerceAtLeast(0)
+        hostVisible = startedHosts > 0 || pipHosts > 0
     }
 
     /**
@@ -1509,6 +1530,14 @@ prefs:
         hostCount = (hostCount - 1).coerceAtLeast(0)
         return hostCount == 0
     }
+
+    /**
+     * 本进程是否还有**任何**存活的 MainActivity 宿主（[hostAttached] 过且未 [hostDetached]）。
+     *
+     * 用途：「退出并清除」的收尾判据——清除完成时若仍有宿主（用户在清理期间重开了应用），
+     * 新实例正跑在这套内核与会话上，此时 `shutdown()` 等于把它脚下拆掉；只有宿主清零才关停。
+     */
+    fun hasAnyHost(): Boolean = hostCount > 0
 
     /**
      * 本进程内**是否还有另一个**存活的 MainActivity 宿主（即不止我一个）。
