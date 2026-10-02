@@ -18,10 +18,14 @@
         android:maxLines="1"
         android:ellipsize="end" />
 
+    <!-- 勾选标记：**只在"当前默认引擎"那一行**由代码置为可见（见 EngineSettingsActivity），
+         故给它一条 contentDescription，读屏焦点到达时能听出"默认引擎"——此前"哪个是默认"只有视觉表达
+         （2026-10-02 外部审查报告 6 的可访问性项）。 -->
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/imgCheck"
         android:layout_width="20dp"
         android:layout_height="20dp"
+        android:contentDescription="@string/a11y_default_engine"
         android:src="@drawable/ic_check"
         app:tint="?attr/colorPrimary"
         android:visibility="invisible" />

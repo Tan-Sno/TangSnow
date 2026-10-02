@@ -127,6 +127,7 @@
 
     <!-- 引擎管理 -->
     <string name="engine_manager_title">搜索引擎</string>
+    <string name="a11y_default_engine">默认引擎</string>
     <string name="engine_settings_help">选择默认搜索引擎；长按自定义项可删除；点击下方按钮可添加自定义搜索（用 {q} 代表关键词）</string>
     <string name="engine_add_title">添加自定义引擎</string>
     <string name="engine_name_hint">名称（如：我的搜索）</string>
