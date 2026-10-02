@@ -863,7 +863,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // MainActivity 实例**时才销毁会话 —— 双实例场景下先创建的实例只是被压到栈下，
         // 用户返回时还要继续用它，不能因为另一个实例结束就被连带关停。
         val lastHost = if (::sessionManager.isInitialized) sessionManager.hostDetached() else false
-        if (isFinishing && lastHost) {
+        // `!exiting`：performExit 一旦接管，关停的**顺序**就由它负责 —— 「退出并清除」那条路
+        // 必须先等内核 `clearData` 往返结束才 shutdown（先关内核会把清理踩断，承诺就失效了）。
+        // 这里抢跑就是把它踩断：用户点了「退出并清除」，界面一退、内核被拆，数据只清了一半。
+        // 两条退出路径都会自己调 shutdown()（不清除的那条在 performExit 内、清除的那条在清完之后），
+        // 故这里跳过不会漏关停。
+        if (isFinishing && lastHost && !exiting) {
             detachActiveSession()
             sessionManager.shutdown()
         }
