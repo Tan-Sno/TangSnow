@@ -165,8 +165,12 @@ interface PromptHandler {
      * <input type=date/time/datetime-local/month/week>：done(格式化串) 或 done(null)=取消。
      * [type] 为 [GeckoSession.PromptDelegate.DateTimePrompt.Type] 常量，仅用于界面决定
      * 日期/时间控件与字符串格式；内核 confirm 只收格式化后的字符串（本版本 confirm(String) 不带 type）。
+     * [min] / [max]：页面给的取值范围（`DateTimePrompt.minValue/maxValue`，**可为空**）——
+     * 必须透传给界面：不设边界时用户能选出界值，页面随后静默丢弃（外部审查 P4-14）。
+     * 格式与 [defaultValue] 同形（date 为 `yyyy-MM-dd`、datetime-local 为 `yyyy-MM-ddTHH:mm`），
+     * 解析失败一律按「无边界」处理。
      */
-    fun onDateTimePrompt(type: Int, defaultValue: String, done: (String?) -> Unit)
+    fun onDateTimePrompt(type: Int, defaultValue: String, min: String?, max: String?, done: (String?) -> Unit)
     /**
      * window.open 弹出窗口请求：[PopupAnswer] 三态。
      * 内核区分「明确拒绝(confirm DENY)」与「用户关闭(dismiss)」——取消（未选择）按
@@ -1317,7 +1321,12 @@ prefs:
                     if (promptStale(tab, result, prompt)) return@post
                     val h = promptHandler
                     if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onDateTimePrompt(type, prompt.defaultValue.orEmpty()) { value ->
+                    else h.onDateTimePrompt(
+                        type,
+                        prompt.defaultValue.orEmpty(),
+                        prompt.minValue,
+                        prompt.maxValue,
+                    ) { value ->
                         // DateTimePrompt.confirm(String) 只收格式化串；type 仅供界面决定控件
                         settleResult(result, if (value == null) prompt.dismiss() else prompt.confirm(value))
                     }
