@@ -34,6 +34,14 @@ object BookmarkRepo {
         BrowserDb.get(ApplicationScope.context).insertBookmarks(items)
     }
 
+    /**
+     * 搜书签（带上限）。给地址栏联想用 —— 它只要前几条匹配，不该把整表读进内存再过滤
+     * （2026-10-02 外部审查报告 6 的 P4）。关键词由调用方预先 lowercase，与库内 `lower(...)` 对齐。
+     */
+    suspend fun search(query: String, limit: Int): List<Bookmark> = withContext(Dispatchers.IO) {
+        BrowserDb.get(ApplicationScope.context).searchBookmarks(query, limit)
+    }
+
     suspend fun list(): List<Bookmark> = withContext(Dispatchers.IO) {
         BrowserDb.get(ApplicationScope.context).allBookmarks()
     }

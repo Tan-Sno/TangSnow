@@ -113,7 +113,10 @@ class SuggestionsController(private val activity: MainActivity) {
             // 单侧读取失败不影响另一侧联想：静默降级为「这一类没有结果」
         }
         try {
-            BookmarkRepo.list().forEach { consider(it.title, it.url) }
+            // ⚠️ 走**带上限的查询**而不是 `list()` 全表读（2026-10-02 外部审查报告 6 的 P4）：
+            // 书签可导入（单次 1000 条、可多次），而联想最终只取 4 条 ⇒ 下推到 SQL 里过滤+限条。
+            // 上限取 [BOOKMARK_QUERY_LIMIT]（略大于最终 take(4)，给"与历史去重"留余量）。
+            BookmarkRepo.search(kw, BOOKMARK_QUERY_LIMIT).forEach { consider(it.title, it.url) }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Throwable) {
@@ -196,6 +199,8 @@ class SuggestionsController(private val activity: MainActivity) {
     }
 
     private companion object {
+        /** 书签侧查询上限：比最终 `take(4)` 略大，给"与历史去重"留余量，避免去重后凑不满 4 条 */
+        const val BOOKMARK_QUERY_LIMIT = 8
         /** 输入停手后到真正查库的等待时长（与 FindBarController 的 250ms 同款） */
         const val DEBOUNCE_MS = 250L
     }

@@ -181,6 +181,34 @@ class BrowserDb private constructor(context: Context) :
         db().delete("bookmarks", "url = ?", arrayOf(url))
     }
 
+    /**
+     * 按关键词搜书签，**带上限**（2026-10-02 外部审查报告 6 的 P4：联想此前读全表再在内存里过滤）。
+     * 书签是可导入的（单次上限 1000 条、可多次导入）⇒ 每次输入都全表读 + 建 List + 全量 contains
+     * 是实打实的浪费，而联想只最终取 4 条。
+     *
+     * 语义与调用方原来的内存过滤保持一致：**url 或 title 包含关键词**（不区分大小写 —— 关键词由调用方
+     * 预先 lower，这里对列做 lower）。`%` / `_` / `\` 按字面处理（`ESCAPE '\'`），与内存态
+     * `contains` 的字面语义对齐，不会把用户输入的 `%` 当通配符。
+     */
+    fun searchBookmarks(query: String, limit: Int): List<Bookmark> {
+        val like = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        return db().query(
+            "bookmarks", null,
+            "lower(url) LIKE ? ESCAPE '\\' OR lower(ifnull(title,'')) LIKE ? ESCAPE '\\'",
+            arrayOf(like, like), null, null, "created_at DESC", "$limit"
+        ).use { c ->
+            // 与 allBookmarks() 同一读法（列序一致）；此处不抽公共函数，避免为两处调用改公开面
+            val out = ArrayList<Bookmark>(c.count)
+            while (c.moveToNext()) {
+                out += Bookmark(
+                    id = c.getLong(0), url = c.getString(1),
+                    title = c.getString(2), createdAt = c.getLong(3),
+                )
+            }
+            return out
+        }
+    }
+
     fun allBookmarks(): List<Bookmark> {
         db().query("bookmarks", null, null, null, null, null, "created_at DESC").use { c ->
             val out = ArrayList<Bookmark>(c.count)
