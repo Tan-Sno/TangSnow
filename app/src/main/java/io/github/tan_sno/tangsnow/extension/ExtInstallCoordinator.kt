@@ -185,10 +185,13 @@ class ExtInstallCoordinator(
                     // 宿主 Activity 若恰在销毁，回调里碰 view 会抛，逃逸出 launch 就是崩溃。
                     // ⚠️ 而 `deliverOnMain` 自身**不包** runCatching（2026-10-02 外部审查 P2 澄清：KDoc
                     // 曾声称"带一次性投递闸"，代码里并没有），所以这个 runCatching 必须留在这里。
-                    // ⚠️ **必须再套 `NonCancellable`**：总超时已经取消了本协程，而 `deliverOnMain` 内层的
-                    // `withContext(Dispatchers.Main)` 在 Job 已取消时会**立即抛 CE、块体根本不执行**
-                    // ⇒ 这条 `onFailure` 曾**永不投递**：页面卡在「安装中…」直到 onResume 自愈，
-                    // 且丢掉「总预算耗尽」的归因，与「失败/超时 100% 通过看门狗反馈」的承诺相冲突。
+                    // ⚠️ **必须再套 `NonCancellable`**（2026-10-02 复核修正此注释的前提）：
+                    // 总超时**并不会**取消本协程——`withTimeout` 只取消它自己的子 TimeoutCoroutine，
+                    // TCE 抛到这个 catch 时外层 Job 仍活跃，普适路径上 `withContext(Main)` 照常执行。
+                    // NonCancellable 真正堵的是**竞态**：TCE 触发之后、主线程投递执行之前，宿主销毁的
+                    // `cancelAll()` 把本作业取消掉——那一刻 `withContext(Main)` 才会抛 CE、投递丢失
+                    // （页面卡「安装中…」直到 onResume 自愈，且丢掉「总预算耗尽」的归因）。
+                    // 外层的 `catch (e: CancellationException)` 挡不住它：那是宿主主动取消，不是超时。
                     deliverOnMain(source.key) {
                         withContext(kotlinx.coroutines.NonCancellable) {
                             runCatching { cb.onFailure(source, InstallTimeoutException(Stage.TOTAL)) }
@@ -249,6 +252,11 @@ class ExtInstallCoordinator(
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             deliveringKeys.remove(key)
+            // 闸也要一并撤销：走到这里说明投递**没有发生**（取消打在 withContext 的挂起点上，
+            // 块体未执行）。不清的话，这个 key 的闸永远闸着——直到同 key 的下一次安装才被
+            // install() 的登记清掉；对「取消后才重试」的正常路径，那是一次会被静默吞掉的投递
+            // （外部审查 P4：deliveredKeys 无界增长的同根问题）。
+            deliveredKeys.remove(key)
             throw e
         }
     }
