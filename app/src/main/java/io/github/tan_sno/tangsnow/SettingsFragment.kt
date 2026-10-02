@@ -23,7 +23,9 @@ import io.github.tan_sno.tangsnow.data.ThemeController
 import io.github.tan_sno.tangsnow.update.UpdateChecker
 import io.github.tan_sno.tangsnow.ui.DialogTracker
 import io.github.tan_sno.tangsnow.util.warmUpFirstRows
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 设置面板：把偏好变化按行为分类绑定。
@@ -439,10 +441,17 @@ class SettingsFragment : PreferenceFragmentCompat() {
         val ctx = ApplicationScope.context
         ApplicationScope.scope.launch {
             val result = ClearDataUseCase.clear(ctx, options)
-            if (isAdded && view != null) {
-                ctx.toast(outcomeMessage(result))
-            } else {
-                ClearDataUseCase.rememberOutcome(result)
+            // ⚠️ 结果处理必须回主线程，而且**不只是为了 toast**：
+            //  · `toast` 是裸 `Toast.makeText(...).show()`（不解到主线程），在 IO 线程上会抛
+            //    「Can't toast on a thread that has not called Looper.prepare()」；
+            //  · `isAdded` / `view` 本身也只有主线程读才安全。
+            // 两者都留在 IO 线程 = 清完数据就闪退，故整段搬到 Main（与 MainActivity 的退出清除同款）。
+            withContext(Dispatchers.Main) {
+                if (isAdded && view != null) {
+                    ctx.toast(outcomeMessage(result))
+                } else {
+                    ClearDataUseCase.rememberOutcome(result)
+                }
             }
         }
     }
