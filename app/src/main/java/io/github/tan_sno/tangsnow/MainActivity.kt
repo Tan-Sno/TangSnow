@@ -757,6 +757,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         super.onNewIntent(intent)
         // 同步当前 intent，后续任何地方再读 getIntent() 拿到的都是最新值
         setIntent(intent)
+        // 与 onStart/onResume 同一款结构性守卫（f7dd7dd 的标准）：同意门禁实例没有
+        // 会话管理器，handleIntent 里的导航全要摸它。今天该路径靠「finishing 的实例
+        // 不再收到 onNewIntent」这一框架行为兜着，这里把不变量写成显式的。
+        if (!::sessionManager.isInitialized || !::binding.isInitialized) return
         handleIntent(intent)
     }
 
@@ -969,6 +973,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     }
 
     private fun enterPipIfMediaPlaying() {
+        // 结构性守卫（同 onStart/onResume/onNewIntent）：门禁实例没有会话管理器
+        if (!::sessionManager.isInitialized) return
         // 不再有 SDK_INT 版本判断：本应用 minSdk = 26，画中画所需 API（24）必然可用，
         // 原 `SDK_INT < O` 判断永远为假（lint: ObsoleteSdkInt 已确认）。真正需要判断的是
         // **设备是否具备画中画特性** —— 部分设备（含某些定制 ROM / 车机 / 电视）虽 API 达标
@@ -2262,6 +2268,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     /**
      * 真正执行下载：一律优先消费内核响应流；**只有内核没给响应体时**才退回系统下载器。
+     *
+     * ⚠️ 跑在**本实例的 lifecycleScope** 上，配置变更（切主题/语言）会取消它：占位行被清、
+     * 响应流关闭，用户点过「下载」的这次请求静默消失（外部审查 P4 记录的取舍）。不把它
+     * 挪去进程级的理由：下载体内嵌 toast 与 prefs 写入都假定界面在场，进程级会让「转正
+     * 失败」这类交互失去落点；而配置变更恰逢下载确认后的窗口极窄。若将来要修，方向是
+     * 进程级作用域 + 完成后经 pendingOutcome 式补报（与 ClearDataUseCase 同款）。
      *
      * 为什么**不再**按体积路由到系统下载器（2026-09-26 审查撤销）：CL 已知的
      * 登录态大附件（NAS / 私有云场景）交系统下载器二次 GET 时没有 Cookie，

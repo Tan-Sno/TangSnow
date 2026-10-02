@@ -124,50 +124,60 @@ class ScanImageActivity : CaptureActivity() {
     private fun decode(uri: android.net.Uri): String? {
         lastDecodeOutOfMemory = false
         lastDecodeUnreadable = false
+        // 第一步：把**图片载入**与**码点解码**分开——载入失败（流打不开 / 损坏 / 格式不支持）
+        // 属「读不出图」；载入成功但 zxing 不认属「图里没有码」。此前混在一个宽 catch 里，
+        // `openInputStream` 抛的 FileNotFound 等会被误报成「图里没有码」（外部审查 P4）。
+        val bmp = try {
+            io.github.tan_sno.tangsnow.util.Bitmaps.decodeSampled(contentResolver, uri, 1600, 1600)
+        } catch (e: OutOfMemoryError) {
+            lastDecodeOutOfMemory = true
+            return null
+        } catch (_: Throwable) {
+            // 流打不开（云端文档未落地 / 文件已被删）/ 解码器拒绝
+            lastDecodeUnreadable = true
+            return null
+        }
+        if (bmp == null) {
+            // 读不出图（损坏 / 格式不受支持）：与「读出来了但没码」分开归因
+            lastDecodeUnreadable = true
+            return null
+        }
+        // CR-010：位图用完必须回收 —— 1600×1600 的 ARGB_8888 约 10 MB，此前靠 GC 才释放，
+        // 内存峰值被无谓抬高。`try/finally` 保证任何早退路径（宽高非法、解码失败）都回收到。
         return try {
-            val bmp = io.github.tan_sno.tangsnow.util.Bitmaps.decodeSampled(contentResolver, uri, 1600, 1600)
-            if (bmp == null) {
-                // 读不出图（损坏 / 格式不受支持）：与「读出来了但没码」分开归因
-                lastDecodeUnreadable = true
+            val w = bmp.width
+            val h = bmp.height
+            if (w <= 0 || h <= 0) {
                 null
             } else {
-                // CR-010：位图用完必须回收 —— 1600×1600 的 ARGB_8888 约 10 MB，此前靠 GC 才释放，
-                // 内存峰值被无谓抬高。`try/finally` 保证任何早退路径（宽高非法、解码失败）都回收到。
-                try {
-                    val w = bmp.width
-                    val h = bmp.height
-                    if (w <= 0 || h <= 0) {
-                        null
-                    } else {
-                        val pixels = IntArray(w * h)
-                        bmp.getPixels(pixels, 0, w, 0, 0, w, h)
-                        val reader = com.google.zxing.MultiFormatReader()
-                        reader.setHints(
-                            mapOf(
-                                com.google.zxing.DecodeHintType.POSSIBLE_FORMATS to
-                                    listOf(com.google.zxing.BarcodeFormat.QR_CODE),
-                                com.google.zxing.DecodeHintType.TRY_HARDER to true,
-                            )
-                        )
-                        val source = com.google.zxing.RGBLuminanceSource(w, h, pixels)
-                        reader.decodeWithState(
-                            com.google.zxing.BinaryBitmap(
-                                com.google.zxing.common.HybridBinarizer(source)
-                            )
-                        ).text
-                    }
-                } finally {
-                    // CR-010：位图用完立刻回收（1600² ARGB_8888 ≈ 10 MB），不靠 GC；
-                    // try/finally 保证任何早退路径（宽高非法、解码抛异常）都会回收。
-                    runCatching { bmp.recycle() }
-                }
+                val pixels = IntArray(w * h)
+                bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+                val reader = com.google.zxing.MultiFormatReader()
+                reader.setHints(
+                    mapOf(
+                        com.google.zxing.DecodeHintType.POSSIBLE_FORMATS to
+                            listOf(com.google.zxing.BarcodeFormat.QR_CODE),
+                        com.google.zxing.DecodeHintType.TRY_HARDER to true,
+                    )
+                )
+                val source = com.google.zxing.RGBLuminanceSource(w, h, pixels)
+                reader.decodeWithState(
+                    com.google.zxing.BinaryBitmap(
+                        com.google.zxing.common.HybridBinarizer(source)
+                    )
+                ).text
             }
         } catch (_: OutOfMemoryError) {
-            // 与"没找到二维码"分开（见 [lastDecodeOutOfMemory] 的说明）
             lastDecodeOutOfMemory = true
             null
         } catch (_: Throwable) {
+            // 载入成功但认不出码（含 zxing 的 NotFoundException 等）=「图里没有码」，
+            // **不**置 unreadable——那会把正常否定误报成「图片损坏」
             null
+        } finally {
+            // CR-010：位图用完立刻回收（1600² ARGB_8888 ≈ 10 MB），不靠 GC；
+            // try/finally 保证任何早退路径（宽高非法、解码抛异常）都会回收。
+            runCatching { bmp.recycle() }
         }
     }
 

@@ -157,50 +157,82 @@ class ExtInstallCoordinator(
      * 回调一律在主线程投递；**成功与失败必然恰好回调一次**。
      */
     fun install(source: Source, controller: WebExtensionController, cb: Callback): Boolean {
-        if (isWorking(source.key)) {
-            return false
-        }
-        // LAZY 启动：先登记 job 再启动，避免协程体在登记前跑完而留下残留条目
-        val startedAt = android.os.SystemClock.elapsedRealtime()
-        val job = scope.launch(start = CoroutineStart.LAZY) {
-            try {
-                withTimeout(TOTAL_TIMEOUT_MS) {
-                    onDone(source, cb, performInstall(source, controller, cb))
-                }
-            } catch (e: TimeoutCancellationException) {
-                // 总预算耗尽 = **兜底**（每一步都有独立上限，正常情况下跑不到这里）
-                settle(source.key, coroutineContext[Job])
-                // 与 onDone 同口径（runCatching）：UI 回调自身异常不得逃逸出协程 ——
-                // 宿主 Activity 若恰在销毁，回调里碰 view 会抛，逃逸出 launch 就是崩溃
-                withContext(Dispatchers.Main) {
-                    runCatching { cb.onFailure(source, InstallTimeoutException(Stage.TOTAL)) }
-                }
-            } catch (e: CancellationException) {
-                // 宿主销毁：静默收尾（孤儿态由列表页 onResume 的自愈逻辑清理）
-                settle(source.key, coroutineContext[Job])
-                throw e
-            } catch (e: Throwable) {
-                settle(source.key, coroutineContext[Job])
-                withContext(Dispatchers.Main) { runCatching { cb.onFailure(source, e) } }
+        // ⚠️ 必须在**主线程**调用（当前三个调用点都是主线程点击回调；约束成文而非靠自律——
+        // jobs 是进程级表，将来从非主线程调这里，下面的「查重→登记」就需要真正的互斥）。
+        // 「查重→登记」与 jobs 表同一把锁：两步之间存在登记窗口，并发同 key 会双双通过检查、
+        // 后登记覆盖先登记（纵深防御，非修现实竞态）。
+        synchronized(jobs) {
+            if (isWorking(source.key)) {
+                return false
             }
+            // LAZY 启动：先登记 job 再启动，避免协程体在登记前跑完而留下残留条目
+            //（安装起点的可见时间戳记在 ExtensionsActivity 侧的 ExtensionCatalog.installStartedAt）
+            val job = scope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    withTimeout(TOTAL_TIMEOUT_MS) {
+                        onDone(source, cb, performInstall(source, controller, cb))
+                    }
+                } catch (e: TimeoutCancellationException) {
+                    // 总预算耗尽 = **兜底**（每一步都有独立上限，正常情况下跑不到这里）
+                    settle(source.key, coroutineContext[Job])
+                    // 与 onDone 同口径（runCatching）：UI 回调自身异常不得逃逸出协程 ——
+                    // 宿主 Activity 若恰在销毁，回调里碰 view 会抛，逃逸出 launch 就是崩溃
+                    deliverOnMain(source.key) {
+                        cb.onFailure(source, InstallTimeoutException(Stage.TOTAL))
+                    }
+                } catch (e: CancellationException) {
+                    // 宿主销毁：静默收尾（孤儿态由列表页 onResume 的自愈逻辑清理）
+                    settle(source.key, coroutineContext[Job])
+                    throw e
+                } catch (e: Throwable) {
+                    settle(source.key, coroutineContext[Job])
+                    deliverOnMain(source.key) { cb.onFailure(source, e) }
+                }
+            }
+            // ⚠️ 上面三处传的是 `coroutineContext[Job]`（即本协程自身的 Job），**不能**写成
+            // 外层的 `job` —— `job` 正在由这条 launch 的返回值初始化，在它自己的 lambda 里
+            // 引用不到（Unresolved reference）。而 `launch` 的 block 接收者是 CoroutineScope，
+            // 其 coroutineContext 里的 Job 就是这个协程的 Job，与 `job` 是同一个对象。
+            jobs[source.key] = job
+            job.start()
         }
-        // ⚠️ 上面三处传的是 `coroutineContext[Job]`（即本协程自身的 Job），**不能**写成
-        // 外层的 `job` —— `job` 正在由这条 launch 的返回值初始化，在它自己的 lambda 里
-        // 引用不到（Unresolved reference）。而 `launch` 的 block 接收者是 CoroutineScope，
-        // 其 coroutineContext 里的 Job 就是这个协程的 Job，与 `job` 是同一个对象。
-        jobs[source.key] = job
-        job.start()
         return true
     }
+
+    /**
+     * 标记「结果投递中」→ 主线程投递 → 解除标记。
+     *
+     * 为什么要有这个标记：[settle]（作业摘除）与主线程投递之间隔着一次主循环派发，宿主
+     * `onResume` 的孤儿自愈若恰在窗口里跑，会把已成功/已失败的安装误判成「被中断」。
+     * 投递前登记、投递后（含取消/异常）解除，自愈侧跳过 delivering 的键。
+     */
+    private val deliveringKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    private suspend fun deliverOnMain(key: String, deliver: () -> Unit) {
+        deliveringKeys.add(key)
+        try {
+            withContext(Dispatchers.Main) {
+                try {
+                    deliver()
+                } finally {
+                    deliveringKeys.remove(key)
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            deliveringKeys.remove(key)
+            throw e
+        }
+    }
+
+    /** 自愈清理侧用：该键的结果正在投递中，不要当「孤儿」清理 */
+    fun isDelivering(key: String): Boolean = deliveringKeys.contains(key)
 
     /** 一次安装的终态收口：摘除作业记录 + 投递结果。带**一次性投递闸**保证 onSuccess/onFailure 恰好一次。 */
     private suspend fun onDone(source: Source, cb: Callback, ext: WebExtension?) {
         // 在协程体内调用，job 即「本作业自身」，走无身份比对的兜底收口
         settle(source.key)
         // 一次性投递闸：UI 回调自身异常不得改变安装结果、不得触发外层 catch
-        withContext(Dispatchers.Main) {
-            runCatching { cb.onSuccess(source, ext) }
-        }
+        deliverOnMain(source.key) { cb.onSuccess(source, ext) }
     }
 
     /** 宿主销毁时调用：取消全部在途安装 */

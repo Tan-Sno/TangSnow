@@ -69,7 +69,34 @@ internal class PrintPdfAdapter(
         // 此前恒传 true：那等于每次都告诉框架「布局变了、请重新布局」，会让框架
         // 反复重排、并可能取消正在进行的写入 —— 表现为打印界面出现「已取消」而
         // 用户并没有取消。
-        callback.onLayoutFinished(info, oldAttributes != newAttributes)
+        // ⚠️ 必须用**值比较**：`PrintAttributes` 未重写 `equals`，`!=` 是引用比较——
+        // 框架复用同一实例时恒 false、每次新建实例时恒 true，两种都与「是否真的变了」无关
+        // （外部审查 P4：注释与实现不符，这里把语义做实）。
+        callback.onLayoutFinished(info, printAttributesChanged(oldAttributes, newAttributes))
+    }
+
+    /** 逐字段比较打印属性（框架类未重写 `equals`，只能自己比）。任一字段不同即视为变化 */
+    private fun printAttributesChanged(a: PrintAttributes?, b: PrintAttributes?): Boolean {
+        if (a == null || b == null) return a != b
+        val am = a.mediaSize
+        val bm = b.mediaSize
+        if (am?.id != bm?.id ||
+            am?.widthMils != bm?.widthMils ||
+            am?.heightMils != bm?.heightMils
+        ) return true
+        val ar = a.resolution
+        val br = b.resolution
+        // Resolution 只有 id 是稳定标识（自定义分辨率 id 为 null，此时视为未变——
+        // 本适配器的「变化」标志是建议性的，取保守口径）
+        if (ar?.id != br?.id) return true
+        val amn = a.minMargins
+        val bmn = b.minMargins
+        if (amn?.leftMils != bmn?.leftMils ||
+            amn?.rightMils != bmn?.rightMils ||
+            amn?.topMils != bmn?.topMils ||
+            amn?.bottomMils != bmn?.bottomMils
+        ) return true
+        return a.colorMode != b.colorMode || a.duplexMode != b.duplexMode
     }
 
     override fun onWrite(

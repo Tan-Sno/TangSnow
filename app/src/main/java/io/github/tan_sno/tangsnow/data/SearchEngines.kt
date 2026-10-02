@@ -103,6 +103,8 @@ object SearchEngines {
     /** 内置 + 用户自定义（自定义在前置导入时计算 id 后接在其后） */
     fun all(prefs: PreferenceStore): List<SearchEngine> {
         val customs = prefs.customEngines
+            // id 按**存储位置**分配：不能因为坏条目被剔除而前移——前移会让已保存的
+            // searchEngineId 悄悄指到另一个引擎（外部审查 P4，读侧复检引入的连带）。
             .mapIndexed { i, ce ->
                 SearchEngine(
                     id = "$CUSTOM_ID_PREFIX$i",
@@ -111,6 +113,10 @@ object SearchEngines {
                     isCustom = true,
                 )
             }
+            // 读侧安全边界（与写入侧 isHttpTemplate 同口径）：陈旧值或手工改坏的 prefs 里
+            // 若塞进非 http(s) 模板，不能成为导航目标。**在 id 分配之后**过滤——
+            // 若把过滤放在 PreferenceStore.parseEngines 里，就会产生上面的前移问题。
+            .filter { PreferenceStore.isHttpTemplate(it.template) }
         return builtins + customs
     }
 

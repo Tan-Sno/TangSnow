@@ -647,13 +647,20 @@ class WebPrompts(
         val dateDialog = DatePickerDialog(activity, dateListener, ld.year, ld.monthValue - 1, ld.dayOfMonth)
         // 页面给的 min/max 必须落到选择器上（外部审查 P4-14）：不设边界用户就能选出界值，页面随后
         // 静默丢弃 —— 界面上看不出"选错了"，只看到页面不认。端点取当天零点（本地时区）。
+        // ⚠️ min 用「周期首日」、max 用「周期末日」：MONTH 的 max=2026-09 允许整个九月，
+        // 若 maxDate 取 9 月 1 日零点，按日粒度比较会把 9 月 2 日起全部禁选（N4，2026-10-02）。
         parseDateByType(min.orEmpty(), type)?.let {
             dateDialog.datePicker.minDate =
                 it.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
-        parseDateByType(max.orEmpty(), type)?.let {
+        parseDateByType(max.orEmpty(), type)?.let { rawMax ->
+            val lastDay = when (type) {
+                DT_TYPE_MONTH -> rawMax.withDayOfMonth(rawMax.lengthOfMonth())
+                DT_TYPE_WEEK -> rawMax.plusDays(6) // parseDateByType 给的是该周周一
+                else -> rawMax
+            }
             dateDialog.datePicker.maxDate =
-                it.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                lastDay.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
         dateDialog.setOnCancelListener { once(null) }
         tracked(dateDialog)

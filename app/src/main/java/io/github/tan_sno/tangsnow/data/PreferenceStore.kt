@@ -329,11 +329,11 @@ class PreferenceStore(context: Context) {
             val arr = JSONArray(json)
             (0 until arr.length()).mapNotNull { i ->
                 val o = arr.optJSONObject(i) ?: return@mapNotNull null
-                val template = o.optString("template")
-                // 读侧复检：写入侧（addCustomEngine）已校验，但这里再验一次 —— 陈旧值或手工改坏的
-                // prefs 里若塞进非 http(s) 模板，它会成为一次**导航的目标**（安全边界，同写入侧口径）。
-                if (!isHttpTemplate(template)) return@mapNotNull null
-                CustomEngine(o.optString("name"), template)
+                // ⚠️ 这里**不做** isHttpTemplate 复检（2026-10-02 N9 修正 91438ae 的写法）：
+                // 在这一步剔除坏条目会让 custom_N 下标整体前移，已保存的 searchEngineId
+                // 悄悄指到另一个引擎。安全边界改由 [SearchEngines.all] 在 **id 分配之后**
+                // 按模板过滤实现——导航目标拦得住，id 又保持位置稳定。
+                CustomEngine(o.optString("name"), o.optString("template"))
             }
         } catch (e: Exception) {
             emptyList()
