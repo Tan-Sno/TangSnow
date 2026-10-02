@@ -90,8 +90,14 @@ class ScanImageActivity : CaptureActivity() {
             val text = withContext(Dispatchers.IO) { decode(uri) }
             if (isFinishing || isDestroyed) return@launch
             if (text == null) {
-                // 如实归因：内存不足 ≠ 图里没有码
-                toast(if (lastDecodeOutOfMemory) R.string.scan_image_too_large else R.string.scan_no_qr_found)
+                // 如实归因：内存不足 ≠ 图读不出来 ≠ 图里没有码 —— 三者给三种提示
+                toast(
+                    when {
+                        lastDecodeOutOfMemory -> R.string.scan_image_too_large
+                        lastDecodeUnreadable -> R.string.scan_image_unreadable
+                        else -> R.string.scan_no_qr_found
+                    }
+                )
             } else {
                 returnResult(text)
             }
@@ -107,11 +113,22 @@ class ScanImageActivity : CaptureActivity() {
     @Volatile
     private var lastDecodeOutOfMemory = false
 
+    /**
+     * 上一次 [decode] 是否**读不出图**（文件损坏 / 格式不受支持）。
+     * 与 [lastDecodeOutOfMemory] 同型：`decode` 的 `null` 是二义的（读不出图 vs 读出来了但没码），
+     * 不分清楚就会把「图片损坏」报成「图里没有码」，用户反复换图重试（2026-10-02 外部审查 P4-17）。
+     */
+    @Volatile
+    private var lastDecodeUnreadable = false
+
     private fun decode(uri: android.net.Uri): String? {
         lastDecodeOutOfMemory = false
+        lastDecodeUnreadable = false
         return try {
             val bmp = io.github.tan_sno.tangsnow.util.Bitmaps.decodeSampled(contentResolver, uri, 1600, 1600)
             if (bmp == null) {
+                // 读不出图（损坏 / 格式不受支持）：与「读出来了但没码」分开归因
+                lastDecodeUnreadable = true
                 null
             } else {
                 // CR-010：位图用完必须回收 —— 1600×1600 的 ARGB_8888 约 10 MB，此前靠 GC 才释放，

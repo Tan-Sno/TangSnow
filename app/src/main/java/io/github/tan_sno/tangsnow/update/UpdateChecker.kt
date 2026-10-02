@@ -83,7 +83,12 @@ object UpdateChecker {
      */
     suspend fun fetchLatest(supportedAbis: List<String>): Release? = withContext(Dispatchers.IO) {
         try {
-            val req = AppHttp.get(LATEST_RELEASE_API, acceptJson = true).build()
+            // ⚠️ 刻意**不**加 `Accept: application/json`（不传 acceptJson）：政策 §4 对本端点写的是
+            // 「会附带本应用版本号（User-Agent）与设备语言偏好（Accept-Language），**除此之外不发送
+            // 其它信息**」—— 多一个头就是与对外承诺的字面出入（2026-10-02 外部审查 P4-23）。
+            // 去掉它是安全的：实测不带该头时 api.github.com 仍返回 `application/json`（HTTP 200）。
+            // 该端点本就只读公开数据，少发一个客户端能力提示也符合本应用的隐私取向。
+            val req = AppHttp.get(LATEST_RELEASE_API).build()
             AppHttp.client.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null
                 val json = JSONObject(resp.body.string())
