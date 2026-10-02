@@ -261,8 +261,21 @@ class ExtInstallCoordinator(
                 val call = client.newCall(AppHttp.get(url).build())
                 // 把协程取消接上 OkHttp 的 Call：cancelAll()/总超时只 cancel 协程，打不断
                 // 阻塞式 execute() —— 宿主销毁后下载仍会跑满 callTimeout，回调闭包把已销毁的
-                // Activity 一直拴到网络超时才放。invokeOnCompletion 在完成/取消/失败时都会
-                // 触发；正常完成后 cancel() 是无害空转。
+                // Activity 一直拴到网络超时才放。
+                //
+                // ⚠️ **这一行其实没起到那个作用**（2026-10-02 实测更正，勿再照字面理解）：
+                // 1 参 `invokeOnCompletion` 注册的是 `InvokeOnCompletion` 节点，其 `onCancelling`
+                // 恒为 false（javap：iconst_0）⇒ 只在 Job 到达**终态**时触发；而协程体正阻塞在
+                // execute() 上，终态要等这次调用自己返回 ⇒ 取消传不到 call.cancel()。
+                // 公开 API 也**没有**现成替代：`Job.invokeOnCompletion(Boolean, Boolean, handler)`
+                // 在 coroutines 1.10.2 已标 `@InternalCoroutinesApi`，写成
+                // `invokeOnCompletion(onCancelling = true, invokeImmediately = true)` 或
+                // `invokeOnCompletion(true, true)` 均编译失败（报 "internal kotlinx.coroutines API"）。
+                // 正解是改用 `enqueue` + `suspendCancellableCoroutine`（公开 API，取消时真能断链），
+                // 属网络路径重构、**需真机联网验证**才可落 —— 见 STATUS.md 待办，本轮只把事实写准。
+                //
+                // 取消的**可观察点**在下面：catch 会把 execute() 抛的 IOException 按
+                // `isActive == false` 转成 CancellationException，所以结果不会错，只是迟到 ≤45s。
                 coroutineContext[Job]?.invokeOnCompletion { call.cancel() }
                 call.execute().use { resp ->
                     if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
