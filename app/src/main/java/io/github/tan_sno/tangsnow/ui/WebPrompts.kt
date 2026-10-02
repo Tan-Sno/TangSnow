@@ -570,7 +570,6 @@ class WebPrompts(
             if (!called) { called = true; done(v) }
         }
         val dateType = type == DT_TYPE_DATE || type == DT_TYPE_MONTH || type == DT_TYPE_WEEK || type == DT_TYPE_DATETIME_LOCAL
-        val timeType = type == DT_TYPE_TIME || type == DT_TYPE_DATETIME_LOCAL
 
         /** 按 [type] 的形态解析日期；**解析不出来返回 null**（边界不该回落「今天」，那会让页面
          *  意外地把 min/max 变成"今天"）。MONTH 形态 `yyyy-MM`、WEEK 形态 ISO 周日期、
