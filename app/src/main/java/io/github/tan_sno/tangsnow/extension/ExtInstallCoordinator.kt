@@ -154,7 +154,13 @@ class ExtInstallCoordinator(
 
     /**
      * 发起一次安装。同一来源已在安装中时返回 `false`，调用方据此提示「正在进行中」。
-     * 回调一律在主线程投递；**成功与失败必然恰好回调一次**。
+     * 回调一律在主线程投递；**成功与失败必然恰好回调一次** —— 但这是**约定**，不是代码保证：
+     * `deliverOnMain` 里**没有**一次性投递闸（2026-10-02 外部审查 P2 指出此处 KDoc 曾声称"带一次性
+     * 投递闸"，代码里并不存在）。现状靠"每条路径只投一次"维持，已知薄弱点：常规投递路径上的 `cb.*`
+     * 未包 `runCatching`（仅超时分支包了）⇒ UI 回调自身抛异常会穿出 `deliverOnMain`、落到外层
+     * `catch (e: Throwable)` 再投一次 `onFailure`（界面会先报成功、再报失败）。当前三处回调体都做了
+     * 销毁守卫，故属**潜伏**而非现网可复现；已记待办：把闸做成真的（`AtomicBoolean` 或复用
+     * `ExtensionPrompts.Once` 的写法）。
      */
     fun install(source: Source, controller: WebExtensionController, cb: Callback): Boolean {
         // ⚠️ 必须在**主线程**调用（当前三个调用点都是主线程点击回调；约束成文而非靠自律——
@@ -176,9 +182,17 @@ class ExtInstallCoordinator(
                     // 总预算耗尽 = **兜底**（每一步都有独立上限，正常情况下跑不到这里）
                     settle(source.key, coroutineContext[Job])
                     // 与 onDone 同口径（runCatching）：UI 回调自身异常不得逃逸出协程 ——
-                    // 宿主 Activity 若恰在销毁，回调里碰 view 会抛，逃逸出 launch 就是崩溃
+                    // 宿主 Activity 若恰在销毁，回调里碰 view 会抛，逃逸出 launch 就是崩溃。
+                    // ⚠️ 而 `deliverOnMain` 自身**不包** runCatching（2026-10-02 外部审查 P2 澄清：KDoc
+                    // 曾声称"带一次性投递闸"，代码里并没有），所以这个 runCatching 必须留在这里。
+                    // ⚠️ **必须再套 `NonCancellable`**：总超时已经取消了本协程，而 `deliverOnMain` 内层的
+                    // `withContext(Dispatchers.Main)` 在 Job 已取消时会**立即抛 CE、块体根本不执行**
+                    // ⇒ 这条 `onFailure` 曾**永不投递**：页面卡在「安装中…」直到 onResume 自愈，
+                    // 且丢掉「总预算耗尽」的归因，与「失败/超时 100% 通过看门狗反馈」的承诺相冲突。
                     deliverOnMain(source.key) {
-                        cb.onFailure(source, InstallTimeoutException(Stage.TOTAL))
+                        withContext(kotlinx.coroutines.NonCancellable) {
+                            runCatching { cb.onFailure(source, InstallTimeoutException(Stage.TOTAL)) }
+                        }
                     }
                 } catch (e: CancellationException) {
                     // 宿主销毁：静默收尾（孤儿态由列表页 onResume 的自愈逻辑清理）
@@ -208,7 +222,7 @@ class ExtInstallCoordinator(
      */
     private val deliveringKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
-    private suspend fun deliverOnMain(key: String, deliver: () -> Unit) {
+    private suspend fun deliverOnMain(key: String, deliver: suspend () -> Unit) {
         deliveringKeys.add(key)
         try {
             withContext(Dispatchers.Main) {

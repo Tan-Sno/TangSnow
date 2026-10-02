@@ -133,9 +133,14 @@ class EngineSettingsActivity : AppCompatActivity() {
             .setMessage(getString(R.string.engine_delete_confirm, label))
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.dlg_ok) { _, _ ->
-                val index = engineList.indexOfFirst { it.id == engine.id }
-                val customIndex = index - SearchEngines.builtins.size
-                if (customIndex >= 0) {
+                // ⚠️ 必须从 **id** 反解存储下标，**不能**拿显示位置减内建数（2026-10-02 外部审查 P2）：
+                // `SearchEngines.all()` 会在**id 分配之后**过滤掉模板非 http(s) 的坏条目（见该处注释），
+                // 于是显示位置在有坏条目时整体前移 ⇒ 按位置算会**删掉另一个引擎**，而且删错了没人知道。
+                // id 本身就带存储下标（`custom_<i>`），`PreferenceStore.remapSelectedEngine` 正是这么解析的。
+                val customIndex = if (engine.isCustom) {
+                    engine.id.substringAfterLast('_').toIntOrNull()
+                } else null
+                if (customIndex != null) {
                     prefs.removeCustomEngine(customIndex)
                     refreshList()
                 }

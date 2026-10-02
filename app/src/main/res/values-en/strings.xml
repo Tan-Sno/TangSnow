@@ -374,6 +374,7 @@
     <string name="about_crash_view">View</string>
     <string name="about_crash_share">Share</string>
     <string name="about_crash_share_via">Share crash log via…</string>
+    <string name="about_crash_share_failed">Couldn\'t share the crash report. Please try again later</string>
     <string name="about_crash_delete">Delete</string>
     <string name="about_crash_delete_failed">Delete failed — the log is still on this device</string>
     <string name="about_crash_empty_file">(This log is empty)</string>
