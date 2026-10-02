@@ -8,8 +8,11 @@
     android:padding="6dp"
     android:background="?attr/selectableItemBackground">
 
+    <!-- 装饰性首字母头像：与紧邻的 tileLabel 内容重复，读屏不该多念一个字母
+         （2026-10-02 外部审查报告 6 的可访问性项） -->
     <TextView
         android:id="@+id/tileAvatar"
+        android:importantForAccessibility="no"
         android:layout_width="46dp"
         android:layout_height="46dp"
         android:gravity="center"
