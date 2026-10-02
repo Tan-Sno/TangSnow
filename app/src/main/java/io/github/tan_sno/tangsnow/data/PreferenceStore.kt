@@ -237,6 +237,15 @@ class PreferenceStore(context: Context) {
      * 带 JSON 解析缓存：`MainActivity.refreshHome()` 在**每次 onResume** 都会取一次，
      * 而每次访问都重解析 JSON 是纯浪费。缓存以「原始 JSON 字符串是否变化」为准，
      * 写入方（增删快捷方式）改了 JSON 即自动失效，无需手动清理 —— 与 customEngines 同一套写法。
+     *
+     * ⚠️ **这层缓存不是原子的，`@Volatile` 也修不了**：它是「JSON 串」与「解析结果」两个字段，
+     * 而 `@Volatile` 只保证**单个字段**的读写可见性，不能让两次读构成一个快照。
+     * 读侧顺序是「先取缓存值、再比 JSON 串」，写侧是「先写 JSON 串、再写缓存值」⇒
+     * 并发下仍可能命中「JSON 已更新、缓存还是旧的」那一格交错、返回过期列表。
+     * （2026-10-01 CR-014 以为「四个字段加 @Volatile」就消除了这个交错，实测并未。）
+     * 当前调用点都在主线程（`refreshHome` / 联想），实际不构成问题；
+     * 真要消除需把两者合成一个不可变 holder（`@Volatile var cache: Pair<String, List<…>>?`），
+     * 按本仓「不为不存在的并发改结构」未动 —— 若将来出现 IO 线程调用这两个 getter，先改这里。
      */
     val homeShortcuts: List<HomeShortcut>
         get() {
@@ -286,12 +295,9 @@ class PreferenceStore(context: Context) {
 
     // --------------------------------------------------------- 自定义搜索引擎
 
-    // ⚠️ 记忆化缓存的四个字段都要 @Volatile（2026-10-01 CR-014）：本类的 getter 可能被
-    // IO 线程（如主页图/快捷方式预热）与主线程同时调用，非 volatile 时可能读到"JSON 已更新、
-    // 解析结果还是旧的"这种交错。代价为零，故一律加上。
-    // （写成行注释而不是 KDoc：KDoc 必须**紧贴**它说明的字段，中间插注释会让它落单不进文档。）
-    /** 自定义搜索引擎列表（最多 [Companion.MAX_CUSTOM_ENGINES] 个）。
-     *  按原始 JSON 记忆化：地址栏联想/导航等高频路径不再每次重解析。 */
+    // ⚠️ 记忆化缓存的四个字段都要 @Volatile：getter 可能被 IO 线程与主线程同时调用。
+    // 但**光靠 @Volatile 并不能让「JSON 串 + 解析结果」这一对字段构成原子快照** ——
+    // 原理与后果见 [homeShortcuts] 的说明。
     @Volatile
     private var cachedEnginesJson: String? = null
     @Volatile
@@ -301,6 +307,12 @@ class PreferenceStore(context: Context) {
     @Volatile
     private var cachedShortcuts: List<HomeShortcut>? = null
 
+    /**
+     * 自定义搜索引擎列表（最多 [Companion.MAX_CUSTOM_ENGINES] 个）。
+     * 按原始 JSON 记忆化：地址栏联想/导航等高频路径不再每次重解析。
+     *
+     * ⚠️ 与 [homeShortcuts] 同款的两字段缓存，非原子；当前调用点都在主线程，实际不构成问题。
+     */
     val customEngines: List<CustomEngine>
         get() {
             val json = prefs.getString(KEY_CUSTOM_ENGINES, null)
