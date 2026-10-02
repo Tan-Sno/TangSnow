@@ -621,7 +621,13 @@ class ExtensionsActivity : AppCompatActivity() {
                 }
                 true
             } == true
-            if (!copied) return null
+            if (!copied) {
+                // ⚠️ 必须显式删：`return null` **不是**异常，不会触发下面的 catch，
+                // 而 `createTempFile` 早已把 0 字节的占位文件建出来了 —— 直接 return 会把它留在
+                // cacheDir/exts 里（只能等陈旧残包清理回收）。与下方两处 `out.delete()` 同口径。
+                out.delete()
+                return null
+            }
             val isZip = out.inputStream().use { ins ->
                 val head = ByteArray(2)
                 ins.read(head) == 2 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte()
