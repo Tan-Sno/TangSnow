@@ -696,6 +696,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             // Activity 重建：恢复到原有活动标签
             binding.geckoView.setSession(active.session)
             syncViewWithTab(active)
+            // ⚠️ 重建也要给慢路径一次机会（2026-10-02 外部审查 P3-10/#29）：慢路径跑在**进程级**作用域，
+            // 回来时若发现本实例已销毁就直接丢弃本次恢复 —— 配置变更恰好插在读盘中间时，这一次启动就
+            // 只剩那个占位标签（旧实例已经 `closeTab` 不到了，新实例原本根本不会补）。
+            // 这样补是**安全**的：`restoreSnapshotAsync` 自带最保守判据（仍然只有一个标签 + 它是活动
+            // 标签 + 它还没导航过），用户已有真实页面时它原地 no-op，绝不会顶掉用户自己开的页面。
+            if (prefs.sessionRestoreEnabled) restoreSnapshotAsync()
         }
         // ⚠️ 只在**首次创建**时处理入口 intent：重建（切主题/切语言/暗色切换等，
         //    uiMode 不在 configChanges 里）会带着**同一个 intent** 走到这里 ——
