@@ -289,12 +289,21 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun clearCurrentTab() {
         lifecycleScope.launch {
-            when (currentTab) {
-                TAB_HISTORY -> HistoryRepo.clear()
-                TAB_BOOKMARKS -> BookmarkRepo.clear()
-                else -> DownloadRepo.clearRecords(this@LibraryActivity)
+            // 结果如实反馈：清空失败**绝不**报「已清空」（本仓禁假反馈）。
+            // 取消要原样抛出，不能被下面那个宽 catch 当成"清空失败"。
+            val ok = try {
+                when (currentTab) {
+                    TAB_HISTORY -> HistoryRepo.clear()
+                    TAB_BOOKMARKS -> BookmarkRepo.clear()
+                    else -> DownloadRepo.clearRecords(this@LibraryActivity)
+                }
+                true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                false
             }
-            toast(R.string.toast_cleared)
+            toast(if (ok) R.string.toast_cleared else R.string.toast_data_clear_failed)
             refresh()
         }
     }
