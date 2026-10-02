@@ -113,10 +113,13 @@ class ExtensionsActivity : AppCompatActivity() {
     private fun pruneStaleInstalls(notifyInterrupted: Boolean = false) {
         val slugs = ExtensionCatalog.installing.toList()
         for (slug in slugs) {
-            // 作业表由协调器持有；本页新实例的作业表里不会有上个实例的条目
+            // 作业表由协调器持有；本页新实例的作业表里不会有上个实例的条目。
+            // ⚠️ isDelivering：settle（作业摘除）与主线程投递之间隔着一次主循环派发——
+            // 恰在这个窗口里跑 onResume 会把已成功/已失败的安装误判成「被中断」。
+            val key = ExtInstallCoordinator.catalogKey(slug)
             val resultPending =
-                runCatching { installCoordinator.isWorking(ExtInstallCoordinator.catalogKey(slug)) }
-                    .getOrDefault(false)
+                runCatching { installCoordinator.isWorking(key) }.getOrDefault(false) ||
+                    runCatching { installCoordinator.isDelivering(key) }.getOrDefault(false)
             val started = ExtensionCatalog.installStartedAt[slug]
             val tooOld = started == null ||
                 android.os.SystemClock.elapsedRealtime() - started > STALE_PRUNE_MS
@@ -207,6 +210,8 @@ class ExtensionsActivity : AppCompatActivity() {
                     async { ExtensionCatalog.hydrate(entry) }
                 }.awaitAll()
             }
+            // 与 refreshInstalled 同款销毁守卫：回调可能在页面已销毁后才到
+            if (isFinishing || isDestroyed) return@launch
             runOnUiThread { catalogAdapter.notifyDataSetChanged() }
         }
     }
@@ -226,6 +231,8 @@ class ExtensionsActivity : AppCompatActivity() {
             supervisorScope {
                 entries.map { entry -> async { ExtensionCatalog.hydrate(entry) } }.awaitAll()
             }
+            // 与 hydrateCatalog 同款销毁守卫
+            if (isFinishing || isDestroyed) return@launch
             runOnUiThread { catalogAdapter.notifyDataSetChanged() }
         }
     }
@@ -523,6 +530,9 @@ class ExtensionsActivity : AppCompatActivity() {
             toast(R.string.extension_need_runtime)
             return
         }
+        // 与 installEntry 同款：controller 是进程级的，委托可能被覆盖或解绑，安装前复核一次
+        //（缺委托时内核直链步会挂满 45s 超时才失败，详见 installEntry 处的注释）。
+        ensurePromptDelegate(extController)
         binding.urlInput.setText("")
         urlInstalling = true
         // 自定义链接没有进度控件：至少给一次「已开始」的即时反馈，消除「点了没反应」的观感
@@ -650,6 +660,8 @@ class ExtensionsActivity : AppCompatActivity() {
             toast(R.string.extension_need_runtime)
             return
         }
+        // 与 installEntry 同款：委托可能被覆盖或解绑，安装前复核一次（缺委托会挂满超时才失败）
+        ensurePromptDelegate(extController)
         val accepted = installCoordinator.install(
             ExtInstallCoordinator.Source.LocalFile(file.name, file),
             extController,
