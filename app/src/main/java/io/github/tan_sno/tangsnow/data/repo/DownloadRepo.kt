@@ -708,6 +708,14 @@ object DownloadRepo {
     }
 
     /**
+     * 只留 `type/subtype`。HTTP 的 Content-Type 常带参数（`text/html; charset=utf-8`），整串拿去
+     * `Intent.setDataAndType` 会匹配不到任何 Activity —— 表现是打开/分享时谎报「没有应用能打开」。
+     * 纯函数，便于单测覆盖。
+     */
+    internal fun bareMimeType(raw: String?): String? =
+        raw?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() }
+
+    /**
      * 直接消费 GeckoView 的内核响应流存盘：
      * Cookie/Referer/登录态都已包含在这次响应里，是登录态附件的唯一可靠路径。
      *
@@ -722,15 +730,6 @@ object DownloadRepo {
      *         （理由见该枚举的说明：其余失败若也退回，等于用一次不带 Cookie 的 GET
      *         去换一个可能完全错误的内容）
      */
-    @Suppress("DEPRECATION") // addCompletedDownload 暂无替代 API，仍是登记自有下载的官方途径
-    /**
-     * 只留 `type/subtype`。HTTP 的 Content-Type 常带参数（`text/html; charset=utf-8`），整串拿去
-     * `Intent.setDataAndType` 会匹配不到任何 Activity —— 表现是打开/分享时谎报「没有应用能打开」。
-     * 纯函数，便于单测覆盖。
-     */
-    internal fun bareMimeType(raw: String?): String? =
-        raw?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() }
-
     suspend fun saveFromStream(
         context: Context,
         response: org.mozilla.geckoview.WebResponse,
