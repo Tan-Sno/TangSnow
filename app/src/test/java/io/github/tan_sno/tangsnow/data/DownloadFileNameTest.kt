@@ -19,6 +19,31 @@ class DownloadFileNameTest {
     // ------------------------------------------------------------- 来源优先级
 
     @Test
+    fun `双向文本控制符被清掉，不能靠它骗过可执行文件判定`() {
+        // U+202E(RLO) 让文件管理器把后面的字符**视觉反转**：`setup.apk<U+202E>txt.pdf`
+        // 在用户眼里显示成 `pdf.txt`；而 isExecutableName 取**最后一段**扩展名 → 判成 .pdf，
+        // 于是「可执行文件一律强确认、且不给『不再询问』」被绕过。必须清成下划线。
+        val sneaky = "setup.apk\u202Etxt.pdf"
+        assertFalse("双向控制符必须被清洗掉", DownloadRepo.sanitizeFileName(sneaky).contains('\u202E'))
+        assertEquals(
+            "清洗后必须仍被判为非可执行（扩展名已被暴露成 .pdf）",
+            false,
+            DownloadRepo.isExecutableName(DownloadRepo.sanitizeFileName(sneaky)),
+        )
+        // 正例：同族其余控制符一并清掉
+        for (cp in intArrayOf(0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069)) {
+            val raw = "a${cp.toChar()}b.pdf"
+            assertEquals("U+%04X 未被清洗".format(cp), "a_b.pdf", DownloadRepo.sanitizeFileName(raw))
+        }
+    }
+
+    @Test
+    fun `DEL 与 C0 之外的不可打印字符也被清掉`() {
+        // DEL(U+007F) 不在 \u0000-\u001F 内，但同样是不可打印控制字符
+        assertEquals("a_b.txt", DownloadRepo.sanitizeFileName("a\u007Fb.txt"))
+    }
+
+    @Test
     fun `Content-Disposition 优先于 URL`() {
         assertEquals(
             "report.pdf",
