@@ -558,7 +558,13 @@ class WebPrompts(
         tracked(dialog)
     }
 
-    override fun onDateTimePrompt(type: Int, defaultValue: String, done: (String?) -> Unit) {
+    override fun onDateTimePrompt(
+        type: Int,
+        defaultValue: String,
+        min: String?,
+        max: String?,
+        done: (String?) -> Unit,
+    ) {
         var called = false
         fun once(v: String?) {
             if (!called) { called = true; done(v) }
@@ -566,12 +572,40 @@ class WebPrompts(
         val dateType = type == DT_TYPE_DATE || type == DT_TYPE_MONTH || type == DT_TYPE_WEEK || type == DT_TYPE_DATETIME_LOCAL
         val timeType = type == DT_TYPE_TIME || type == DT_TYPE_DATETIME_LOCAL
 
+        /** 按 [type] 的形态解析日期；**解析不出来返回 null**（边界不该回落「今天」，那会让页面
+         *  意外地把 min/max 变成"今天"）。MONTH 形态 `yyyy-MM`、WEEK 形态 ISO 周日期、
+         *  DATETIME_LOCAL 形态 `yyyy-MM-ddTHH:mm`（带 step 时还带秒）。 */
+        fun parseDateByType(raw: String, type: Int): LocalDate? {
+            if (raw.isBlank()) return null
+            return when (type) {
+                DT_TYPE_MONTH -> runCatching { YearMonth.parse(raw.trim()).atDay(1) }.getOrNull()
+                DT_TYPE_WEEK -> runCatching {
+                    LocalDate.parse(raw.trim() + "-1", DateTimeFormatter.ISO_WEEK_DATE)
+                }.getOrNull()
+                DT_TYPE_DATETIME_LOCAL -> parseDateTimeLocal(raw.trim())?.value?.toLocalDate()
+                else -> runCatching { LocalDate.parse(raw.trim(), DT_DATE_FMT) }.getOrNull()
+            }
+        }
+
+        /** 时间夹进 [lo]/[hi]（任一为 null = 该侧无界）：TimePickerDialog 没有边界概念，只能夹初值 */
+        fun clampTime(v: LocalTime, lo: LocalTime?, hi: LocalTime?): LocalTime = when {
+            lo != null && v < lo -> lo
+            hi != null && v > hi -> hi
+            else -> v
+        }
+
         if (!dateType) {
             // 仅时间：直接弹 TimePickerDialog。
             // 默认值用**宽松**解析（`HH:mm` 与 `HH:mm:ss` 都收）：页面设了 `step=1` 时给的是
             // 带秒形态，用 `HH:mm` 去解析必然失败并静默回落到「此刻」（同族第三个形态）。
             val parsed = parseTimeLoose(defaultValue)
-            val lt = parsed?.time ?: LocalTime.now()
+            // 页面给的 min/max（外部审查 P4-14）：TimePickerDialog **没有**边界概念 ⇒ 只能把初始值
+            // 夹进区间；用户仍可能拨出界值、页面随后静默丢弃 —— 该残余如实记在待办 #44。
+            val lt = clampTime(
+                parsed?.time ?: LocalTime.now(),
+                parseTimeLoose(min.orEmpty())?.time,
+                parseTimeLoose(max.orEmpty())?.time,
+            )
             val timeDialog = TimePickerDialog(activity, { _, hh, mm ->
                 once(
                     if (parsed != null) formatChosenTime(parsed, hh, mm)
@@ -584,19 +618,9 @@ class WebPrompts(
         }
 
         // 日期类（DATE / MONTH / WEEK / DATETIME_LOCAL）：先弹 DatePickerDialog
-        val ld = when (type) {
-            DT_TYPE_MONTH -> runCatching { YearMonth.parse(defaultValue).atDay(1) }.getOrDefault(LocalDate.now())
-            // WEEK 的默认值形如 2026-W37（ISO 周日期），用 ISO_WEEK_DATE 解析星期一并得到该周周一；
-            // 早期用 DT_DATE_FMT 解析必然失败 → 选择器每次都停在今天，与页面给的默认值不符
-            DT_TYPE_WEEK -> runCatching {
-                LocalDate.parse(defaultValue.trim() + "-1", DateTimeFormatter.ISO_WEEK_DATE)
-            }.getOrDefault(LocalDate.now())
-            // DATETIME_LOCAL 的默认值是 yyyy-MM-ddTHH:mm（页面设了 step 时还带秒），
-            // 必须用对应格式解析，否则必然失败并回落到「今天」（见 parseDateTimeLocal 的说明）
-            DT_TYPE_DATETIME_LOCAL -> parseDateTimeLocal(defaultValue)?.value?.toLocalDate()
-                ?: LocalDate.now()
-            else -> runCatching { LocalDate.parse(defaultValue, DT_DATE_FMT) }.getOrDefault(LocalDate.now())
-        }
+        // 解析规则与**默认值**共用一个函数（下面 parseDateByType）—— 边界与默认值同形，
+        // 曾经"默认值按四种格式各写一遍、边界干脆不接"就是漏在这一层（外部审查 P4-14）。
+        val ld = parseDateByType(defaultValue, type) ?: LocalDate.now()
         val dateListener = DatePickerDialog.OnDateSetListener { _, y, m, d ->
             val chosen = LocalDate.of(y, m + 1, d)
             when (type) {
@@ -621,6 +645,16 @@ class WebPrompts(
             }
         }
         val dateDialog = DatePickerDialog(activity, dateListener, ld.year, ld.monthValue - 1, ld.dayOfMonth)
+        // 页面给的 min/max 必须落到选择器上（外部审查 P4-14）：不设边界用户就能选出界值，页面随后
+        // 静默丢弃 —— 界面上看不出"选错了"，只看到页面不认。端点取当天零点（本地时区）。
+        parseDateByType(min.orEmpty(), type)?.let {
+            dateDialog.datePicker.minDate =
+                it.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+        parseDateByType(max.orEmpty(), type)?.let {
+            dateDialog.datePicker.maxDate =
+                it.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
         dateDialog.setOnCancelListener { once(null) }
         tracked(dateDialog)
     }
