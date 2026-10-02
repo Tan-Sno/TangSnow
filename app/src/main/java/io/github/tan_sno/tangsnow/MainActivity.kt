@@ -64,6 +64,7 @@ import io.github.tan_sno.tangsnow.data.repo.ApplicationScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.mozilla.geckoview.WebResponse
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
@@ -120,20 +121,32 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     private val bottomBarH get() = dp(78)
 
     /**
-     * 把「宿主可见性」的两个来源（常规可见、PiP）收敛成**一处**下发。
+     * 把「宿主可见性」的两个来源（常规可见、PiP）收敛成**一处**以增量上报。
      *
-     * 为什么必须收敛而不是在各个回调里各自 set：PiP 的进入/退出与 onResume/onPause
-     * 的相对时序在不同路径（返回键退出、展开全屏、直接回桌面）下并不一致，
-     * 分散赋值总有一条路径会把可见性留在错误的状态。凡可见性变化一律走这里。
+     * 为什么是增量而不是整体赋值：管理器侧的可见性是**所有实例**的合成值（见
+     * [BrowserSessionManager.hostStartedChanged] 的说明），后写者赢的整体赋值会让
+     * 被压实例迟到的 `onStop` 把压上实例刚上报的 true 覆盖掉。这里只在本实例自己的
+     * 两个布尔**真的变化**时各发一次增量，管理器侧按计数推导，与到达顺序无关。
      */
     private fun syncHostVisible() {
-        if (::sessionManager.isInitialized) {
-            sessionManager.setHostVisible(hostVisibleNow())
+        if (!::sessionManager.isInitialized) return
+        if (startedVisible != lastSentStarted) {
+            lastSentStarted = startedVisible
+            sessionManager.hostStartedChanged(startedVisible)
+        }
+        if (pipActive != lastSentPip) {
+            lastSentPip = pipActive
+            sessionManager.hostPipChanged(pipActive)
         }
     }
 
     /** 此刻窗口是否在屏幕上（常规可见、分屏失焦、或 PiP）。弹窗类副作用（下载确认等）据此决定建不建窗 */
     private fun hostVisibleNow(): Boolean = startedVisible || pipActive
+
+    /** [syncHostVisible] 已上报的 started 状态（去重，防重复计数） */
+    private var lastSentStarted = false
+    /** [syncHostVisible] 已上报的 PiP 状态 */
+    private var lastSentPip = false
 
     /** 本应用主动写剪贴板的时间戳（用于区分「外部静默写入」与「用户主动复制」） */
     private var selfClipboardWriteAt = 0L
@@ -874,7 +887,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 shown.dialog.cancel()
             }
             if (isChangingConfigurations) {
-                pendingDownloadConfirms.addLast(shown.pending)
+                // 走统一入口：回队同样受上限约束（满了挤出最旧并计数），不破坏队列不变式
+                enqueuePendingDownloadConfirm(shown.pending)
             } else {
                 abandonDownload(shown.pending.response)
             }
@@ -883,6 +897,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         if (!isChangingConfigurations) {
             pendingDownloadConfirms.forEach { abandonDownload(it.response) }
             pendingDownloadConfirms.clear()
+            // 被放弃的那几条永远不会被 flush 报告了：计数一并清零。不清的话，进程仍存活时
+            // （本仓「返回键退出、内核后台常驻」正是常态）下一次启动的首次 onResume 会拿
+            // 残留计数弹一条「N 个下载被丢弃」——时点与归因都错（外部审查 P4）。
+            pendingDownloadDropped = 0
         }
         // 扩展安装/权限提示同样必须在销毁前关闭并应答：否则页面侧的安装或权限请求
         // 对应的 GeckoResult 永不完成（流程永久挂起），且对话框会泄漏窗口。
@@ -915,9 +933,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // `!exiting`：performExit 一旦接管，关停的**顺序**就由它负责 —— 「退出并清除」那条路
         // 必须先等内核 `clearData` 往返结束才 shutdown（先关内核会把清理踩断，承诺就失效了）。
         // 这里抢跑就是把它踩断：用户点了「退出并清除」，界面一退、内核被拆，数据只清了一半。
-        // 两条退出路径都会自己调 shutdown()（不清除的那条在 performExit 内、清除的那条在清完之后），
-        // 故这里跳过不会漏关停。
-        if (isFinishing && lastHost && !exiting) {
+        // 两条退出路径都会自己调 shutdown()（不清除的那条在 performExit 内、清除的那条在清完
+        // 之后）；`exitClearSettled` 在该流程收尾（或已判定把内核交给接管的新宿主）后解锁本判据，
+        // 否则清除期间重开的应用再退出时，这里与 performExit 都不会关停内核。
+        if (isFinishing && lastHost && (!exiting || exitClearSettled)) {
             detachActiveSession()
             sessionManager.shutdown()
         }
@@ -2078,6 +2097,28 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         const val MAX_PENDING_DOWNLOADS = 4
 
         /**
+         * 退出流程进行中（**进程级**，不是实例字段）。
+         *
+         * 为什么必须在 companion：「退出并清除」跑在进程级作用域上，`finishAffinity()` 会把
+         * **任务里所有** MainActivity 实例（含被压在子页面下的那个）一并结束 —— 每个实例的
+         * `onDestroy` 都要能读到同一个「退出中」标志，才能把关停让给在途的清除协程；
+         * 实例字段会让先销毁者读到 false、抢在清除前面关停内核（与 N1 同款多实例教训）。
+         */
+        @Volatile
+        var exiting = false
+
+        /**
+         * 「退出并清除」流程是否已收尾（提示已发、关停已执行或已判定交给接管的新宿主）。
+         * [exiting] 置位后由本标志解锁 onDestroy 的常规关停判据——否则清除期间用户重开应用、
+         * 再退出时，`performExit` 会被 `exiting` 挡成空操作且 onDestroy 永远不关停内核。
+         */
+        @Volatile
+        var exitClearSettled = false
+
+        /** 「退出并清除」的内核往返 + 本地三清的有界等待上限（超时按失败如实报告并照常关停） */
+        const val EXIT_CLEAR_TIMEOUT_MS = 15_000L
+
+        /**
          * 挂起队列与丢弃计数放**进程级**：Activity 因主题/语言切换重建时，新实例能接手
          * 这些内核响应（[WebResponse] 本就是进程级对象），onResume 照常补弹；
          * 留在实例字段上只会「队列随旧实例消失、连接悬挂到超时」（外部审查 M4，2026-10-01）。
@@ -2108,6 +2149,20 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     }
 
     /**
+     * 入队一条待确认下载，**上限口径的唯一入口**：满了就挤出最旧（显式关流 + 计数）。
+     * 入口（[handleDownload]）与配置变更回队（onDestroy）必须共用这里——
+     * 回队各自为政会让「队列 ≤ [MAX_PENDING_DOWNLOADS]」的不变式失效（外部审查 N5）。
+     */
+    private fun enqueuePendingDownloadConfirm(pending: PendingDownloadConfirm) {
+        if (pendingDownloadConfirms.size >= MAX_PENDING_DOWNLOADS) {
+            // 被挤掉的请求必须**显式关掉**内核流：只丢引用，连接会挂到内核超时
+            abandonDownload(pendingDownloadConfirms.removeFirst().response)
+            pendingDownloadDropped++
+        }
+        pendingDownloadConfirms.addLast(pending)
+    }
+
+    /**
      * 网页触发的下载。**宿主不可见时不建确认窗**（与权限征询同口径）：
      * 需要询问的请求挂起，onResume 补弹；静默下载（已关「下载前询问」）不受影响。
      * 代价：挂起期间内核连接可能超时断开，补弹后开始下载会**如实**报失败 ——
@@ -2125,12 +2180,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 不应把它的确认一并免掉；而普通文档仍尊重用户的「不再询问」偏好。
         val needsConfirm = DownloadRepo.isExecutableName(fileName) || prefs.askBeforeDownload
         if (needsConfirm && !hostVisibleNow()) {
-            if (pendingDownloadConfirms.size >= MAX_PENDING_DOWNLOADS) {
-                // 被挤掉的请求必须**显式关掉**内核流：只丢引用，连接会挂到内核超时
-                abandonDownload(pendingDownloadConfirms.removeFirst().response)
-                pendingDownloadDropped++
-            }
-            pendingDownloadConfirms.addLast(PendingDownloadConfirm(response, pageUrl))
+            enqueuePendingDownloadConfirm(PendingDownloadConfirm(response, pageUrl))
             return
         }
         confirmDownload(response, fileName, pageUrl)
@@ -2796,8 +2846,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             .show()
     }
 
-    /** 退出流程进行中标记：异步清除 → 关停 → finishAffinity 期间屏蔽二次触发 */
-    private var exiting = false
+    // 退出流程的「进行中 / 已收尾」标志在进程级 companion（见其内部注释），此处不另设实例字段。
 
     /**
      * 统一的退出收口（[confirmExit] 与 [confirmExitByDoubleBack] 两条路径共用，
@@ -2826,8 +2875,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      *    （设置文案已如实枚举）；系统最近任务划掉等外部退出不在此列。
      */
     private fun performExit() {
-        if (exiting) return
+        if (exiting) {
+            // 已有一条退出流程在途（进程级）：把界面退掉即可，清理与关停由它负责。
+            // 此前这里是裸 return —— 清除期间重开的应用点「退出」会毫无反应。
+            finishAffinity()
+            return
+        }
         exiting = true
+        exitClearSettled = false
         if (!prefs.exitClearBrowsingData) {
             sessionManager.saveState()
             SessionStore.markPurged()
@@ -2844,15 +2899,21 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         val ctx = applicationContext
         ApplicationScope.scope.launch {
             val result: ClearDataUseCase.Result? = try {
-                ClearDataUseCase.clear(
-                    ctx,
-                    ClearDataUseCase.Options(
-                        cookiesAndSiteData = true,
-                        cache = true,
-                        history = true,
-                        sessionSnapshot = true,
-                    ),
-                )
+                // 有界等待（N3）：内核 clearData 的 GeckoResult 理论上可能永不结算——
+                // 无超时的话这条协程永久悬挂，shutdown 永不执行、runtime 驻留到进程被回收。
+                // 超时按「如实报失败 + 照常关停」处置：宁可部分清理并明说（与本函数 ④ 的
+                // 「进程被杀可能只清一部分」同一取舍），也不留下一个永不关停的内核。
+                withTimeoutOrNull(EXIT_CLEAR_TIMEOUT_MS) {
+                    ClearDataUseCase.clear(
+                        ctx,
+                        ClearDataUseCase.Options(
+                            cookiesAndSiteData = true,
+                            cache = true,
+                            history = true,
+                            sessionSnapshot = true,
+                        ),
+                    )
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Throwable) {
@@ -2868,8 +2929,17 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                         else -> R.string.toast_data_cleared
                     }
                 )
-                detachActiveSession()
-                sessionManager.shutdown()
+                // ⚠️ 关停前先看「是否已有新宿主接管」（N2）：清理完成前用户重新打开应用的话，
+                // 新实例正跑在**这套**内核与会话上——此刻 shutdown 等于把它脚下拆掉。
+                // 数据已经清掉；会话留给接管者继续用，不是理想形态但远好过「新开即死页」。
+                if (!sessionManager.hasAnyHost()) {
+                    detachActiveSession()
+                    sessionManager.shutdown()
+                }
+                // 本条退出流程收尾：放开 onDestroy 的关停豁免、并允许接管者的退出走正常路径
+                //（exiting 是进程级的，不清掉会让接管者点「退出」变成空操作）。
+                exiting = false
+                exitClearSettled = true
             }
         }
         // 立刻退出界面：不等待清理（Fenix 的 ANR 修法就是这个方向）
