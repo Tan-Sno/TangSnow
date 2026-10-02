@@ -723,6 +723,14 @@ object DownloadRepo {
      *         去换一个可能完全错误的内容）
      */
     @Suppress("DEPRECATION") // addCompletedDownload 暂无替代 API，仍是登记自有下载的官方途径
+    /**
+     * 只留 `type/subtype`。HTTP 的 Content-Type 常带参数（`text/html; charset=utf-8`），整串拿去
+     * `Intent.setDataAndType` 会匹配不到任何 Activity —— 表现是打开/分享时谎报「没有应用能打开」。
+     * 纯函数，便于单测覆盖。
+     */
+    internal fun bareMimeType(raw: String?): String? =
+        raw?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() }
+
     suspend fun saveFromStream(
         context: Context,
         response: org.mozilla.geckoview.WebResponse,
@@ -733,9 +741,11 @@ object DownloadRepo {
         // 两处都切是刻意的：出口不假设调用方已经站在 IO 线程上。
         val input = response.body ?: return@withContext SaveOutcome.NO_BODY
         val safeName = sanitizeFileName(fileName)
-        // HTTP 头名大小写不敏感，统一查找 Content-Type
-        val mime = response.headers.entries
-            .firstOrNull { it.key.equals("content-type", ignoreCase = true) }?.value
+        // HTTP 头名大小写不敏感，统一查找 Content-Type；参数（`; charset=…`）必须剥掉
+        val mime = bareMimeType(
+            response.headers.entries
+                .firstOrNull { it.key.equals("content-type", ignoreCase = true) }?.value,
+        )
             ?: android.webkit.MimeTypeMap.getSingleton()
                 .getMimeTypeFromExtension(safeName.substringAfterLast('.', ""))
             ?: "application/octet-stream"

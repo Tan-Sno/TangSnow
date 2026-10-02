@@ -116,4 +116,38 @@ class LocaleAndCatalogTest {
             assertTrue("${e.slug} 的 colorRes 未设置", e.colorRes != 0)
         }
     }
+
+    // ------------------------------------------------- AMO 判据（安装链唯一的准入判据，补上覆盖）
+
+    /**
+     * 只钉「拿到 scheme/host 之后」的判定与反斜杠这一条 —— `Uri.parse` 那一层（显式端口、
+     * 无路径、大小写归一）需要 Android 运行时，JVM 单测里是抛异常的桩，故不在此列。
+     */
+    @Test
+    fun `AMO 判据放行官方链接、拒绝换主与伪装`() {
+        assertTrue(
+            ExtensionCatalog.isAmoTarget("https://addons.mozilla.org/x", "https", "addons.mozilla.org")
+        )
+        // scheme 与 host 都按大小写不敏感处理（URL scheme 与 DNS 本就如此）
+        assertTrue(
+            ExtensionCatalog.isAmoTarget("https://addons.mozilla.org/x", "HTTPS", "ADDONS.MOZILLA.ORG")
+        )
+
+        // 反斜杠那一类最要紧：`android.net.Uri` 按 RFC 3986 会把 host 解析成 AMO，而内核按 WHATWG
+        // 把 `\` 当 `/` ⇒ 实际连的是另一个域。合法 AMO 链接不含 `\`，故一律拒。
+        listOf(
+            Triple("https://evil.com\\@addons.mozilla.org/x", "https", "addons.mozilla.org"),
+            Triple("https://addons.mozilla.org\\@evil.com/x", "https", "evil.com"),
+            Triple("https://addons.mozilla.org/x", "http", "addons.mozilla.org"),
+            Triple("https://addons.mozilla.org.evil.com/x", "https", "addons.mozilla.org.evil.com"),
+            Triple("https://evil.com/x", "https", "evil.com"),
+            Triple("https://addons.mozilla.org/x", "https", null),
+            Triple("https://addons.mozilla.org/x", null, "addons.mozilla.org"),
+        ).forEach { (raw, scheme, host) ->
+            assertFalse(
+                "不应放行：$raw（scheme=$scheme host=$host）",
+                ExtensionCatalog.isAmoTarget(raw, scheme, host),
+            )
+        }
+    }
 }

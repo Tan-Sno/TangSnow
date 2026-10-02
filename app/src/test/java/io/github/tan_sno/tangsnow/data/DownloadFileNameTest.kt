@@ -267,4 +267,20 @@ class DownloadFileNameTest {
         // 关键正向用例：双扩展名伪装 —— 取最后一段，故仍判为可执行
         assertTrue(DownloadRepo.isExecutableName("invoice.pdf.apk"))
     }
+
+    // ------------------------------------------------------------- MIME 归一
+
+    @Test
+    fun `Content-Type 的参数被剥掉`() {
+        // 带参数的整串拿去 setDataAndType 会匹配不到任何 Activity ⇒ 打开/分享时谎报「没有应用能打开」
+        assertEquals("text/html", DownloadRepo.bareMimeType("text/html; charset=utf-8"))
+        assertEquals("text/html", DownloadRepo.bareMimeType("text/html;charset=UTF-8"))
+        assertEquals("application/pdf", DownloadRepo.bareMimeType("  application/pdf  "))
+        assertEquals("image/jpeg", DownloadRepo.bareMimeType("image/jpeg"))
+
+        // 空值 / 只有参数 ⇒ 交回 null，让调用方走扩展名兜底，而不是存进一个空 MIME
+        assertNull(DownloadRepo.bareMimeType(null))
+        assertNull(DownloadRepo.bareMimeType(""))
+        assertNull(DownloadRepo.bareMimeType("; charset=utf-8"))
+    }
 }

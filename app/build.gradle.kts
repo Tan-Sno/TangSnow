@@ -308,10 +308,12 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **231**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **233**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
-        //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1），
+        //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
+        //   2026-10-02 为扩展源判据（`isAmoTarget`，含反斜杠换主）与下载 MIME 归一（`bareMimeType`）
+        //   各补 1 例 ⇒ +2），
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则 testDebugUnitTest 直接红。
         //   两条新哨兵已主动验证会红（临时改坏 ⇒ 6 条 FAILED）；lint 全警告口径仍 `No issues found`。
         versionCode = 39

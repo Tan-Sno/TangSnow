@@ -63,10 +63,25 @@ object ExtensionCatalog {
      * host 用解析结果而不是前缀匹配：`HTTPS://…`、大写 host、显式 :443 都是合法同源。
      */
     internal fun isAmoUrl(url: String): Boolean {
-        val uri = runCatching { android.net.Uri.parse(url.trim()) }.getOrNull() ?: return false
-        return uri.scheme.equals("https", ignoreCase = true) &&
-            uri.host.equals(AMO_HOST, ignoreCase = true)
+        val trimmed = url.trim()
+        val uri = runCatching { android.net.Uri.parse(trimmed) }.getOrNull() ?: return false
+        return isAmoTarget(trimmed, uri.scheme, uri.host)
     }
+
+    /**
+     * [isAmoUrl] 的**纯判定核心**：原文不含反斜杠 + scheme=https（忽略大小写）+ host 恰好是 AMO。
+     *
+     * ⚠️ **单独拒 `\` 不是洁癖**：`https://evil.com\@addons.mozilla.org/` 在 `android.net.Uri` 的
+     * RFC 3986 解析下 host = `addons.mozilla.org`（本判据会放行），而内核按 WHATWG 把 `\` 当 `/`
+     * ⇒ 真正连的是 `evil.com`。这处分歧在 JVM 单测里测不了（需要 Android 运行时），故在**解析之前**
+     * 就把这类输入整体拒掉 —— 判定不再依赖"两边的解析器谁对"。合法 AMO 链接不可能含 `\`。
+     *
+     * 抽成纯函数是既有惯例：`android.net.Uri` 在 JVM 单测里是抛异常的桩。
+     */
+    internal fun isAmoTarget(rawUrl: String, scheme: String?, host: String?): Boolean =
+        !rawUrl.contains('\\') &&
+            scheme.equals("https", ignoreCase = true) &&
+            host.equals(AMO_HOST, ignoreCase = true)
 
     data class Entry(
         val slug: String,
