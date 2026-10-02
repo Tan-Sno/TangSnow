@@ -1458,7 +1458,8 @@ prefs:
     // --------------------------------------------------------- 站点权限（A3）
 
     /**
-     * 本应用界面当前是否**对用户可见**（由 `MainActivity` 在 `onResume` / `onPause` 维护）。
+     * 本应用界面当前是否**对用户可见**（由 `MainActivity` 在 `onStart` / `onStop` 维护、
+     * 单点下发；**不是** onResume/onPause —— 分屏失焦的那一侧窗口仍在屏幕上，理由见 [promptStale]）。
      *
      * 为什么走显式通道而不是「没有来路的裸 val」：本类 [attachDelegates] 的 KDoc 明言
      * 「经主线程转发给 events，**不捕获任何 Activity**」—— 让 Activity 直接写字段会破坏
