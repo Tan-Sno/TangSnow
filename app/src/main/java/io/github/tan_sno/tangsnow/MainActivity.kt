@@ -845,6 +845,23 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 挂起的下载确认：队列在进程级 companion，**配置变更重建**时由新实例的 onResume
         // 接手补弹，不能在这里关流；**真销毁**（返回键退出等，内核仍在后台）时必须逐个
         // 关掉，否则内核连接悬挂到超时（外部审查 M4）。
+        // ⚠️ 正在展示的那些确认框**不在队列里**，两种情形都要处理（2026-10-02 外部审查 P3-11）：
+        // 它们随本实例被系统强拆，而强拆不触发 OnCancelListener ⇒ 不处理就永远没人关那条响应流。
+        //  · 配置变更重建 ⇒ 交回进程级队列，由新实例接着问（不丢用户那次下载）；
+        //  · 真销毁 ⇒ 放弃（也就是关流）。
+        shownDownloadConfirms.toList().forEach { shown ->
+            runCatching {
+                // 先摘取消监听：cancel() 默认会走它去关流，而"关不关"要按下面两种情形分别决定
+                shown.dialog.setOnCancelListener(null)
+                shown.dialog.cancel()
+            }
+            if (isChangingConfigurations) {
+                pendingDownloadConfirms.addLast(shown.pending)
+            } else {
+                abandonDownload(shown.pending.response)
+            }
+        }
+        shownDownloadConfirms.clear()
         if (!isChangingConfigurations) {
             pendingDownloadConfirms.forEach { abandonDownload(it.response) }
             pendingDownloadConfirms.clear()
@@ -2053,6 +2070,20 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         var pendingDownloadDropped = 0
     }
 
+    private class ShownDownloadConfirm(val dialog: AlertDialog, val pending: PendingDownloadConfirm)
+
+    /**
+     * **正在展示**的下载确认框（两种形态：可执行文件警示 / 「下载前询问」）及其请求。
+     *
+     * 用列表而不是单个字段：队列补弹时可能连开好几个（外部审查 P4 记过「互相遮挡」），单个字段
+     * 只会记住最后一个，其余的在销毁时依旧无人收口。
+     *
+     * 必须是实例字段：对话框是窗口，随本实例一起被系统强拆 —— 而强拆**不触发** `OnCancelListener`
+     * ⇒ 不主动收口的话那条 `WebResponse` 永远不会被 `abandonDownload` 关掉（连接悬挂到内核超时，
+     * 窗口也泄漏）。2026-10-02 外部审查 P3-11：此前只处理了**队列**，正在展示的那些没人管。
+     */
+    private val shownDownloadConfirms = mutableListOf<ShownDownloadConfirm>()
+
     /** 放弃一次下载：关掉内核响应流——不消费不关闭 = 连接悬挂到内核超时（外部审查 M4） */
     private fun abandonDownload(response: WebResponse) {
         runCatching { response.body?.close() }
@@ -2087,20 +2118,32 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         confirmDownload(response, fileName, pageUrl)
     }
 
+    /** 展示下载确认框并登记 —— 登记是给 onDestroy 收口用的，别省 */
+    private fun showDownloadConfirm(dialog: AlertDialog, pending: PendingDownloadConfirm) {
+        val shown = ShownDownloadConfirm(dialog, pending)
+        shownDownloadConfirms += shown
+        dialog.setOnDismissListener { shownDownloadConfirms.remove(shown) }
+        dialog.show()
+    }
+
     /** [handleDownload] 的后半段：真正弹确认框或直接开始（此时已判定不需要挂起） */
     private fun confirmDownload(response: WebResponse, fileName: String, pageUrl: String?) {
         val url = response.uri
         if (DownloadRepo.isExecutableName(fileName)) {
-            AlertDialog.Builder(this)
-                .setTitle(R.string.dl_executable_title)
-                .setMessage(getString(R.string.dl_executable_message, fileName))
-                .setNegativeButton(R.string.dlg_cancel) { _, _ -> abandonDownload(response) }
-                .setPositiveButton(R.string.dl_executable_continue) { _, _ ->
-                    startDownload(response, url, fileName, pageUrl)
-                }
-                // 返回键/点外侧取消也要关流（取消键走 OnCancelListener，不走负按钮回调）
-                .setOnCancelListener { abandonDownload(response) }
-                .show()
+            val pending = PendingDownloadConfirm(response, pageUrl)
+            showDownloadConfirm(
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.dl_executable_title)
+                    .setMessage(getString(R.string.dl_executable_message, fileName))
+                    .setNegativeButton(R.string.dlg_cancel) { _, _ -> abandonDownload(response) }
+                    .setPositiveButton(R.string.dl_executable_continue) { _, _ ->
+                        startDownload(response, url, fileName, pageUrl)
+                    }
+                    // 返回键/点外侧取消也要关流（取消键走 OnCancelListener，不走负按钮回调）
+                    .setOnCancelListener { abandonDownload(response) }
+                    .create(),
+                pending,
+            )
             return
         }
         // 用户已关掉「下载前询问」：直接开始
@@ -2111,19 +2154,22 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 下载先征询用户，避免“页面偷偷开始下载”的体验与合规风险；
         // 勾选「不再询问」后本次起永久跳过（可在设置里重新打开）
         val noAsk = booleanArrayOf(false)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.download_confirm_title)
-            .setMessage(getString(R.string.download_confirm_message, fileName))
-            .setMultiChoiceItems(
-                arrayOf(getString(R.string.download_no_ask)), noAsk
-            ) { _, _, isChecked -> noAsk[0] = isChecked }
-            .setNegativeButton(R.string.dlg_cancel) { _, _ -> abandonDownload(response) }
-            .setPositiveButton(R.string.download_confirm_ok) { _, _ ->
-                if (noAsk[0]) prefs.askBeforeDownload = false
-                startDownload(response, url, fileName, pageUrl)
-            }
-            .setOnCancelListener { abandonDownload(response) }
-            .show()
+        showDownloadConfirm(
+            AlertDialog.Builder(this)
+                .setTitle(R.string.download_confirm_title)
+                .setMessage(getString(R.string.download_confirm_message, fileName))
+                .setMultiChoiceItems(
+                    arrayOf(getString(R.string.download_no_ask)), noAsk
+                ) { _, _, isChecked -> noAsk[0] = isChecked }
+                .setNegativeButton(R.string.dlg_cancel) { _, _ -> abandonDownload(response) }
+                .setPositiveButton(R.string.download_confirm_ok) { _, _ ->
+                    if (noAsk[0]) prefs.askBeforeDownload = false
+                    startDownload(response, url, fileName, pageUrl)
+                }
+                .setOnCancelListener { abandonDownload(response) }
+                .create(),
+            PendingDownloadConfirm(response, pageUrl),
+        )
     }
 
     /** onResume 补弹挂起的下载确认；被挤掉的请求按条数如实告知（不说「都还在」） */
