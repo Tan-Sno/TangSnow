@@ -189,13 +189,19 @@ class BrowserDb private constructor(context: Context) :
      * 语义与调用方原来的内存过滤保持一致：**url 或 title 包含关键词**（不区分大小写 —— 关键词由调用方
      * 预先 lower，这里对列做 lower）。`%` / `_` / `\` 按字面处理（`ESCAPE '\'`），与内存态
      * `contains` 的字面语义对齐，不会把用户输入的 `%` 当通配符。
+     *
+     * ⚠️ 只喂**纯 ASCII** 关键词（调用方 [io.github.tan_sno.tangsnow.data.repo.BookmarkRepo.search]
+     * 分流）：SQLite 的 lower/LIKE 不折叠非 ASCII（实测 `lower('CAFÉ')='CAFÉ'`），下推含非
+     * ASCII 的关键词会把「CAFÉ Store」这类条目整个丢掉——那部分走内存过滤。
      */
     fun searchBookmarks(query: String, limit: Int): List<Bookmark> {
+        // 与 trimHistoryTo/recentHistory 同一守卫（LIMIT 直接插串，0 会得到空集、负数是「不限」）
+        val n = positiveLimit(limit, "limit")
         val like = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         return db().query(
             "bookmarks", null,
             "lower(url) LIKE ? ESCAPE '\\' OR lower(ifnull(title,'')) LIKE ? ESCAPE '\\'",
-            arrayOf(like, like), null, null, "created_at DESC", "$limit"
+            arrayOf(like, like), null, null, "created_at DESC", "$n"
         ).use { c ->
             // 与 allBookmarks() 同一读法（列序一致）；此处不抽公共函数，避免为两处调用改公开面
             val out = ArrayList<Bookmark>(c.count)

@@ -2974,6 +2974,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 // ⚠️ 关停前先看「是否已有新宿主接管」（N2）：清理完成前用户重新打开应用的话，
                 // 新实例正跑在**这套**内核与会话上——此刻 shutdown 等于把它脚下拆掉。
                 // 数据已经清掉；会话留给接管者继续用，不是理想形态但远好过「新开即死页」。
+                // 这里没有「检查与关停之间插进新宿主」的竞态：本判定与 shutdown 同在主线程的
+                // **同一个同步块**里，新实例的 onCreate（hostAttached）同在主线程，插不进来——
+                // 它要么整体发生在这段之前（count≥1 ⇒ 跳过关停 ✓），要么之后（内核已关，走全新启动 ✓）。
                 if (!sessionManager.hasAnyHost()) {
                     detachActiveSession()
                     sessionManager.shutdown()

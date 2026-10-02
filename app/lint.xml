@@ -30,4 +30,15 @@
     <issue id="NegativeMargin">
         <ignore path="src/main/res/layout/view_home.xml" />
     </issue>
+
+    <!--
+        检查项级豁免（本文件唯一的 severity="ignore"，与上面两条路径级豁免不同类，理由必须更硬）：
+        AndroidGradlePluginVersion 会把 wrapper 的 Gradle 版本与 AGP 已知的最新版比对，
+        有新版就提示。本项目**刻意**停在 9.6.0——升级要动 gradle-daemon-jvm.properties
+        那套已验证的组合（版本史有记录），留到专门的构建链升级轮一起做。
+        这是升级**提示**而非正确性问题，且 AGP 的「已知最新版」数据随构建环境更新、
+        提示会反复出现（2026-10-02 起常驻，破坏「lint 零问题」门禁）⇒ 按检查项豁免。
+        ⚠️ 将来升级 wrapper 时**必须摘掉本条**，让升级提示恢复工作。
+    -->
+    <issue id="AndroidGradlePluginVersion" severity="ignore" />
 </lint>

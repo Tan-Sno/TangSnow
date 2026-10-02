@@ -277,9 +277,13 @@ android {
         //   ① 【P1】`exiting` 在「**不清除**」退出分支不复位 ⇒ `finishAffinity()` 不杀进程，同进程内
         //      「从桌面重开 → 再退出」会被早退挡成空操作：开着「退出即清除」也不清、零提示（承诺为假 +
         //      无反馈），同时跳过 `saveState()`、且 onDestroy 的关停判据恒假 ⇒ 内核再也不关停；
-        //   ② 扩展安装的**总超时 `onFailure` 永不投递**：超时已取消协程，`deliverOnMain` 内层
-        //      `withContext(Dispatchers.Main)` 会立即抛 CE、块体不执行 ⇒ 改套 `NonCancellable` 并补
-        //      `runCatching`；同时把"带一次性投递闸"那句**失实的 KDoc 改成真话**（闸仍待做）；
+        //   ② 扩展安装的总超时 `onFailure` 在「超时与宿主销毁竞态」下会丢投递（**普适超时路径本身
+        //      不丢**——`withTimeout` 只取消自己的子 TimeoutCoroutine，外层协程仍活跃，
+        //      `withContext(Dispatchers.Main)` 照常执行；丢投递只发生在 TCE 触发后、主线程投递
+        //      执行前，宿主 destroy 的 `cancelAll()` 恰好取消作业的那一刻）⇒ 投递套
+        //      `NonCancellable` 并补 `runCatching` 堵住该竞态；同时把"带一次性投递闸"那句
+        //      **失实的 KDoc 改成真话**（该措辞曾声称"总超时已取消本协程、投递曾永不发生"，前提错误，
+        //      2026-10-02 复核更正——见 ExtInstallCoordinator 内同位置的注释）；
         //   ③ 删除自定义搜索引擎按**显示位置**算下标 ⇒ `all()` 在 id 分配后才过滤坏条目，位置会前移
         //      ⇒ 有坏条目时会**删错引擎**；改为从 `engine.id` 反解存储下标；
         //   ④ 崩溃日志「分享」失败复用了"当前没有可分享的页面"⇒ 归因错，新增 `about_crash_share_failed`；
@@ -337,7 +341,11 @@ android {
         //   各补 1 例 ⇒ +2；2026-10-02 外部审查报告 3 为文件名双向控制符补 2 例、再为
         //   `BrowserDbLimitGuardTest`（新类，3 例）⇒ +5），
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则 testDebugUnitTest 直接红。
-        //   两条新哨兵已主动验证会红（临时改坏 ⇒ 6 条 FAILED）；lint 全警告口径仍 `No issues found`。
+        //   两条新哨兵已主动验证会红（临时改坏 ⇒ 6 条 FAILED）。
+        //   ⚠️ lint 口径更新（2026-10-02）：`checkAllWarnings = true` 下现有一条**常驻**的
+        //   `AndroidGradlePluginVersion` Warning（wrapper 9.6.0 → 9.8.0 的升级提示）——wrapper
+        //   刻意不升（见上方版本史），该提示已在 lint.xml 按检查项豁免并写明理由；除此之外仍
+        //   `No issues found`。门禁口径据此为「零错误 + 零未豁免警告」。
         versionCode = 40
         versionName = "2.1.7"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
