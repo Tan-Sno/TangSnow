@@ -317,7 +317,11 @@ class PreferenceStore(context: Context) {
             val arr = JSONArray(json)
             (0 until arr.length()).mapNotNull { i ->
                 val o = arr.optJSONObject(i) ?: return@mapNotNull null
-                CustomEngine(o.optString("name"), o.optString("template"))
+                val template = o.optString("template")
+                // 读侧复检：写入侧（addCustomEngine）已校验，但这里再验一次 —— 陈旧值或手工改坏的
+                // prefs 里若塞进非 http(s) 模板，它会成为一次**导航的目标**（安全边界，同写入侧口径）。
+                if (!isHttpTemplate(template)) return@mapNotNull null
+                CustomEngine(o.optString("name"), template)
             }
         } catch (e: Exception) {
             emptyList()
