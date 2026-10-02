@@ -164,6 +164,10 @@ class LibraryActivity : AppCompatActivity() {
             tv.setBackgroundResource(
                 if (active) R.drawable.bg_tab_active else android.R.color.transparent
             )
+            // 可访问性（2026-10-02 外部审查报告 6）：同上——用 contentDescription 而非 isSelected，
+            // 并把原标签文本带上（否则读屏只剩"已选中"，标签被吞掉）。
+            tv.contentDescription =
+                if (active) getString(R.string.a11y_tab_selected, tv.text) else tv.text
         }
         style(binding.tabHistory, currentTab == TAB_HISTORY)
         style(binding.tabBookmarks, currentTab == TAB_BOOKMARKS)

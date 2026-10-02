@@ -115,6 +115,10 @@ class HomeCustomizeActivity : AppCompatActivity() {
             container.setBackgroundResource(
                 if (active) R.drawable.bg_style_selected else android.R.color.transparent
             )
+            // 可访问性（2026-10-02 外部审查报告 6）：风格卡的"选中"此前只有视觉表达。描述挂在
+            // **可点击的容器**上（那才是读屏聚焦的节点），文本取标签的，避免读屏只念"已选中"。
+            container.contentDescription =
+                if (active) getString(R.string.a11y_tab_selected, label.text) else label.text
         }
         style(binding.styleTangSnow, binding.styleTangSnowLabel, selected == PreferenceStore.STYLE_TANGSNOW)
         style(binding.styleMist, binding.styleMistLabel, selected == PreferenceStore.STYLE_MIST)

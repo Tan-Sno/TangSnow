@@ -185,6 +185,11 @@ class ExtensionsActivity : AppCompatActivity() {
             tv.setBackgroundResource(
                 if (active) R.drawable.bg_tab_active else android.R.color.transparent
             )
+            // 可访问性（2026-10-02 外部审查报告 6）：页签的"选中"此前**只有视觉表达**（颜色/字重/背景），
+            // 读屏拿不到。**刻意不用 `isSelected`** —— 对纯 TextView 它未必会被 TalkBack 念出；
+            // contentDescription 在所有版本上都会读出来，并把原标签文本一并带上（否则会把标签吞掉）。
+            tv.contentDescription =
+                if (active) getString(R.string.a11y_tab_selected, tv.text) else tv.text
         }
         style(binding.tabRecommend, tab == TAB_RECOMMEND)
         style(binding.tabInstalled, tab == TAB_INSTALLED)
