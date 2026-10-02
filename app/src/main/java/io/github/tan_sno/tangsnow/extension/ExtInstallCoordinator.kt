@@ -154,13 +154,11 @@ class ExtInstallCoordinator(
 
     /**
      * 发起一次安装。同一来源已在安装中时返回 `false`，调用方据此提示「正在进行中」。
-     * 回调一律在主线程投递；**成功与失败必然恰好回调一次** —— 但这是**约定**，不是代码保证：
-     * `deliverOnMain` 里**没有**一次性投递闸（2026-10-02 外部审查 P2 指出此处 KDoc 曾声称"带一次性
-     * 投递闸"，代码里并不存在）。现状靠"每条路径只投一次"维持，已知薄弱点：常规投递路径上的 `cb.*`
-     * 未包 `runCatching`（仅超时分支包了）⇒ UI 回调自身抛异常会穿出 `deliverOnMain`、落到外层
-     * `catch (e: Throwable)` 再投一次 `onFailure`（界面会先报成功、再报失败）。当前三处回调体都做了
-     * 销毁守卫，故属**潜伏**而非现网可复现；已记待办：把闸做成真的（`AtomicBoolean` 或复用
-     * `ExtensionPrompts.Once` 的写法）。
+     * 回调一律在主线程投递；**成功与失败必然恰好回调一次** —— 由 `deliveredKeys` 这个**一次性投递闸**
+     * 保证（2026-10-02 外部审查 P2 指出：此处与 `onDone` 的 KDoc 都曾声称"带一次性投递闸"，而代码里
+     * 没有；**闸已按该次审查落地**，清理点见 `install()` 登记处与 `deliveredKeys` 的注释）。
+     * 仍存的薄弱点：三个回调体之外的 `cb.*` 只在超时分支包了 `runCatching`（常规路径未包），
+     * 但闸会兜住"抛异常后二次投递"这件事；当前三处回调体也都做了销毁守卫。
      */
     fun install(source: Source, controller: WebExtensionController, cb: Callback): Boolean {
         // ⚠️ 必须在**主线程**调用（当前三个调用点都是主线程点击回调；约束成文而非靠自律——
@@ -171,6 +169,8 @@ class ExtInstallCoordinator(
             if (isWorking(source.key)) {
                 return false
             }
+            // 同一 key 的**新一次安装**开始 ⇒ 复位投递闸（清理点必须在这里，理由见 deliveredKeys 的注释）
+            deliveredKeys.remove(source.key)
             // LAZY 启动：先登记 job 再启动，避免协程体在登记前跑完而留下残留条目
             //（安装起点的可见时间戳记在 ExtensionsActivity 侧的 ExtensionCatalog.installStartedAt）
             val job = scope.launch(start = CoroutineStart.LAZY) {
@@ -222,7 +222,22 @@ class ExtInstallCoordinator(
      */
     private val deliveringKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
+    /**
+     * **一次性投递闸**（2026-10-02 外部审查 P2；此前 KDoc 声称有、代码里并没有）：同一次安装尝试里，
+     * `deliverOnMain` 只在**第一次**真正执行 `deliver`，之后同 key 的投递直接丢弃 —— 这堵的是
+     * "`cb.onSuccess` 抛异常穿出 `deliverOnMain`、落到外层 catch 再投一次 `onFailure`"那条路。
+     *
+     * ⚠️ `deliveringKeys` **不能**兼任：它在投完就 `finally` 摘除（语义是"正在投递给它"，
+     * 供 `isDelivering` 给自愈侧用），拦不住第二次。
+     * ⚠️ **清理点在 `install()` 的登记处**，不在这里、也**不在 `settle()`**：超时分支是"先 settle
+     * 再投递"（`:183` 在前）⇒ 若在 settle 里清闸，那次投递会重新把闸加上、此后再无人清 ⇒
+     * **同一 key 的下一次重试会被永久吞掉**（比没有闸更糟）。语义因此是「**每次安装尝试**恰好投递一次」，
+     * 与 `onDone` 的 KDoc 一致。
+     */
+    private val deliveredKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     private suspend fun deliverOnMain(key: String, deliver: suspend () -> Unit) {
+        if (!deliveredKeys.add(key)) return
         deliveringKeys.add(key)
         try {
             withContext(Dispatchers.Main) {
