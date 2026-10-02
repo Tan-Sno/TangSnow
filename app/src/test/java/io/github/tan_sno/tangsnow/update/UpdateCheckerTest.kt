@@ -159,10 +159,10 @@ class UpdateCheckerTest {
 
     @Test
     fun `只信任 https 且 host 严格等于 github 主域`() {
-        assertTrue(UpdateChecker.isTrustedApkTarget("https", "github.com"))
+        assertTrue(UpdateChecker.isTrustedApkTarget("https://github.com/x.apk", "https", "github.com"))
         // scheme 与 host 都按大小写不敏感处理（DNS 与 URL scheme 本就如此）
-        assertTrue(UpdateChecker.isTrustedApkTarget("HTTPS", "GitHub.com"))
-        assertTrue(UpdateChecker.isTrustedApkTarget("https", "GITHUB.COM"))
+        assertTrue(UpdateChecker.isTrustedApkTarget("HTTPS://GitHub.com/x.apk", "HTTPS", "GitHub.com"))
+        assertTrue(UpdateChecker.isTrustedApkTarget("https://GITHUB.COM/", "https", "GITHUB.COM"))
     }
 
     @Test
@@ -180,7 +180,25 @@ class UpdateCheckerTest {
             "https" to "objects.githubusercontent.com", // release 资产的上层入口不是它，一律不信
             "javascript" to null,
         ).forEach { (scheme, host) ->
-            assertFalse("不应信任 scheme=$scheme host=$host", UpdateChecker.isTrustedApkTarget(scheme, host))
+            assertFalse(
+                "不应信任 scheme=$scheme host=$host",
+                UpdateChecker.isTrustedApkTarget("https://x/", scheme, host),
+            )
         }
+    }
+
+    @Test
+    fun `原文含反斜杠一律拒绝——两解析器差分的统一收口`() {
+        // 与 ExtensionCatalog.isAmoTarget 同款（N6）：`https://evil.com\@github.com/` 在
+        // android.net.Uri 下 host=github.com（放行），消费方按 WHATWG 把 `\` 当 `/` ⇒ 连 evil.com。
+        // 判据在解析**之前**对原文整体拒 `\`，不再依赖"两边的解析器谁对"。
+        assertTrue(
+            UpdateChecker.isTrustedApkTarget("https://evil.com\\@github.com/", "https", "github.com")
+                .not(),
+        )
+        // 合法 GitHub 下载地址不可能含 `\`：正常 URL 不受影响
+        assertTrue(
+            UpdateChecker.isTrustedApkTarget("https://github.com/Tan-Sno/TangSnow/releases/x.apk", "https", "github.com"),
+        )
     }
 }

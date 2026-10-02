@@ -146,17 +146,24 @@ object UpdateChecker {
     internal fun isTrustedApkUrl(url: String): Boolean {
         if (url.isBlank()) return false
         val uri = runCatching { android.net.Uri.parse(url) }.getOrNull() ?: return false
-        return isTrustedApkTarget(uri.scheme, uri.host)
+        return isTrustedApkTarget(url, uri.scheme, uri.host)
     }
 
     /**
-     * [isTrustedApkUrl] 的纯判定核心：https（忽略大小写）且 host **严格等于** github.com。
+     * [isTrustedApkUrl] 的纯判定核心：原文不含反斜杠 + https（忽略大小写）+ host **严格等于** github.com。
      *
      * 必须严格等值而不是 `startsWith` / `contains`：`github.com.evil.example` 与
      * `github.com.cn` 都能骗过前缀/包含式判断。
+     *
+     * ⚠️ 「拒反斜杠」必须以**原文**为准（与 `ExtensionCatalog.isAmoTarget` 同款，2026-10-02 N6）：
+     * `https://evil.com\@github.com/` 在 `android.net.Uri` 的 RFC 3986 解析下 host = `github.com`
+     * （本判据会放行），而消费这条 URL 的外部应用按 WHATWG 把 `\` 当 `/` ⇒ 实际连的是 `evil.com`。
+     * 合法 GitHub 下载地址不可能含 `\`，整体拒掉即把分歧面收干。
      */
-    internal fun isTrustedApkTarget(scheme: String?, host: String?): Boolean =
-        scheme.equals("https", ignoreCase = true) && host.equals("github.com", ignoreCase = true)
+    internal fun isTrustedApkTarget(rawUrl: String, scheme: String?, host: String?): Boolean =
+        !rawUrl.contains('\\') &&
+            scheme.equals("https", ignoreCase = true) &&
+            host.equals("github.com", ignoreCase = true)
 
     /**
      * 远端版本是否比本机新。

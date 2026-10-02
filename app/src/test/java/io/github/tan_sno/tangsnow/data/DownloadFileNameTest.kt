@@ -19,10 +19,11 @@ class DownloadFileNameTest {
     // ------------------------------------------------------------- 来源优先级
 
     @Test
-    fun `双向文本控制符被清掉，不能靠它骗过可执行文件判定`() {
+    fun `双向文本控制符被删除，不能靠它骗过可执行文件判定`() {
         // U+202E(RLO) 让文件管理器把后面的字符**视觉反转**：`setup.apk<U+202E>txt.pdf`
         // 在用户眼里显示成 `pdf.txt`；而 isExecutableName 取**最后一段**扩展名 → 判成 .pdf，
-        // 于是「可执行文件一律强确认、且不给『不再询问』」被绕过。必须清成下划线。
+        // 于是「可执行文件一律强确认、且不给『不再询问』」被绕过。这一族必须**删除**
+        // （替换成 `_` 会留下带 `_` 的伪扩展名，绕过面仍在——见 INVISIBLE_FILE_CHARS）。
         val sneaky = "setup.apk\u202Etxt.pdf"
         assertFalse("双向控制符必须被清洗掉", DownloadRepo.sanitizeFileName(sneaky).contains('\u202E'))
         assertEquals(
@@ -30,17 +31,32 @@ class DownloadFileNameTest {
             false,
             DownloadRepo.isExecutableName(DownloadRepo.sanitizeFileName(sneaky)),
         )
-        // 正例：同族其余控制符一并清掉
+        // 正例：同族其余控制符一并删除
         for (cp in intArrayOf(0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069)) {
             val raw = "a${cp.toChar()}b.pdf"
-            assertEquals("U+%04X 未被清洗".format(cp), "a_b.pdf", DownloadRepo.sanitizeFileName(raw))
+            assertEquals("U+%04X 未被删除".format(cp), "ab.pdf", DownloadRepo.sanitizeFileName(raw))
         }
     }
 
     @Test
     fun `DEL 与 C0 之外的不可打印字符也被清掉`() {
-        // DEL(U+007F) 不在 \u0000-\u001F 内，但同样是不可打印控制字符
-        assertEquals("a_b.txt", DownloadRepo.sanitizeFileName("a\u007Fb.txt"))
+        // DEL(U+007F) 不在 \u0000-\u001F 内，但同样是不可打印控制字符（删除，见 INVISIBLE_FILE_CHARS）
+        assertEquals("ab.txt", DownloadRepo.sanitizeFileName("a\u007Fb.txt"))
+    }
+
+    @Test
+    fun `零宽字符族被删除——可执行文件警示不被绕过`() {
+        // U+200B–200F / FEFF / ALM 不在双向控制符与 C0 清单里：`evil.apk<U+200B>` 的
+        // 扩展名按字符串是 "apk<U+200B>"，isExecutableName 判不中 ⇒ 「可执行文件一律强确认」
+        // 被绕过，且文件管理器里用户肉眼不可见。必须**删除**还原真实可见名（外部审查 P4）。
+        for (cp in intArrayOf(0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0xFEFF, 0x061C)) {
+            val cleaned = DownloadRepo.sanitizeFileName("evil.apk${cp.toChar()}")
+            assertEquals("U+%04X 未被删除".format(cp), "evil.apk", cleaned)
+            assertTrue(
+                "U+%04X 清洗后必须判为可执行".format(cp),
+                DownloadRepo.isExecutableName(cleaned),
+            )
+        }
     }
 
     @Test
