@@ -28,6 +28,9 @@ local.properties
 # 构建日志等临时产物
 *.log
 .workbuddy-tmp/
+# 代码审查工具（mimosa）的运行状态目录：run/history/report 与 hook 状态，纯本机工具产物，
+# 与项目无关。它会在被审查的仓库根下自建，故在此忽略，避免 git add -A 时被带走。
+.mimosa/
 # Python 字节码缓存（tools/ 下的脚本被 import 或运行时产生）
 __pycache__/
 

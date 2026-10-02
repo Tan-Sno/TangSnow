@@ -18,7 +18,7 @@ SHA256，但**依赖产物本身**（尤其来自 maven.mozilla.org 的 GeckoVie
 ## 用法
     python tools/verify_deps.py            # 离线（默认）
     python tools/verify_deps.py --online   # 额外联官网校验（慢，受网络影响）
-    python tools/verify_deps.py --cache D:/Android/gradle   # 指定 GRADLE_USER_HOME
+    python tools/verify_deps.py --cache /path/to/gradle-home   # 指定 GRADLE_USER_HOME
 
 退出码：0 = 全部一致（或无公布校验和项已如实列出）；1 = 发现不一致（值得当事故查），
 或**一项都没能校验**（缓存缺失/元数据全无 ⇒ 闸门形同虚设，按失败处理，见 main 末尾）。
