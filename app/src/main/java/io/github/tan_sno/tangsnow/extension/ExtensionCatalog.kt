@@ -245,8 +245,17 @@ object ExtensionCatalog {
             ?.let { ADDON_PAGE_PATTERN.find(it)?.groupValues?.get(1) }
             ?.takeIf { it.isNotBlank() }
 
-    /** 从 AMO 列表页地址中截取 slug */
-    private val ADDON_PAGE_PATTERN = Regex("""/addon/([^/?#]+)""")
+    /**
+     * 从 AMO 列表页地址中截取 slug。
+     *
+     * ⚠️ **必须锚定主机与 scheme**（2026-10-02 复扫补记）：此前是裸 `/addon/([^/?#]+)`，未锚定意味着
+     * **任何**本地导入的 `.xpi` 只要把 `amoListingUrl` 写成含 `/addon/<别人的 slug>` 的串，就能冒充
+     * 精选目录里的另一个扩展（"已安装"状态错乱）。上面 KDoc 本来就说"非 AMO 来源解析不到"，
+     * 旧正则做不到 —— 现在两者一致。路径允许若干前缀段：AMO 的形态是
+     * `/[-locale]/[firefox|android]/addon/<slug>/`。
+     */
+    internal val ADDON_PAGE_PATTERN =
+        Regex("""^https?://addons\.mozilla\.org/(?:[^/?#]+/)*addon/([^/?#]+)""")
 
     /**
      * 卸载后移除「本会话已安装」记录。

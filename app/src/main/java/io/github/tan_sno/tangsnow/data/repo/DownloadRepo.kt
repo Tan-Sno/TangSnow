@@ -572,11 +572,17 @@ object DownloadRepo {
      */
     internal suspend fun writeToDownloads(
         context: Context,
-        fileName: String,
+        rawFileName: String,
         mime: String,
         register: Boolean,
         write: (java.io.OutputStream) -> Unit,
     ): Placement? = withContext(Dispatchers.IO) {
+        // ⚠️ **漏斗自己负责净化**（2026-10-02 复扫补记）：本函数被文档称为"唯一写出口"，但此前只
+        // 依赖调用方先净化 —— 在 API 26-28 上 `File(dir, name)` 里的 `..` 能越出目录，不变式只活在
+        // 调用方纪律里。`sanitizeFileName` 是**幂等**的（纯替换链 + 按码点限长），故调用方再净化一次
+        // 无副作用；新调用点忘了净化也不会漏。参数改名 `rawFileName` 是为了不遮蔽同名局部量
+        // （Kotlin 遮蔽会产生警告，而本仓门禁要求 0 警告），正文其余部分因此**无需改动**。
+        val fileName = sanitizeFileName(rawFileName)
         val resolver = context.contentResolver
         if (android.os.Build.VERSION.SDK_INT >= 29) {
             val values = ContentValues().apply {
