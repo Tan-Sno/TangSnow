@@ -293,7 +293,9 @@ class ExtInstallCoordinator(
                                     val percent = ((done * 100) / total).toInt().coerceIn(1, 100)
                                     if (percent > lastPercent) {
                                         lastPercent = percent
-                                        withContext(Dispatchers.Main) { cb.onProgress(source, percent) }
+                                        // 进度上报也走「UI 回调异常不改变安装结果」的口径（与 onSuccess 同）：
+                                        // 界面层渲染进度时抛异常不该把一次正在进行的安装判成失败。
+                                        withContext(Dispatchers.Main) { runCatching { cb.onProgress(source, percent) } }
                                     }
                                 }
                             }

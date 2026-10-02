@@ -204,6 +204,8 @@ object SearchEngines {
     private val HOST_ALIASES: Map<String, List<String>> = mapOf(
         // 模板主机 cn.bing.com；bing.com 是同一品牌在无区域前缀时的主机
         "bing_cn" to listOf("bing.com"),
+        // 国际版模板主机是 global.bing.com；`bing.com` 经「子域后缀」匹配同时覆盖 cn./global./www.
+        "bing" to listOf("bing.com"),
         "baidu" to listOf("m.baidu.com"),
         "sogou" to listOf("m.sogou.com"),
         "so360" to listOf("m.so.com"),

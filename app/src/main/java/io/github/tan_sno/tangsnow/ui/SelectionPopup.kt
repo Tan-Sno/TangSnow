@@ -78,7 +78,10 @@ fun showSelectionPopup(
         // 未展示也必须走一次收口回调（合约见上），但**必须延后**（2026-10-01 外部审查）：
         // 同步回调会跑在调用方"把返回值存进字段"**之前**，于是那个字段最终指向一个从未展示、
         // 且已收口的实例（倒挂）。post 一拍让调用方先完成赋值，再由回调把它清掉。
-        anchor.post { fireDismissOnce() }
+        // ⚠️ 用主线程 Handler，**不要**用 `anchor.post`：锚点已脱离窗口时 `View.post` 只是把任务塞进
+        // `HandlerActionQueue`，要等它**再次 attach** 才执行 —— 而对一个正在结束的界面那可能永远不
+        // 发生 ⇒ 收口回调一次都不跑（调用方字段就永远指着一个从未展示的实例）。
+        android.os.Handler(android.os.Looper.getMainLooper()).post { fireDismissOnce() }
         return pw
     }
     if (bottomMarginPx != null) {
