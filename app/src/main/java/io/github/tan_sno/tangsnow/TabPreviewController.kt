@@ -1,87 +1,62 @@
 package io.github.tan_sno.tangsnow
 
 import android.graphics.Bitmap
-import android.os.Handler
-import android.os.Looper
 import androidx.core.view.isVisible
-import org.mozilla.geckoview.GeckoDisplay
-import java.util.concurrent.atomic.AtomicBoolean
+import io.github.tan_sno.tangsnow.browser.Tab
 
 /**
  * 标签页缩略图捕获控制器。
- * 从 MainActivity 抽出：抓取当前活动标签的内核截图并缩成小图缓存（供标签切换页展示）。
- * 仅当 GeckoView 可见且有页面时执行；截图完成后立即释放 display，防止句柄泄漏。
+ * 抓取当前活动标签的截图并缩成小图缓存（供标签切换页展示）；仅当 GeckoView 可见且有页面时执行。
+ *
+ * ## 为什么走 `GeckoView.capturePixels()` 而不是 `session.acquireDisplay()`
+ *
+ * `GeckoView.setSession()` **内部就已经 acquire 了该会话的 display**（GeckoView 157 字节码实测：
+ * `setSession` → `invokevirtual GeckoSession.acquireDisplay()`），而 `GeckoSession.acquireDisplay()`
+ * 的第一条指令是 `assertOnUiThread()`、紧接着 `if (mDisplay != null) throw
+ * IllegalStateException("Display already acquired")`。
+ *
+ * 于是对「正挂在 GeckoView 上的活动标签」再 acquire 一次**必然抛**；原实现把这一步包在
+ * `catch (_: Throwable)` 里直接 return，于是三个触发点全是死路 —— **缩略图从来没生成过**。
+ *
+ * 改用视图自己的 `capturePixels()`：它复用的正是已经持有的那个 display。连带好处是不再需要
+ * acquire/release 配对，也就不需要那套 8 秒看门狗（看门狗的存在理由恰恰是"怕 display 漏释放"）。
  */
 class TabPreviewController(private val activity: MainActivity) {
 
-    /**
-     * 抓取当前活动标签页的内核截图并缩成小图缓存。
-     * capturePixels 为空或失败时回退 display.screenshot()。
-     */
+    /** 抓取当前活动标签页的截图并缩成小图缓存 */
     fun captureCurrentPreview() {
         // 生命周期安全：Activity 正在销毁/已完成时不做任何视图与内核操作
         if (activity.isFinishing || activity.isDestroyed) return
-        if (activity.homeVisible || !activity.binding.geckoView.isVisible) return
+        val view = activity.binding.geckoView
+        if (activity.homeVisible || !view.isVisible) return
         val tab = activity.sessionManager.activeTab ?: return
         // 无痕标签不做缩略图：截图会在内存留存无痕内容，与无痕承诺（不留痕迹）不一致
         if (tab.isPrivate) return
         val url = tab.url ?: return
         if (url.isBlank() || url.startsWith("about:")) return
+        // 只截「视图此刻正在显示的那个会话」：视图还挂在别的标签上时（切换中途）截出来是别人的画面
+        if (view.session !== tab.session) return
 
-        val display = try {
-            tab.session.acquireDisplay()
+        val shot = try {
+            view.capturePixels()
         } catch (_: Throwable) {
-            null
-        } ?: return
-
-        val released = AtomicBoolean(false)
-        fun releaseOnce() {
-            if (released.compareAndSet(false, true)) {
-                runCatching { tab.session.releaseDisplay(display) }
-            }
+            return
         }
-        val handler = Handler(Looper.getMainLooper())
-        // 兜底：若 GeckoResult 迟迟不回调，8 秒后强制释放 display，防止句柄泄漏。
-        // ⚠️ 看门狗只能在「结果已落定」时（onBitmap）摘除：capturePixels 失败会转入
-        // screenshot() 兜底，若在转入兜底前就摘掉看门狗而兜底也永不回调，
-        // display 将无人释放——修复前正是这个窗口泄漏句柄。
-        val watchdog = Runnable { releaseOnce() }
-        fun onBitmap(bmp: Bitmap?) {
-            // 结果已落定：先摘看门狗再释放 display；看门狗已先行释放时此处幂等
-            handler.removeCallbacks(watchdog)
-            releaseOnce()
-            if (bmp != null && bmp.width > 0 && !activity.isDestroyed) {
-                activity.runOnUiThread {
-                    if (!activity.isDestroyed) {
-                        tab.preview = scaleDownPreview(bmp)
-                        activity.tabsAdapter.updateTab(tab)
-                    }
-                }
-            }
-        }
-        handler.postDelayed(watchdog, 8_000L)
-        try {
-            display.capturePixels().accept(
-                { bmp -> if (bmp != null) onBitmap(bmp) else tryScreenshotBuilder(display, ::onBitmap) },
-                { _ -> tryScreenshotBuilder(display, ::onBitmap) }
-            )
-        } catch (_: Throwable) {
-            tryScreenshotBuilder(display, ::onBitmap)
-        }
+        shot.accept(
+            { bmp -> if (bmp != null) onBitmap(tab, bmp) },
+            // 取不到就算了：缩略图是可选装饰，不该有任何可见反馈，也不该影响任何主流程
+            { _ -> },
+        )
     }
 
-    /** 通过 GeckoDisplay.screenshot 显式构造器获取位图，作为 capturePixels 失败的兜底 */
-    private fun tryScreenshotBuilder(
-        display: GeckoDisplay,
-        onBitmap: (Bitmap?) -> Unit,
-    ) {
-        try {
-            display.screenshot().capture().accept(
-                { bmp -> onBitmap(bmp) },
-                { _ -> onBitmap(null) }
-            )
-        } catch (_: Throwable) {
-            onBitmap(null)
+    private fun onBitmap(tab: Tab, bmp: Bitmap) {
+        if (bmp.width <= 0 || activity.isDestroyed) return
+        // 回调线程不由我们决定 ⇒ 写字段与刷新适配器都回 UI 线程
+        activity.runOnUiThread {
+            if (!activity.isDestroyed) {
+                tab.preview = scaleDownPreview(bmp)
+                activity.tabsAdapter.updateTab(tab)
+            }
         }
     }
 
