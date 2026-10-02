@@ -214,16 +214,21 @@ object DownloadRepo {
     }
 
     /**
-     * 文件名非法字符（含控制字符、**双向文本控制符**、DEL）：提到文件级，避免每次下载都重新编译正则。
-     *
-     * ⚠️ 双向文本控制符（U+202A–202E 的 LRE/RLE/PDF/LRO/RLO 与 U+2066–2069 的 LRI/RLI/FSI/PDI）
-     * 必须在清单里：它们既不在 `\u0000-\u001F`、也不是路径分隔符，于是能原样落盘 ——
-     * 而文件管理器会按它们**把后面的字符视觉反转**，于是 `setup.apk<U+202E>txt.pdf`
-     * 在用户眼里显示成 `pdf.txt`、系统 `isExecutableName` 也判成 `.pdf`（取最后一段扩展名），
-     * 那句「可执行文件一律强确认、且不给『不再询问』」就被绕过了。
-     * DEL（U+007F）一并清掉：它同样是 C0 之外的不可打印字符。
+     * 文件名非法字符（路径分隔符 / 保留符号 / C0 控制字符）：提到文件级，避免每次下载都重新编译正则。
+     * 这一组**替换成 `_`**（保留视觉分隔）；不可见/双向字符族归 [INVISIBLE_FILE_CHARS]（删除）。
      */
-    private val ILLEGAL_FILE_CHARS = Regex("""[/\\:*?"<>|\u0000-\u001F\u007F\u202A-\u202E\u2066-\u2069]""")
+    private val ILLEGAL_FILE_CHARS = Regex("""[/\\:*?"<>|\u0000-\u001F]""")
+
+    /**
+     * 不可见/双向字符族：DEL（U+007F）、零宽与连接符（U+200B–200F）、双向文本控制符
+     * （U+202A–202E 的 LRE/RLE/PDF/LRO/RLO 与 U+2066–2069 的 LRI/RLI/FSI/PDI）、
+     * BOM（U+FEFF）、阿拉伯字母序标记（U+061C）。这一族**删除**而不是替换成 `_`：
+     * 它们不携带任何用户想要的信息，而替换会让 `evil.apk<U+200B>` 变成 `evil.apk_` ——
+     * `isExecutableName` 取最后一段扩展名仍是 `apk_`，照旧判不中，「可执行文件一律强确认」
+     * 被绕过且用户肉眼不可见（外部审查 P4）。删除则还原真实可见名 `evil.apk`，闸门命中。
+     */
+    private val INVISIBLE_FILE_CHARS =
+        Regex("""[\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u061C]""")
 
     /** 结尾的空白与点（Windows 会静默丢弃，或造成路径穿越） */
     private val TRAILING_SPACE_OR_DOT = Regex("""[\s.]+$""")
@@ -868,6 +873,9 @@ object DownloadRepo {
     /** 文件名清洗：防路径穿越 / 非法字符注入，仅保留安全的基本文件名 */
     internal fun sanitizeFileName(raw: String): String {
         val cleaned = raw
+            // 不可见字符先**删除**（替换成 `_` 会把绕过面留在扩展名里，见 INVISIBLE_FILE_CHARS），
+            // 再把结构性非法字符替换成 `_`
+            .replace(INVISIBLE_FILE_CHARS, "")
             .replace(ILLEGAL_FILE_CHARS, "_")
             // 结尾的点与空格在部分文件系统（exFAT/SD 卡）上非法，一并去掉
             .replace(TRAILING_SPACE_OR_DOT, "")
