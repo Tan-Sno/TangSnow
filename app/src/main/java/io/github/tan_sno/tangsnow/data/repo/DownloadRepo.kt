@@ -583,20 +583,24 @@ object DownloadRepo {
                 )
                 put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
             }
+            // 取消要在**建行之前**判（2026-10-02 外部审查更正）：`insert` 是阻塞式 Binder 调用、
+            // 不感知协程取消，于是「用户取消而 MediaProvider 正在插入」会**照样建出行**，
+            // 随后才在这里（原先在 insert 之后、且在负责 delete 的 try 之外）抛 CE ——
+            // 那条行就成 0 字节、IS_PENDING=1 的孤儿：既没登记、也不在转正重试队列里，
+            // 用户与本应用都看不见，直到系统按 DATE_EXPIRES（约 7 天）回收。
+            // 移到 insert **之前**判，这个窗口就不存在了（行还没建，无可泄漏）。
+            // 已知残留：**复制进行中**的取消仍不可中断（`write` 是非 suspend 阻塞循环，
+            // 要打断得把 ensureActive 织进复制循环本身）—— 那一条由 write 抛出的 CE 走
+            // 下方 catch 分支清占位。
+            if (kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.isActive == false) {
+                throw kotlinx.coroutines.CancellationException("download cancelled before write")
+            }
             val uri = resolver.insert(
                 android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
             ) ?: return@withContext null
             // 两段分开处置（本函数的核心约定，见上方 KDoc）：
             //  · 写流阶段失败 ⇒ 内容不完整 ⇒ 清占位（**唯一**会删内容的路径）
             //  · 转正阶段失败 ⇒ 内容已完整落盘、只是对外不可见 ⇒ **保留**，如实报失败
-            // ⚠️ 取消要在**开始写之前**看出来（2026-10-01 外部审查）：`write` 是阻塞式复制、
-            // 中途没有挂起点，取消只能在边界被观察到 —— 不在这里判，用户取消之后文件照样落盘、
-            // 记录照样登记，与"取消"语义相悖。用 FQ 写法避免为一个判据引入导入。
-            // 已知残留：**复制进行中**的取消仍不可中断（`write` 是非 suspend 阻塞循环，
-            // 要打断得把 ensureActive 织进复制循环本身）—— 另行评估，不在本次范围。
-            if (kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.isActive == false) {
-                throw kotlinx.coroutines.CancellationException("download cancelled before write")
-            }
             try {
                 // ⚠️ 判空不能丢：openOutputStream 返回 null 时**不抛异常**。只看异常会把
                 //    「打不开流」当成写入成功，于是 0 字节的占位行被清零转正成可见文件，
