@@ -272,6 +272,21 @@ android {
         //     资料库页签与搜索词的重建恢复、语言初选页重建后保留已选语言、取色对话框回填与
         //     无障碍描述、硬编码失败原因改资源串、崩溃日志过滤口径、对话框内边距 px→dp。
         //   ABI 分包 versionCode 随之派生为 381 / 382 / 383。
+        // 2.1.7：**第三方审查报告 6 的收口**。无新功能、无新对外端点、政策文本未变 ⇒
+        //   `POLICY_VERSION` **保持 23**（不动）。修的都是"编译通过、测试全绿也发现不了"那一类：
+        //   ① 【P1】`exiting` 在「**不清除**」退出分支不复位 ⇒ `finishAffinity()` 不杀进程，同进程内
+        //      「从桌面重开 → 再退出」会被早退挡成空操作：开着「退出即清除」也不清、零提示（承诺为假 +
+        //      无反馈），同时跳过 `saveState()`、且 onDestroy 的关停判据恒假 ⇒ 内核再也不关停；
+        //   ② 扩展安装的**总超时 `onFailure` 永不投递**：超时已取消协程，`deliverOnMain` 内层
+        //      `withContext(Dispatchers.Main)` 会立即抛 CE、块体不执行 ⇒ 改套 `NonCancellable` 并补
+        //      `runCatching`；同时把"带一次性投递闸"那句**失实的 KDoc 改成真话**（闸仍待做）；
+        //   ③ 删除自定义搜索引擎按**显示位置**算下标 ⇒ `all()` 在 id 分配后才过滤坏条目，位置会前移
+        //      ⇒ 有坏条目时会**删错引擎**；改为从 `engine.id` 反解存储下标；
+        //   ④ 崩溃日志「分享」失败复用了"当前没有可分享的页面"⇒ 归因错，新增 `about_crash_share_failed`；
+        //   ⑤ 手动进入 PiP 不再传空参数（此前把 `updatePipParams` 刚设好的 autoEnter / 源矩形丢掉）；
+        //      下载确认队列的销毁判据补 `hasOtherHost()`（不再被另一个实例的 onDestroy 整队放弃）。
+        //   ABI 分包 versionCode 随之派生为 401 / 402 / 403。
+        //   versionCode = 40（本文件的版本历史按这个风格记，`tools/verify_release.py` 也会去核对声明与制品一致）。
         // 2.1.6：**政策 §4 措辞与实发对齐 + 第三方全盘报告的核实与修复收口**（8 文件 + 3 个新测试类 /
         //   +387 −47）。无新功能、无新对外端点；但 §4 原写「不携带任何设备标识、账号或浏览记录」，
         //   而实发还带应用版本号（User-Agent）与设备语言偏好（Accept-Language）—— 二者都不是设备
@@ -323,8 +338,8 @@ android {
         //   `BrowserDbLimitGuardTest`（新类，3 例）⇒ +5），
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则 testDebugUnitTest 直接红。
         //   两条新哨兵已主动验证会红（临时改坏 ⇒ 6 条 FAILED）；lint 全警告口径仍 `No issues found`。
-        versionCode = 39
-        versionName = "2.1.6"
+        versionCode = 40
+        versionName = "2.1.7"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
         // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
         // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。

@@ -898,7 +898,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             }
         }
         shownDownloadConfirms.clear()
-        if (!isChangingConfigurations) {
+        // ⚠️ 判据补 `hasOtherHost()`（2026-10-02 外部审查 P3）：队列与计数是**进程级**的（为配置变更
+        // 重建而刻意提到 companion），但此前只看本实例是否配置变更 ⇒ 双实例（singleTop + 外部深链）
+        // 下 A 真销毁会把 **B 排队**的下载确认全部关流、计数清零 ⇒ B 的补弹什么都弹不出来，
+        // 连「N 个下载被忽略」那句如实提示也没了。同文件里处理器解绑与内核关停都已按
+        // 「引用比对 / 宿主计数」收口，只有这处漏了。
+        if (!isChangingConfigurations && !sessionManager.hasOtherHost()) {
             pendingDownloadConfirms.forEach { abandonDownload(it.response) }
             pendingDownloadConfirms.clear()
             // 被放弃的那几条永远不会被 flush 报告了：计数一并清零。不清的话，进程仍存活时
@@ -987,7 +992,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         val tab = sessionManager.activeTab ?: return
         if (tab.isPrivate || !tab.mediaPlaying) return
         runCatching {
-            enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())
+            // 复用同一份参数（2026-10-02 外部审查 P4）：此前传空 Builder ⇒ 丢掉 autoEnter 与源矩形
+            enterPictureInPictureMode(buildPipParams())
         }
     }
 
@@ -1004,16 +1010,30 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      */
     private fun updatePipParams() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return
+        runCatching { setPictureInPictureParams(buildPipParams()) }
+    }
+
+    /**
+     * 组装 PiP 参数（autoEnter + 源矩形）。
+     *
+     * ⚠️ **手动进入 PiP 与 [updatePipParams] 必须共用这一份**（2026-10-02 外部审查 P4）：此前手动
+     * 进入传的是空 `Builder().build()`，会把这里刚设好的 `setAutoEnterEnabled` / `setSourceRectHint`
+     * 覆盖成默认值 ⇒ 正是上面 KDoc 要避免的"切后台再进 PiP 闪烁 / 转场不跟手"。
+     * `setAutoEnterEnabled` 仅 API 31+ 存在（minSdk 26 直接调会 NoSuchMethod），故按版本加。
+     */
+    private fun buildPipParams(): android.app.PictureInPictureParams {
         val tab = sessionManager.activeTab
         val autoEnter = tab != null && !tab.isPrivate && tab.mediaPlaying
         val builder = android.app.PictureInPictureParams.Builder()
-            .setAutoEnterEnabled(autoEnter)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(autoEnter)
+        }
         if (::binding.isInitialized && binding.geckoView.width > 0) {
             builder.setSourceRectHint(
                 android.graphics.Rect(0, 0, binding.geckoView.width, binding.geckoView.height)
             )
         }
-        runCatching { setPictureInPictureParams(builder.build()) }
+        return builder.build()
     }
 
     override fun onPictureInPictureModeChanged(
