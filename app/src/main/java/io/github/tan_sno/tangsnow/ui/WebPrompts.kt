@@ -240,9 +240,26 @@ class WebPrompts(
     }
 
     /**
-     * Activity 销毁前兜底：
-     *  - 未完成的文件选择 / 权限申请按取消处理，避免 JS 侧永久挂起；
-     *  - 仍在展示的网页弹窗逐个 `cancel()`，触发其取消监听完成一次应答并释放窗口。
+     * 关掉仍在展示的应用内弹窗，逐条结算对应内核应答。
+     *
+     * `cancel()` 会触发各自挂好的 `OnCancelListener` ⇒ 那里的 `once(取消值)` 完成 GeckoResult。
+     *
+     * ⚠️ **配置变更时也必须调**（2026-10-02 外部审查 M1 的补漏）：这些 Dialog 随 Activity 一起被
+     * 系统强拆（`WindowManagerGlobal.closeAll`），而**强拆不触发 OnDismiss/OnCancelListener** ⇒ 不主动
+     * cancel 就没有人结算那条 GeckoResult：页面侧 await 永久挂起（JS 冻结）、窗口也泄漏。
+     */
+    fun closeShownDialogs() {
+        openDialogs.toList().forEach { runCatching { it.cancel() } }
+        openDialogs.clear()
+    }
+
+    /**
+     * Activity 销毁前兜底 —— **只收口「系统对话框」那一半**：
+     * 未完成的文件选择 / 权限申请 / 选目录按取消处理，避免 JS 侧永久挂起。
+     *
+     * ⚠️ 别把这里当成"销毁时全收口"：配置变更（切主题 / 切语言）要走 [closeShownDialogs] 那一半、
+     * **不能**应答这些挂起回调 —— 系统对话框的结果随后会派发给新实例，提前应答就会把用户点的
+     * "允许 / 已选文件"当成拒绝（外部审查 M1）。两件事的判据不同，故拆成两个方法。
      */
     fun cancelPending() {
         pendingFileDone?.invoke(null)
@@ -251,8 +268,7 @@ class WebPrompts(
         pendingPermDone = null
         pendingFolderDone?.invoke(null)
         pendingFolderDone = null
-        openDialogs.toList().forEach { runCatching { it.cancel() } }
-        openDialogs.clear()
+        closeShownDialogs()
     }
 
     // ------------------------------------------------------------- PromptHandler

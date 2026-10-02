@@ -827,7 +827,13 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // ⚠️ 配置变更（切主题 / 切语言等）会重建 Activity，此时**不能**把挂起的弹窗应答成"拒绝"
         // （外部审查 M1）：系统对话框的结果随后会派发给新实例，而应答已被提前消耗 ⇒ 用户点了
         // "允许 / 已选文件"却被当成拒绝且零提示。与下方"下载确认"同一口径：只在真销毁时收口。
-        if (!isChangingConfigurations && ::webPrompts.isInitialized) webPrompts.cancelPending()
+        // 但**应用内已展示的弹窗**两码事：它们随本实例一起被系统强拆，强拆不触发取消回调 ⇒
+        // 那条 GeckoResult 再也没人结算（页面 JS 永久挂起 + 窗口泄漏）⇒ 两种情形都必须关它们
+        // （2026-10-02 外部审查 P2-4：M1 当时把这两件事一起跳过了）。
+        if (::webPrompts.isInitialized) {
+            webPrompts.closeShownDialogs()
+            if (!isChangingConfigurations) webPrompts.cancelPending()
+        }
         // 挂起的下载确认：队列在进程级 companion，**配置变更重建**时由新实例的 onResume
         // 接手补弹，不能在这里关流；**真销毁**（返回键退出等，内核仍在后台）时必须逐个
         // 关掉，否则内核连接悬挂到超时（外部审查 M4）。
