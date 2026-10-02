@@ -743,6 +743,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     override fun onStart() {
         super.onStart()
+        // 同 onResume 的开头守卫：门禁那条路上本实例没有会话管理器，提前 return
+        if (!::sessionManager.isInitialized) return
         // 窗口出现在屏幕上（分屏失焦时同样成立）：权限/弹窗的「用户看不看得见」这一维以它为准
         startedVisible = true
         syncHostVisible()
@@ -750,6 +752,16 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     override fun onResume() {
         super.onResume()
+        // ⚠️ 同意门禁那条路在 onCreate 里就 `finish()` 并 return，`binding` 与 `sessionManager`
+        // **都没初始化**；而下面十来行全都直接摸它们（`updateEngineChipText` / `refreshHome` /
+        // `updateTabsBadge` …），未经守卫就是首装必崩的 `UninitializedPropertyAccessException`。
+        // 现状安全只依赖一条**框架不保证**的隐式行为：`onCreate` 里 finish 掉的 Activity
+        // 不会被 resume（AOSP `ActivityThread.performResumeActivity` 开头
+        // `if (r.activity.mFinished) return false`）⇒ onStart/onResume 根本不会来。
+        // 那条依据已核实过（见 STATUS.md 第八节），但它是「框架实现细节」而非契约 ——
+        // 将来若门禁挪位、多加一条 early-return、或有人手工调 onResume，就会变成首装崩。
+        // 这里把不变量写成结构性的：没绑上视图就没什么可 resume 的。
+        if (!::binding.isInitialized || !::sessionManager.isInitialized) return
         // 无条件夺回处理器（幂等）：本实例可能刚被另一个实例压在栈下又恢复前台
         bindSessionHandlers()
         // 同一件事的另一半：后创建的实例会把活动会话挂到它自己的 GeckoView 上，本实例恢复前台时
