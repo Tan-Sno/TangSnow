@@ -11,8 +11,14 @@ data class HistoryItem(val id: Long, val url: String, val title: String, val vis
 
 /**
  * 轻量本地库：书签 + 历史。
- * 采用原生 SQLite（无第三方依赖、无注解处理器），
- * 读写统一走内部 IO 线程池，避免阻塞主线程。
+ * 采用原生 SQLite（无第三方依赖、无注解处理器）。
+ *
+ * ⚠️ **本类不含任何线程池/调度器**：每个方法都**同步**在调用线程上执行，调用方负责切到 IO 线程。
+ * 线程约束由 [io.github.tan_sno.tangsnow.data.repo.HistoryRepo] /
+ * [io.github.tan_sno.tangsnow.data.repo.BookmarkRepo] 的 `withContext(Dispatchers.IO)` 保证
+ * （那两个仓库的方法全是 `suspend`，未在协程里调用就编译不过）。
+ * 此前这里写着「读写统一走内部 IO 线程池」—— 类里根本没有这个东西，照它写新调用点会以为
+ * 可以从任意线程直接调，于是静默变成主线程 SQLite I/O（`onCreate`/`onUpgrade` 也可能在主线程跑）。
  */
 class BrowserDb private constructor(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DB_NAME, null, DB_VERSION) {
@@ -248,9 +254,10 @@ class BrowserDb private constructor(context: Context) :
 
     /** 只保留最近 [keep] 条历史，更早的自动裁掉（走 visited_at 索引，开销极小） */
     fun trimHistoryTo(keep: Int) {
+        val k = positiveLimit(keep, "keep")
         db().execSQL(
             "DELETE FROM history WHERE _id NOT IN " +
-                "(SELECT _id FROM history ORDER BY visited_at DESC LIMIT $keep)"
+                "(SELECT _id FROM history ORDER BY visited_at DESC LIMIT $k)"
         )
     }
 
@@ -281,7 +288,8 @@ class BrowserDb private constructor(context: Context) :
 
     /** 最近 [limit] 条历史（地址栏联想用，避免每次全表扫描） */
     fun recentHistory(limit: Int): List<HistoryItem> {
-        db().query("history", null, null, null, null, null, "visited_at DESC", "$limit").use { c ->
+        val n = positiveLimit(limit, "limit")
+        db().query("history", null, null, null, null, null, "visited_at DESC", "$n").use { c ->
             val out = ArrayList<HistoryItem>(c.count)
             while (c.moveToNext()) {
                 out += HistoryItem(
@@ -301,6 +309,25 @@ class BrowserDb private constructor(context: Context) :
         private const val DB_VERSION = 3
         /** 专门历史页可见范围：超出后按最近访问自动裁剪 */
         const val HISTORY_KEEP = 200
+
+        /**
+         * 「LIMIT」入参的守卫（纯函数，便于 JVM 单测钉住边界）。
+         *
+         * **为什么必须有**：[trimHistoryTo] / [recentHistory] 把上限**直接插进 SQL**
+         * （值是 `Int`，不构成注入），但 `trimHistoryTo(0)` 会生成 `LIMIT 0` ⇒ 子查询返回**空集**
+         * ⇒ `NOT IN (∅)` 对**每一行**都为真 ⇒ **静默清空整张历史表**；而 `recentHistory(-1)` 在
+         * SQLite 里负数 LIMIT 表示「不限」⇒ 返回全表。当前调用点传的都是正常常量
+         * （[HISTORY_KEEP] 与联想的 10），但两者都是 `public` 且原本无守卫 —— 一个 `0` 或负数
+         * 就够了，且调用方只会看到「没有异常」。
+         *
+         * 放 companion 是因为本类构造器私有，实例方法在 JVM 单测里不可达。
+         */
+        internal fun positiveLimit(limit: Int, name: String): Int {
+            require(limit > 0) {
+                "$name 必须为正整数（收到 $limit）：LIMIT 0 会让 `NOT IN (空集)` 命中每一行 ⇒ 清空整表"
+            }
+            return limit
+        }
 
         @Volatile
         private var instance: BrowserDb? = null
