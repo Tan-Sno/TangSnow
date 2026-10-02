@@ -387,9 +387,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     /**
      * 扩展弹窗（browser_action 默认弹窗）展示：用独立 Dialog 承载，不覆盖正在浏览的主标签。
-     * session 已由内核 open 并加载弹窗内容（见 ExtensionPrompts.openPopupSession），这里只负责
-     * 把它挂到一个可见的 GeckoView 上；关闭时 `releaseSession()` **解绑** GeckoView 与会话，
-     * 避免 GeckoView 继续持有它。
+     * ⚠️ **交到这里的会话是「未 open」的**（2026-10-02 外部审查 P3 更正：本句此前写成"session 已由
+     * 内核 open 并加载弹窗内容"，与 `ExtensionPrompts.openPopupSession` 的说明**正好相反**）：
+     * 内核拿到该会话后**自行** open + `loadUri(弹窗地址)`；而"先 open"会触发内核断言
+     * `Must use an unopened GeckoSession instance` ⇒ **绝不能在这里 open**。本方法只负责把它挂到一个
+     * 可见的 GeckoView 上；关闭时 `releaseSession()` **解绑** GeckoView 与会话，避免 GeckoView 继续持有它。
      * ⚠️ 解绑**不等于**关闭会话：releaseSession 之后会话本身仍是 open 状态。
      * 进程退出时的统一收口是 `SessionManager.closeAll()`（只遍历 tabs）——
      * 扩展弹窗会话的显式 `close()` 属内核契约风险项，是施工计划里待真机验证后补的第 2 步，
