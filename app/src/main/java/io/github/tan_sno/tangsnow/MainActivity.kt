@@ -108,11 +108,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     /** 画中画（PiP）进行中：隐藏框架只留网页画面，退出自动恢复 */
     private var pipActive = false
     /**
-     * 本实例处于「onResume..onPause 之间」的常规可见态。与 [pipActive] 一道构成
-     * 宿主可见性的两个来源 —— PiP 期间系统**必走 onPause**，但窗口仍在屏幕上，
-     * 只看 onResume/onPause 就会把 PiP 判成不可见（弹窗/权限被误拒）。
+     * 本实例的窗口是否**在屏幕上** —— 由 `onStart..onStop` 维护。
+     *
+     * 为什么不用 `onResume..onPause`（2026-10-02 外部审查 P2-6）：**分屏/多窗口下失焦的那一侧
+     * 只走到 `onPause`**（生命周期停在 STARTED），窗口仍在屏幕上、用户看得见。按 onResume 判可见性
+     * 会把那一侧当成"后台" ⇒ 网页弹窗被自动 dismiss、权限被静默拒，用户明明看得见却什么也没弹。
+     * PiP 同理（系统必走 onPause 而窗口仍可见），故 [pipActive] 那一维继续保留。
      */
-    private var resumedVisible = false
+    private var startedVisible = false
     private val topBarH get() = dp(70)
     private val bottomBarH get() = dp(78)
 
@@ -129,8 +132,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         }
     }
 
-    /** 此刻窗口是否在屏幕上（常规可见或 PiP）。弹窗类副作用（下载确认等）据此决定建不建窗 */
-    private fun hostVisibleNow(): Boolean = resumedVisible || pipActive
+    /** 此刻窗口是否在屏幕上（常规可见、分屏失焦、或 PiP）。弹窗类副作用（下载确认等）据此决定建不建窗 */
+    private fun hostVisibleNow(): Boolean = startedVisible || pipActive
 
     /** 本应用主动写剪贴板的时间戳（用于区分「外部静默写入」与「用户主动复制」） */
     private var selfClipboardWriteAt = 0L
@@ -738,11 +741,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         handleIntent(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        // 窗口出现在屏幕上（分屏失焦时同样成立）：权限/弹窗的「用户看不看得见」这一维以它为准
+        startedVisible = true
+        syncHostVisible()
+    }
+
     override fun onResume() {
         super.onResume()
-        // 界面重新可见：权限征询的守卫据此判定「用户此刻看不看得见」这一维（见 permissionStale）
-        resumedVisible = true
-        syncHostVisible()
         // 无条件夺回处理器（幂等）：本实例可能刚被另一个实例压在栈下又恢复前台
         bindSessionHandlers()
         // 同一件事的另一半：后创建的实例会把活动会话挂到它自己的 GeckoView 上，本实例恢复前台时
@@ -788,10 +795,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
 
     override fun onPause() {
         super.onPause()
-        // 界面不再可见：此后由后台标签触发的权限征询一律拒绝（不弹框、不抢焦点）。
-        // PiP 是唯一例外 —— PiP 必走 onPause 但窗口仍可见，由 syncHostVisible 用 pipActive 补回。
-        resumedVisible = false
-        syncHostVisible()
+        // ⚠️ 这里**不**动可见性：onPause 只说明"失去焦点"，窗口可能仍在屏幕上（分屏失焦、PiP）。
+        // 真正的"离开屏幕"由 onStop 判定（见 startedVisible）。
         // 进入后台前立即保存会话快照：进程可能在后台被系统回收，这是最后的落盘时机
         if (::sessionManager.isInitialized) sessionManager.saveState()
         runCatching {
@@ -807,6 +812,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         if (::sessionManager.isInitialized && sessionManager.hasOtherHost()) {
             coveredByOtherHost = true
         }
+        // 窗口离开屏幕：此后由后台标签触发的权限征询一律拒绝（不弹框、不抢焦点）
+        startedVisible = false
+        syncHostVisible()
         super.onStop()
     }
 
@@ -957,7 +965,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // PiP 期间窗口仍可见，宿主可见性要补回 true：否则网页弹窗（alert/confirm/HTTP 认证）
         // 会被 promptStale 的 hostVisible 判据就地拒绝 —— 用户在小窗看视频时页面的
         // 「会话已过期，请重新登录」这类框会被静默吞掉。退出 PiP 后的各种走向
-        // （展开全屏 / 回桌面 / 被覆盖）由 onResume/onPause 经 resumedVisible 如实接管。
+        // （展开全屏 / 回桌面 / 被覆盖）由 onStart/onStop 经 startedVisible 如实接管。
         syncHostVisible()
         // PiP 时只留网页画面（隐藏顶/底栏 + 进度），恢复后自动还原
         if (::binding.isInitialized) refreshChrome()
