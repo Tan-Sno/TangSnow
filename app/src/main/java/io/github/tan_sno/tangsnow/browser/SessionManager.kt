@@ -1072,7 +1072,8 @@ prefs:
         //  · 为什么补在**这里**而不是那 18 个 `on*Prompt` 里逐处加：那些回调各有自己的 `done`，
         //    早退**必须同时把 prompt 应答掉**（否则内核永久等这个 GeckoResult），逐处加极易漏一处；
         //    本函数是它们唯一的共同入口，且 `settleResult(dismiss)` 已经把"应答"这一步做掉了。
-        //  · 为什么用 [hostVisible]：它由 onResume 置 true、onPause 置 false ⇒ 用户按返回键之后
+        //  · 为什么用 [hostVisible]：它由 onStart 置 true、onStop 置 false（**不是** onResume/onPause ——
+        //    分屏失焦的那一侧窗口仍在屏幕上，按 onResume 判会把用户看得见的弹窗一并误拒）⇒ 用户按返回键之后
         //    （onPause → … → onDestroy 这段）或界面被别的 Activity 盖住时到达的弹窗会被就地拒绝，
         //    不会再出现"对话框建在正要销毁的窗口上"。这与 [permissionStale] 的判据完全对称（那里早就补了）。
         if (isAlive(tab) && tab === active && hostVisible) return false
