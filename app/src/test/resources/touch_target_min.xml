@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 notes-tangsnow/tools/static-touch-target-audit.py 生成，请勿手改；
+     豁免请填 exempt 属性（会被人为保留），改完布局请重跑工具。 -->
+<touchTargets>
+    <target kind="violation" layout="item_extension_catalog.xml" key="btnAction" minSideDp="36" widthDp="80" heightDp="36" exempt="宽度已有 minWidth=80dp，高度 36dp 待加到 48dp。见 PLAN 批 2">app\src\main\java\io\github\tan_sno\tangsnow\ExtensionsActivity.kt:1153</target>
+    <target kind="violation" layout="view_tabs_panel.xml" key="btnAddTab" minSideDp="40" widthDp="40" heightDp="40" exempt="父容器 56dp 固定高 + center_vertical ⇒ 改 48dp 视觉零变化。见 PLAN 批 1a">app\src\main\java\io\github\tan_sno\tangsnow\MainActivity.kt:1461</target>
+    <target kind="partial" layout="activity_home_customize.xml" key="btnClearImage" minSideDp="44" widthDp="" heightDp="44" exempt="">app\src\main\java\io\github\tan_sno\tangsnow\HomeCustomizeActivity.kt:72</target>
+    <target kind="violation" layout="activity_library.xml" key="btnClearSearch" minSideDp="42" widthDp="42" heightDp="42" exempt="清空搜索按钮，待扩到 48dp。见 PLAN 批 2">app\src\main\java\io\github\tan_sno\tangsnow\LibraryActivity.kt:76</target>
+    <target kind="violation" layout="view_tabs_panel.xml" key="btnCloseTabs" minSideDp="40" widthDp="40" heightDp="40" exempt="父容器 56dp 固定高 + center_vertical ⇒ 改 48dp 视觉零变化。见 PLAN 批 1a">app\src\main\java\io\github\tan_sno\tangsnow\MainActivity.kt:1459</target>
+    <target kind="violation" layout="view_find_bar.xml" key="btnFindClose" minSideDp="42" widthDp="42" heightDp="42" exempt="查找条关闭键；该行 40/42/44dp 混用，需整行一起评估。见 PLAN 批 3">app\src\main\java\io\github\tan_sno\tangsnow\FindBarController.kt:48</target>
+    <target kind="partial" layout="view_find_bar.xml" key="btnFindNext" minSideDp="40" widthDp="" heightDp="40" exempt="">app\src\main\java\io\github\tan_sno\tangsnow\FindBarController.kt:45</target>
+    <target kind="partial" layout="view_find_bar.xml" key="btnFindPrev" minSideDp="40" widthDp="" heightDp="40" exempt="">app\src\main\java\io\github\tan_sno\tangsnow\FindBarController.kt:42</target>
+    <target kind="partial" layout="activity_extensions.xml" key="btnImportFile" minSideDp="40" widthDp="" heightDp="40" exempt="">app\src\main\java\io\github\tan_sno\tangsnow\ExtensionsActivity.kt:88</target>
+    <target kind="partial" layout="activity_extensions.xml" key="btnInstallUrl" minSideDp="34" widthDp="" heightDp="34" exempt="">app\src\main\java\io\github\tan_sno\tangsnow\ExtensionsActivity.kt:87</target>
+    <target kind="violation" layout="item_extension_installed.xml" key="btnManage" minSideDp="36" widthDp="36" heightDp="36" exempt="待加高到 48dp：视觉尺寸不变、只加 padding，行高会随之变化，需实机确认视觉。见 PLAN 批 2">app\src\main\java\io\github\tan_sno\tangsnow\ExtensionsActivity.kt:1184</target>
+    <target kind="partial" layout="activity_home_customize.xml" key="btnPickImage" minSideDp="44" widthDp="" heightDp="44" exempt="">app\src\main\java\io\github\tan_sno\tangsnow\HomeCustomizeActivity.kt:71</target>
+    <target kind="violation" layout="view_home.xml" key="btnPrivate" minSideDp="42" widthDp="42" heightDp="42" exempt="无痕浏览按钮，待扩到 48dp。见 PLAN 批 2">app\src\main\java\io\github\tan_sno\tangsnow\MainActivity.kt:1807</target>
+    <target kind="violation" layout="view_tabs_panel.xml" key="btnPrivateTab" minSideDp="40" widthDp="40" heightDp="40" exempt="父容器 56dp 固定高 + center_vertical ⇒ 改 48dp 视觉零变化。见 PLAN 批 1a">app\src\main\java\io\github\tan_sno\tangsnow\MainActivity.kt:1460</target>
+    <target kind="violation" layout="view_toolbar.xml" key="btnReload" minSideDp="40" widthDp="40" heightDp="40" exempt="在 56dp 胶囊内，改 48dp 放得下但按钮可见变大，需实机确认胶囊内元素不被挤压。见 PLAN 批 3">app\src\main\java\io\github\tan_sno\tangsnow\MainActivity.kt:1711</target>
+    <target kind="violation" layout="item_library.xml" key="btnRemove" minSideDp="36" widthDp="36" heightDp="36" exempt="待加高到 48dp：删除是破坏性操作，优先级最高。见 PLAN 批 2">app\src\main\java\io\github\tan_sno\tangsnow\ui\Adapters.kt:44</target>
+    <target kind="violation" layout="view_toolbar.xml" key="btnScan" minSideDp="44" widthDp="44" heightDp="44" exempt="在 56dp 胶囊内，改 48dp 放得下但按钮可见变大，需实机确认胶囊内元素不被挤压。见 PLAN 批 3">app\src\main\java\io\github\tan_sno\tangsnow\MainActivity.kt:1710</target>
+    <target kind="violation" layout="item_extension_installed.xml" key="btnUninstall" minSideDp="36" widthDp="36" heightDp="36" exempt="待加高到 48dp：视觉尺寸不变、只加 padding，行高会随之变化，需实机确认视觉。见 PLAN 批 2">app\src\main\java\io\github\tan_sno\tangsnow\ExtensionsActivity.kt:1186</target>
+    <target kind="partial" layout="view_toolbar.xml" key="engineChip" minSideDp="46" widthDp="" heightDp="46" exempt="">app\src\main\java\io\github\tan_sno\tangsnow\MainActivity.kt:1661</target>
+    <target kind="partial" layout="activity_extensions.xml" key="rowLinkInstall" minSideDp="44" widthDp="" heightDp="44" exempt="">app\src\main\java\io\github\tan_sno\tangsnow\ExtensionsActivity.kt:514</target>
+    <target kind="partial" layout="activity_extensions.xml" key="rowXpiImport" minSideDp="44" widthDp="" heightDp="44" exempt="">app\src\main\java\io\github\tan_sno\tangsnow\ExtensionsActivity.kt:509</target>
+    <target kind="violation" layout="item_tab.xml" key="tabClose" minSideDp="32" widthDp="32" heightDp="32" exempt="全仓最小。卡片高度由内容驱动，改尺寸会盖住更多预览图，且内层只有 marginEnd=30dp ⇒ 修法用 TouchDelegate 外扩 8dp（视觉与布局都不动）。见 PLAN 批 1b">app\src\main\java\io\github\tan_sno\tangsnow\ui\Adapters.kt:103</target>
+</touchTargets>
