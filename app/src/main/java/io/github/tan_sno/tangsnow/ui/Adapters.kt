@@ -1,7 +1,9 @@
 package io.github.tan_sno.tangsnow.ui
 
 import android.content.res.ColorStateList
+import android.graphics.Rect
 import android.view.LayoutInflater
+import android.view.TouchDelegate
 import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
@@ -82,8 +84,26 @@ class TabsAdapter(
 
     class VH(val binding: ItemTabBinding) : RecyclerView.ViewHolder(binding.root)
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
-        VH(ItemTabBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+        val binding = ItemTabBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+        // 「删除」是全仓最小的触摸目标（32×32dp），而且是**破坏性**操作。
+        // 刻意**不改布局尺寸**：卡片高度由内容驱动，尺寸变大既会盖住更多预览图，
+        // 又需要连带加大内层的 marginEnd（否则标题/URL 被压住）—— 两处都会动视觉。
+        // TouchDelegate 只扩大命中区，视觉与布局都不动。
+        // ⚠️ 命中区向卡片外扩的部分会被父容器裁掉（tabClose 距卡片边只有 6dp），
+        // 所以内侧扩到 48dp、外侧约 40dp；布局节点本身仍是 32dp，
+        // 因此 `TouchTargetSentinelTest` 的豁免表里保留这一条并注明原因。
+        binding.root.post {
+            val close = binding.tabClose
+            val pad = (8 * close.resources.displayMetrics.density).toInt()
+            val rect = Rect(
+                close.left - pad, close.top - pad,
+                close.right + pad, close.bottom + pad,
+            )
+            binding.root.setTouchDelegate(TouchDelegate(rect, close))
+        }
+        return VH(binding)
+    }
 
     override fun getItemCount(): Int = items.size
 
