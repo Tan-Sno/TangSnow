@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **243**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **245**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -342,6 +342,8 @@ android {
         //   `BrowserDbLimitGuardTest`（新类，3 例）⇒ +5；
         //   2026-10-03 新增 `TouchTargetSentinelTest`（新类，3 例：未豁免违规 / 豁免须有理由 /
         //   豁免表不得留已修好的条目）⇒ +3），
+        //   2026-10-03 另为 `data:` / `blob:` 维持进搜索、以及裸 `about:` 边界各补 1 例
+        //   （这两条取舍此前**只有注释、没有断言**，等于没有门禁）⇒ +2），
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则 testDebugUnitTest 直接红。
         //   两条新哨兵已主动验证会红（临时改坏 ⇒ 6 条 FAILED）。
         //   ⚠️ lint 口径更新（2026-10-02）：`checkAllWarnings = true` 下现有一条**常驻**的

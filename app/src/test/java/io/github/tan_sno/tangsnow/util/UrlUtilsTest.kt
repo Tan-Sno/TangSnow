@@ -128,6 +128,26 @@ class UrlUtilsTest {
     }
 
     @Test
+    fun `data 与 blob 维持进搜索——刻意不放开并用断言钉住`() {
+        // 2026-10-03 补：这两条是**刻意的取舍**（理由写在 resolveInfo 的分支注释里），
+        // 但此前只有注释、**没有断言** ⇒ 以后有人"顺手把它修好"不会有任何测试变红。
+        val data = UrlUtils.resolveInfo("data:text/html;base64,PGgxPmhpPC9oMT4=", engine)
+        assertTrue("data: 必须仍进搜索（顶层数据: 导航 Firefox 59 起封禁，反钓鱼，与 externalUrl 同向）", data?.isSearch == true)
+        val blob = UrlUtils.resolveInfo("blob:https://example.com/2f9c-uuid", engine)
+        assertTrue("blob: 必须仍进搜索（地址栏新输入时会话里没有注册对象，打开必为空）", blob?.isSearch == true)
+    }
+
+    @Test
+    fun `只有冒号的 about 前缀也走直达——已知的边界，用断言钉住现状`() {
+        // 现状：`startsWith("about:")` 不检查冒号后是否有页面名，故 "about:" 也被当作直达。
+        // 打开是内核的空白/错误页，不崩、无副作用。刻意在此**钉住现状**避免无声漂移；
+        // 若将来收紧判据（要求冒号后非空），本断言会提醒同步改这里与实现。
+        val r = UrlUtils.resolveInfo("about:", engine)
+        assertEquals("about:", r?.url)
+        assertEquals(false, r?.isSearch)
+    }
+
+    @Test
     fun `空输入返回 null`() {
         assertNull(UrlUtils.resolveInfo("", engine))
         assertNull(UrlUtils.resolveInfo("   ", engine))
