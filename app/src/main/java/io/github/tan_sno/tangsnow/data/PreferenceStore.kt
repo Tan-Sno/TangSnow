@@ -217,28 +217,27 @@ class PreferenceStore(context: Context) {
      * 已接受的隐私政策/用户协议版本（见 [LegalDocs.POLICY_VERSION]）。
      * 小于当前版本说明需要重新征得同意（首次安装或政策更新后）。
      *
-     * ⚠️ setter 用 **[SharedPreferences.commit]** 而非 [SharedPreferences.apply]——本仓的**唯一例外**
-     * （类注释的「setter 统一走 apply()」即指此）：
+     * **刻意是 `val` 而不是 `var`**：写入只走 [persistAcceptedPolicyVersion]，因为它要把
+     * `commit()` 的成败交回调用方（[ConsentGate.agree] 靠这个返回值决定是否提示用户重试）。
+     * 若留一个 `var` 的 setter 而丢弃返回值，等于**留一条静默失败的路** —— 以后谁写一行
+     * `prefs.acceptedPolicyVersion = POLICY_VERSION` 就会把「写盘失败当成功」重新引回来，
+     * 而那正是 2026-10-03 才修掉的问题。改成 `val` 后这条路在**编译期**就不存在。
+     */
+    val acceptedPolicyVersion: Int
+        get() = prefs.getInt(KEY_POLICY_VERSION, 0)
+
+    /**
+     * 写入 [acceptedPolicyVersion]，并把 `commit()` 的成败交回调用方。**本仓唯一的写入入口。**
+     *
+     * 为什么用 [SharedPreferences.commit] 而非 [SharedPreferences.apply]（类注释的
+     * 「setter 统一走 apply()」这条规矩在此例外）：
      *  - 这是「一生只写一次、丢了后果用户可直接感知」的一致性关键写入：丢失 ⇒ 已点过同意的用户
      *    在下次启动被整页重签（外部审查报告 ② 实测复现，成因未定位，本改动消除其中
      *    「异步落盘未及冲刷即进程死亡」这一类成因）；
      *  - 成本可控：仅同意页点「同意」与政策升版两个时机在主线程写一次，几毫秒；
      *    debug 构建的 StrictMode 会报一条 DiskWriteViolation（penaltyLog，仅日志）——已知、接受。
-     * ⚠️ commit 治不了**数据被外部清除**（`pm clear` / 系统设置清除）——那类场景与本改动无关，
+     *  ⚠️ commit 治不了**数据被外部清除**（`pm clear` / 系统设置清除）——那类场景与本改动无关，
      *    判别方法见施工报告 ②（抓 shared_prefs 文件内容 + 看语言初选页是否一并重现）。
-     */
-    var acceptedPolicyVersion: Int
-        get() = prefs.getInt(KEY_POLICY_VERSION, 0)
-        set(value) {
-            persistAcceptedPolicyVersion(value)
-        }
-
-    /**
-     * 写入 [acceptedPolicyVersion]，并把 `commit()` 的成败交回调用方。
-     *
-     * 为什么单独开一个方法而不是把 commit 留在 setter 里：Kotlin 的属性 setter **不能有返回值**，
-     * 而"这次同意到底有没有落盘"恰恰是调用方必须知道的——[ConsentGate.agree] 靠它决定
-     * 是否提示用户重试。写在 setter 里丢返回值，等于让失败静默过去。
      *
      * `commit()` 返回 false = 写盘失败（磁盘满 / I/O 错误）。此时**内存值已变、磁盘值未变**，
      * 进程一死就回退 ⇒ 绝不能当作成功。
