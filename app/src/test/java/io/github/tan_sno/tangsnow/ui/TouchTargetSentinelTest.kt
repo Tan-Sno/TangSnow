@@ -191,18 +191,50 @@ class TouchTargetSentinelTest {
         return minBound(el.getAttribute("android:minHeight"))
     }
 
-    /** 固定 dp 尺寸；`0dp` / wrap / match / 其它 → null（不可确定）。 */
+    /** 固定 dp 尺寸；`0dp` / wrap / match / 未知 dimen → null（不可确定）。 */
     private fun fixed(raw: String): Double? {
-        val v = raw.trim()
+        val v = resolveDimen(raw.trim())
         if (!v.endsWith("dp")) return null
         if (v == "0dp") return null
         return v.dropLast(2).toDoubleOrNull()
     }
 
     private fun minBound(raw: String): Double? {
-        val v = raw.trim()
+        val v = resolveDimen(raw.trim())
         if (!v.endsWith("dp")) return null
         return v.dropLast(2).toDoubleOrNull()
+    }
+
+    /**
+     * `@dimen/xxx` → 字面量。
+     *
+     * **为什么必须解析**：本仓 `title_action_size` 被 9 个可点节点共用（7 个详情页的 `btnBack`
+     * + 资料库的 `btnClear` / `btnBookmarkTools`），不解析时它们全部落进"两侧不可知"、
+     * 从门禁视野里消失 —— 而真机实测它们确实是 40×40dp（低于 48dp）。共享尺寸是本仓刻意
+     * 收敛的结果（见 `values/dimens.xml` 的注释），不解析它等于门禁漏掉整整一类。
+     */
+    private fun resolveDimen(raw: String, depth: Int = 0): String {
+        if (!raw.startsWith("@dimen/") || depth >= 3) return raw
+        val name = raw.removePrefix("@dimen/")
+        return dimens[name]?.let { resolveDimen(it, depth + 1) } ?: raw
+    }
+
+    /** `values` 目录（及其 night / v26 变体）下 `dimens.xml` 的 name → 字面量；后加载的覆盖先加载的。 */
+    private val dimens: Map<String, String> by lazy {
+        val res = File(File(repoRoot(), "app"), "src/main/res")
+        val out = LinkedHashMap<String, String>()
+        for (dir in listOf("values", "values-night", "values-v26")) {
+            val f = File(res, "$dir/dimens.xml")
+            if (!f.isFile) continue
+            val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(f)
+            val nodes = doc.getElementsByTagName("dimen")
+            for (i in 0 until nodes.length) {
+                val el = nodes.item(i) as Element
+                val name = el.getAttribute("name")
+                if (name.isNotBlank()) out[name] = el.textContent.trim()
+            }
+        }
+        out
     }
 
     // ---------------------------------------------------------------- 可点击集合

@@ -15,7 +15,11 @@
          _legal / _library / _settings） -->
     <dimen name="title_bar_height">52dp</dimen>
     <dimen name="title_bar_padding_h">6dp</dimen>
-    <!-- 顶栏两侧动作位（返回键及对称占位/清空键）的边长 -->
-    <dimen name="title_action_size">40dp</dimen>
+    <!-- 顶栏两侧动作位（返回键及对称占位/清空键）的边长。
+         48dp = 无障碍最小触摸目标；`title_bar_height` 52dp 放得下 ⇒ 改这一处标题栏不产生位移。
+         ⚠️ 这一个值同时决定 9 个可点节点（7 个详情页 btnBack + 资料库 btnClear/btnBookmarkTools），
+         真机实测它们原本是 40×40dp；改这里等于一次修好 9 处。
+         5 个只占宽度的 1dp 高对称占位 View 也随之变宽，那是刻意维持标题居中的占位，改宽是想要的。 -->
+    <dimen name="title_action_size">48dp</dimen>
     <dimen name="title_text_size">17sp</dimen>
 </resources>
