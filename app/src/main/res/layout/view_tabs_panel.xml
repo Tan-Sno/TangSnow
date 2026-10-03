@@ -15,8 +15,8 @@
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/btnCloseTabs"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:src="@drawable/ic_close"
             app:tint="?attr/colorOnSurfaceVariant"
             android:background="?attr/selectableItemBackgroundBorderless"
@@ -33,8 +33,8 @@
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/btnPrivateTab"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:src="@drawable/ic_sunglasses"
             app:tint="?attr/colorOnSurfaceVariant"
             android:background="?attr/selectableItemBackgroundBorderless"
@@ -42,8 +42,8 @@
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/btnAddTab"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:src="@drawable/ic_add"
             app:tint="?attr/colorPrimary"
             android:background="?attr/selectableItemBackgroundBorderless"
