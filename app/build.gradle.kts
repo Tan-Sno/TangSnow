@@ -15,7 +15,7 @@ plugins {
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties().apply {
     // 显式按 UTF-8 读取：Properties.load(InputStream) 默认按 ISO-8859-1 解码，
-    // 会把含中文的路径（如 `D:/示例/keystore.jks`）变成乱码并报「keystore 不存在」。
+    // 会把含中文的路径（例如把 keystore 放在名为「密钥库」的目录下）变成乱码并报「keystore 不存在」。
     if (keystorePropsFile.exists()) keystorePropsFile.reader(Charsets.UTF_8).use { load(it) }
 }
 // 「Android Studio 签名向导驱动本次构建」的判据 —— **三处闸门单一来源**。
