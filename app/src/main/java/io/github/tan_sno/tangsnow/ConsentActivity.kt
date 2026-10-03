@@ -2,6 +2,7 @@ package io.github.tan_sno.tangsnow
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -140,10 +141,21 @@ class ConsentActivity : AppCompatActivity() {
 
     private fun agreeAndContinue() {
         if (agreed) return
-        agreed = true
         binding.btnAgree.isEnabled = false
         binding.btnDisagree.isEnabled = false
-        ConsentGate.agree(prefs)
+
+        // 写盘成败必须看：`commit()` 返回 false 说明这次同意**没有被记住**（磁盘满 / I/O 错误），
+        // 内存值已变而磁盘值未变，进程一死就回退。此前忽略返回值、且先把 `agreed` 置 true，
+        // 失败路径既不告知用户也不可重试 ⇒ 用户以为已同意、下次启动又被问一遍，且原因无处可查。
+        if (!ConsentGate.agree(prefs)) {
+            android.util.Log.e("ConsentActivity", "写入 acceptedPolicyVersion 失败（commit 返回 false）")
+            binding.btnAgree.isEnabled = true
+            binding.btnDisagree.isEnabled = true
+            binding.btnAgree.text = getString(R.string.consent_agree)
+            Toast.makeText(this, R.string.consent_persist_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+        agreed = true
 
         // 用户已同意 → 立即把「会话快照读盘」排进后台串行队列。
         //

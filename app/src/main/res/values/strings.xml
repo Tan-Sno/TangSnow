@@ -367,6 +367,7 @@
     <string name="consent_agree">同意并继续</string>
     <string name="consent_disagree">不同意</string>
     <string name="consent_starting">正在启动…</string>
+    <string name="consent_persist_failed">未能保存同意状态，请再点一次「同意并继续」</string>
     <string name="kernel_unavailable_title">浏览器内核未能启动</string>
     <string name="kernel_unavailable_message">本次初始化失败，无法进入浏览界面。请再试一次；若反复出现，请重启应用后再试。应用在您同意之前没有加载任何网页，也不会因此收集任何信息。</string>
 

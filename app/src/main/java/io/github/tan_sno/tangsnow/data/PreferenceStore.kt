@@ -229,12 +229,29 @@ class PreferenceStore(context: Context) {
      */
     var acceptedPolicyVersion: Int
         get() = prefs.getInt(KEY_POLICY_VERSION, 0)
-        // @SuppressLint：这是全仓**唯一**刻意用 commit 的写入（缘由见上方 KDoc）——
-        // 就地豁免而非 lint.xml 路径豁免，让其余任何 commit() 的用法仍会被 lint 点名。
-        @android.annotation.SuppressLint("ApplySharedPref")
         set(value) {
-            prefs.edit().putInt(KEY_POLICY_VERSION, value).commit()
+            persistAcceptedPolicyVersion(value)
         }
+
+    /**
+     * 写入 [acceptedPolicyVersion]，并把 `commit()` 的成败交回调用方。
+     *
+     * 为什么单独开一个方法而不是把 commit 留在 setter 里：Kotlin 的属性 setter **不能有返回值**，
+     * 而"这次同意到底有没有落盘"恰恰是调用方必须知道的——[ConsentGate.agree] 靠它决定
+     * 是否提示用户重试。写在 setter 里丢返回值，等于让失败静默过去。
+     *
+     * `commit()` 返回 false = 写盘失败（磁盘满 / I/O 错误）。此时**内存值已变、磁盘值未变**，
+     * 进程一死就回退 ⇒ 绝不能当作成功。
+     *
+     * 这是全仓**唯一**刻意用 `commit()` 的写入（缘由见上方 KDoc）：一致性关键数据、
+     * 一生只写一次、丢失后果用户直接感知。`@SuppressLint` 就地豁免（而非走 `lint.xml` 的
+     * 路径豁免），好让其余任何 `commit()` / `apply()` 的用法仍会被 lint 点名。
+     *
+     * @return true = 已同步落盘。
+     */
+    @android.annotation.SuppressLint("ApplySharedPref")
+    fun persistAcceptedPolicyVersion(value: Int): Boolean =
+        prefs.edit().putInt(KEY_POLICY_VERSION, value).commit()
 
     // --------------------------------------------------------- 定制主页
 

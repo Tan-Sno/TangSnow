@@ -136,7 +136,12 @@ object ConsentGate {
     fun needsConsent(prefs: PreferenceStore): Boolean =
         prefs.acceptedPolicyVersion < LegalDocs.POLICY_VERSION
 
-    fun agree(prefs: PreferenceStore) {
-        prefs.acceptedPolicyVersion = LegalDocs.POLICY_VERSION
-    }
+    /**
+     * 记下"用户已同意"。
+     *
+     * @return true = 已同步落盘；false = 写盘失败（磁盘满 / I/O 错误），**这次同意没被记住**，
+     *   调用方必须让用户知道并能重试 —— 静默继续的后果是"用户以为已同意、下次启动又被问一遍"。
+     */
+    fun agree(prefs: PreferenceStore): Boolean =
+        prefs.persistAcceptedPolicyVersion(LegalDocs.POLICY_VERSION)
 }
