@@ -50,3 +50,14 @@ jobs:
       # lint 的 checkAllWarnings = true 是项目的硬门禁：全警告口径下必须 `No issues found`
       - name: Unit tests + lint
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug --console=plain
+
+      # 发布门禁**自证**：verify_release.py 的失败表现是抛异常、成功是打印 ✅ ——
+      # 也就是说它自己的解析逻辑一旦坏了，最可能的表现是**静默放行**而不是误报。
+      # 本轮它已吃过两次亏（第 ⑧ 项只看 apks[0]、第 ⑨ 项 permission 解析静默失效），
+      # 两次都是人肉复核发现的，不是门禁自己发现的。
+      # `--selftest` 在临时仓库里造「干净 / 已修改未提交 / 有未跟踪文件」三种状态，
+      # 断言干净时不拦、脏时**必须红** —— 双向都过才算这道门真的在拦。
+      # 刻意放在这里而不是发版流程里：它**不需要签名凭据、不需要 APK、不联网**，
+      # 所以能在每次 push 上零成本跑。已知未覆盖第 ⑦⑧⑨ 项（依赖 APK/build-tools），见函数注释。
+      - name: Release gate self-test
+        run: python3 tools/verify_release.py --selftest

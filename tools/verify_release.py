@@ -123,7 +123,14 @@ class Fail(Exception):
 # 环境探测
 # ---------------------------------------------------------------------------
 
-def repo_root():
+def repo_root(override=None):
+    """仓库根 = 本脚本上溯一级（`tools/` 的父目录）。
+
+    `override` 只为 [selftest] 与「在别的 checkout 上试跑」存在：脚本自身定位在默认路径时
+    行为与从前完全一致。**自检必须能指向一个临时仓库**，否则就没法喂它坏输入。
+    """
+    if override:
+        return os.path.abspath(override)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -505,14 +512,129 @@ def sha256_of(path):
 # 主流程
 # ---------------------------------------------------------------------------
 
+def selftest():
+    """发布门禁的自检：**证明它真的会拦，而不是一路绿灯。**
+
+    ## 为什么需要它
+
+    这个脚本是发版前最后一道闸，而它**失败时的表现是"抛异常"**、成功时的表现是"打印 ✅"——
+    也就是说：**它自身的解析/判定逻辑一旦坏了，最可能的表现不是误报，而是静默放行**。
+    本轮就吃过两次亏（`verify_release.py` 第 ⑧ 项只看 `apks[0]`、第 ⑨ 项的 permission 解析
+    静默失效导致假红），两次都不是靠门禁自己发现的，是靠人肉复核发现的。
+
+    ## 覆盖什么、为什么不覆盖什么
+
+    ✅ 覆盖：**不依赖 APK / SDK / 网络**的那部分判定 —— 这里选 [check_git_clean]（工作区是否干净），
+       因为它是全脚本第一道、也是"产物能否对应到提交"的前提。它同时验**两个方向**：
+       干净 ⇒ 不拦；有一处未提交 ⇒ **必须拦**。只有双向都过，才说明它既不放过脏工作区、
+       也不是"永远失败"。
+    ❌ 不覆盖：第 ⑦⑧⑨ 项（依赖 APK 与 build-tools）。要自证它们得先造出一个"内核构建号不符"
+       或"多了一个导出组件"的 APK —— 那要么二进制改包、要么先有一份可签名的产物，成本与
+       风险都远大于收益。**这一段是已知缺口，写在这里是为了别假装它是全覆盖的。**
+
+    用法：`python tools/verify_release.py --selftest`（不需要任何 APK）。
+    """
+    import shutil
+    import tempfile
+
+    results = []
+
+    def case(name, fn):
+        try:
+            fn()
+            results.append((True, name, ""))
+        except AssertionError as e:
+            results.append((False, name, str(e)))
+        except Exception as e:  # 脚本自身抛异常也算失败
+            results.append((False, name, "意外异常：%s: %s" % (type(e).__name__, e)))
+
+    tmp = tempfile.mkdtemp(prefix="tangsnow-verify-selftest-")
+    try:
+        root = os.path.join(tmp, "repo")
+        os.makedirs(os.path.join(root, "app"), exist_ok=True)
+        env = {
+            "GIT_AUTHOR_NAME": "selftest", "GIT_AUTHOR_EMAIL": "selftest@example.invalid",
+            "GIT_COMMITTER_NAME": "selftest", "GIT_COMMITTER_EMAIL": "selftest@example.invalid",
+        }
+        saved = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        try:
+            r = run(["git", "init", "-q"], cwd=root)
+            if r.returncode != 0:
+                raise AssertionError("git init 失败：%s" % (r.stderr or "").strip())
+            tracked = os.path.join(root, "app", "tracked.txt")
+            with open(tracked, "w", encoding="utf-8") as f:
+                f.write("clean\n")
+            run(["git", "add", "-A"], cwd=root)
+            r = run(["git", "commit", "-q", "-m", "selftest base"], cwd=root)
+            if r.returncode != 0:
+                raise AssertionError("git commit 失败：%s" % (r.stderr or "").strip())
+
+            def clean_passes():
+                check_git_clean(root)  # 不抛 = 干净时不拦，正确
+
+            def dirty_blocks():
+                with open(tracked, "a", encoding="utf-8") as f:
+                    f.write("dirty\n")
+                try:
+                    check_git_clean(root)
+                except Fail:
+                    return
+                finally:
+                    # 复位，保证另一个用例跑在干净树上
+                    with open(tracked, "w", encoding="utf-8") as f:
+                        f.write("clean\n")
+                raise AssertionError("工作区已弄脏，但 check_git_clean 没有拦 —— 门禁形同虚设")
+
+            def untracked_blocks():
+                stray = os.path.join(root, "app", "stray.txt")
+                with open(stray, "w", encoding="utf-8") as f:
+                    f.write("untracked\n")
+                try:
+                    check_git_clean(root)
+                except Fail:
+                    return
+                finally:
+                    os.remove(stray)
+                raise AssertionError("出现未跟踪文件，但 check_git_clean 没有拦")
+
+            case("干净工作区不拦（正向）", clean_passes)
+            case("已修改未提交会拦（反向·必须红）", dirty_blocks)
+            case("未跟踪文件也会拦（反向）", untracked_blocks)
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    width = max(len(n) for _, n, _ in results)
+    for ok, name, detail in results:
+        print("  %s  %-*s %s" % ("PASS" if ok else "FAIL", width, name, detail))
+    bad = [r for r in results if not r[0]]
+    print("自检结果：%s（%d 项）" % ("全部通过" if not bad else "有失败项", len(results)))
+    if not bad:
+        print("⚠️ 已知未覆盖：第 ⑦⑧⑨ 项（依赖 APK / build-tools）无法离线自证，见函数注释。")
+    return 1 if bad else 0
+
+
 def main():
     _use_utf8_output()
     ap = argparse.ArgumentParser(description="发布前校验（纯本地，只读）")
     ap.add_argument("--apk-dir", default=None, help="APK 所在目录，默认 app/release")
+    ap.add_argument("--root", default=None,
+                    help="仓库根（默认由脚本自身位置推断；自检与「在别处试跑」才需要传）")
+    ap.add_argument("--selftest", action="store_true",
+                    help="跑发布门禁的自检并退出（不需要 APK / SDK）")
     ap.add_argument("--quiet", action="store_true", help="只输出结论与校验和")
     args = ap.parse_args()
 
-    root = repo_root()
+    if args.selftest:
+        return selftest()
+
+    root = repo_root(args.root)
     apk_dir = args.apk_dir or os.path.join(root, "app", "release")
     say = (lambda *a: None) if args.quiet else print
 
