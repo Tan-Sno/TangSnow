@@ -31,7 +31,7 @@ import javax.xml.parsers.DocumentBuilderFactory
  *
  * 本测试只读**布局 XML**。以下三类它看不见，必须靠人工审或真机兜：
  *  1. **代码里 `dp(N)` 动态构造的控件** —— 已确认真实存在两处：
- *     `ui/SheetBuilders.makeSheetRow` 造的 5 个可点行（已加 `minHeight=48dp` 修好）与
+ *     `ui/SheetBuilders.makeSheetRow` 造的 5 个可点行（已加 `minimumHeight = dp(48)` 修好）与
  *     `HomeCustomizeActivity` 的 40×40dp 删除键（已改 48dp）。2026-10-03 人工审出，
  *     当时它们**完全不在本门禁视野内**。
  *  2. **运行时才设的 `LayoutParams`** —— 代码可以在 `onBindViewHolder` / `onResume` 里改尺寸。
