@@ -290,7 +290,7 @@ android {
         //   ⑤ 手动进入 PiP 不再传空参数（此前把 `updatePipParams` 刚设好的 autoEnter / 源矩形丢掉）；
         //      下载确认队列的销毁判据补 `hasOtherHost()`（不再被另一个实例的 onDestroy 整队放弃）。
         //   ABI 分包 versionCode 随之派生为 401 / 402 / 403。
-        //   versionCode = 40（本文件的版本历史按这个风格记，`tools/verify_release.py` 也会去核对声明与制品一致）。
+        //   versionCode = 41（本文件的版本历史按这个风格记，`tools/verify_release.py` 也会去核对声明与制品一致）。
         // 2.1.6：**政策 §4 措辞与实发对齐 + 第三方全盘报告的核实与修复收口**（8 文件 + 3 个新测试类 /
         //   +387 −47）。无新功能、无新对外端点；但 §4 原写「不携带任何设备标识、账号或浏览记录」，
         //   而实发还带应用版本号（User-Agent）与设备语言偏好（Accept-Language）—— 二者都不是设备
@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **243**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **239**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -346,8 +346,18 @@ android {
         //   `AndroidGradlePluginVersion` Warning（wrapper 9.6.0 → 9.8.0 的升级提示）——wrapper
         //   刻意不升（见上方版本史），该提示已在 lint.xml 按检查项豁免并写明理由；除此之外仍
         //   `No issues found`。门禁口径据此为「零错误 + 零未豁免警告」。
-        versionCode = 40
-        versionName = "2.1.7"
+        // 2.2.0：**修「点同意即闪退」** —— 2.1.6/2.1.7 的致命回归（用户报告：两版都在同意页点
+        //   「同意」即闪退，2.1.5 正常）。根因已定位到具体机制：为关闭内核未披露出网而新加的
+        //   `GeckoRuntimeSettings.Builder.configFilePath(...)` 在 Android 上**必然失败** —— GeckoView 157 的
+        //   `DebugConfig.fromFile` 走 snakeyaml 2.2 的 JavaBean 路径（`Constructor(DebugConfig.class, …)`），
+        //   而 Android **没有** `java.beans.Introspector`（`android.jar` 里只有 6 个 `java.beans.*`）⇒
+        //   抛 `NoClassDefFoundError`；`GeckoRuntime` 只 catch `ConfigException`/`FileNotFoundException`
+        //   ⇒ 异常逃出运行时创建，又被 `warmUp` 的 `runCatching` 吞掉 ⇒ **运行时没建成** ⇒ 主界面建
+        //   `GeckoSession` 时崩。修法：① 移除该注入（Android 上不可用，且即使解析成功也会被
+        //   catch-and-ignore、覆盖从不生效）；② `warmUp` 改为如实返回是否成功，失败时在同意页给出
+        //   提示而不是带着空运行时进主界面。**versionCode 41（ABI 派生 411/412/413）**。
+        versionCode = 41
+        versionName = "2.2.0"
         // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
         // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
         // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。
