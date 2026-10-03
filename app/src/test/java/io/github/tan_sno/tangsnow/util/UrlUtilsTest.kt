@@ -112,6 +112,22 @@ class UrlUtilsTest {
     }
 
     @Test
+    fun `about 自省页地址栏直达而非搜索`() {
+        // Firefox 系自省页族从地址栏直达（about:license / about:buildinfo / about:blank）。
+        // data:/blob: 刻意维持进搜索：data: 顶层数据: 导航 Firefox 59 起已封禁（反钓鱼，
+        // 与 externalUrl 同向）；blob: 从地址栏新输入时会话里没有注册对象、打开必为空。
+        val r = UrlUtils.resolveInfo("about:license", engine)
+        assertEquals("about:license", r?.url)
+        assertEquals(false, r?.isSearch)
+        // scheme 大小写不敏感
+        val upper = UrlUtils.resolveInfo("ABOUT:blank", engine)
+        assertEquals("ABOUT:blank", upper?.url)
+        assertEquals(false, upper?.isSearch)
+        // 无冒号的 "about" 是普通词（无点不匹配 HOST_PATTERN）⇒ 维持既有行为：搜索
+        assertTrue(UrlUtils.resolveInfo("about", engine)?.isSearch == true)
+    }
+
+    @Test
     fun `空输入返回 null`() {
         assertNull(UrlUtils.resolveInfo("", engine))
         assertNull(UrlUtils.resolveInfo("   ", engine))

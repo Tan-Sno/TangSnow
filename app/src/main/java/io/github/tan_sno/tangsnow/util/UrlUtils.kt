@@ -329,6 +329,11 @@ object UrlUtils {
         return when {
             trimmed.startsWith("http://", ignoreCase = true) ||
                 trimmed.startsWith("https://", ignoreCase = true) -> Resolved(trimmed, false)
+            // Firefox 系自省页族（about:license / about:buildinfo / about:blank…）：地址栏直达而非搜索。
+            // ⚠️ 刻意**只放行 about:**——data: 的顶层数据: 导航 Firefox 59 起已封禁（反钓鱼，
+            // 与 externalUrl 的口径同向），blob: 从地址栏新输入时会话里没有注册对象、打开必为空，
+            // 两者维持进搜索。内核侧 onLoadRequest 的 webScheme 白名单本就放行 about:，无需其他改动。
+            trimmed.startsWith("about:", ignoreCase = true) -> Resolved(trimmed, false)
             HOST_PATTERN.matches(trimmed) -> Resolved("https://$trimmed", false)
             // 本机 / 内网地址：当地址导航而非搜索（localhost、localhost:端口、设备名:端口）
             LOCALHOST_PATTERN.matches(trimmed) -> Resolved("http://$trimmed", false)
