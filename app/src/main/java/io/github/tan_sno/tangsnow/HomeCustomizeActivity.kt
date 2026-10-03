@@ -294,7 +294,10 @@ class HomeCustomizeActivity : AppCompatActivity() {
             setBackgroundResource(android.R.color.transparent)
             setColorFilter(ContextCompat.getColor(context, R.color.accent_muted))
             contentDescription = getString(R.string.btn_delete)
-            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+            // 48dp = 无障碍最小触摸目标。这枚按钮**整枚可点**且是破坏性操作（删快捷方式），
+            // 原为 40×40dp —— 静态门禁看不见"代码里 dp(N) 构造的控件"，靠人工审出来的。
+            // 所在页面外层是 ScrollView，加高 8dp 不会把内容挤出去。
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
             setOnClickListener {
                 prefs.removeHomeShortcut(index)
                 refreshShortcuts()

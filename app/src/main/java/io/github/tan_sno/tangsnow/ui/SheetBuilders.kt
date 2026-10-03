@@ -59,6 +59,14 @@ fun makeSheetRow(
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         selectableRipple()
+        // ⚠️ 48dp = 无障碍最小触摸目标。这行**整行可点**，而高度原本只有
+        // max(图标 34dp, 文字) + 上下各 4dp = **42dp**（真机实测 380×41.8dp 吻合）。
+        // 用 minimumHeight 而不是把图标放大到 40dp：放大图标会改变视觉密度，
+        // 而 minimumHeight 只把整行抬到 48dp、`gravity=center_vertical` 让内容保持居中。
+        // ⚠️ 本行在「更多面板」被 addView 5 次（MainActivity 的扩展/查找/打印/设置/…），
+        // 加高 5×6dp 会让面板（wrap_content + gravity=bottom，**外层无 ScrollView**）
+        // 整体向上长 30dp ⇒ 需实机确认顶部不被挤出屏幕。
+        minimumHeight = context.dp(48)
         setPadding(context.dp(16), context.dp(4), context.dp(16), context.dp(4))
         setOnClickListener { dismiss(); onClick() }
     }
