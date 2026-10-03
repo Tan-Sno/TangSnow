@@ -32,6 +32,8 @@
    从 `lib/*/libxul.so` 里找内核构建号，与声明逐字符比对。为什么需要它：依赖声明、
    内核自报、APK 内实物是**三个**不同来源，只前两者一致并不说明打出来的包是对的
    （过期的 AAR / 构建缓存都可能让包里的内核与声明不符，而门禁与单测都看不出来）。
+9. `exported=true` 的组件集合 == 基准：依赖升级会悄悄带进新的导出面（如 GeckoView 157 的
+   剪贴板 provider），而只比权限集合的检查看不见它。
 
 依赖：Python 3 标准库 + 本机 Android SDK 的 `apksigner` / `aapt2`。
 """
@@ -89,6 +91,18 @@ EXPECTED_PERMISSIONS = {
     "android.permission.WAKE_LOCK",
     "android.permission.MODIFY_AUDIO_SETTINGS",
     "io.github.tan_sno.tangsnow.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+}
+
+# 导出组件基准（`exported=true` 的组件全清单）。为什么必须写死：依赖升级会**悄悄**带进新的导出组件，
+# 而「权限基准」（第 4 项）看不见它。2026-10-03 实证：GeckoView 155→157 带进了
+# `org.mozilla.gecko.GeckoClipboardContentProvider`（exported=true、**无权限保护**，任何应用可查询），
+# 同时 `androidx.profileinstaller` 的 `ProfileInstallReceiver` 也在（受 `android.permission.DUMP` 保护，
+# 只有 shell/系统能触发 ⇒ 无害）。前两个是应用自己的入口，后两个来自依赖 —— 增删都必须是有意的。
+EXPECTED_EXPORTED = {
+    ("activity", "io.github.tan_sno.tangsnow.ConsentActivity"),        # LAUNCHER（同意页）
+    ("activity", "io.github.tan_sno.tangsnow.MainActivity"),           # http/https 的 ACTION_VIEW 入口
+    ("provider", "org.mozilla.gecko.GeckoClipboardContentProvider"),   # GeckoView 157 新增（内核剪贴板）
+    ("receiver", "androidx.profileinstaller.ProfileInstallReceiver"),  # androidx 基线配置安装，受 DUMP 保护
 }
 
 # SDK 级别：与 app/build.gradle.kts 的 defaultConfig 一致。
@@ -417,6 +431,48 @@ def check_apk_gecko_build(root, apk):
     return True, "%s（%d 份 libxul.so 均为声明版本）" % (declared, len(targets))
 
 
+def check_exported_components(aapt2, env, apk):
+    """⑨ 清单里 `exported=true` 的组件集合是否等于 [EXPECTED_EXPORTED]。
+
+    为什么单列一项：第 4 项只比权限集合，**看不见组件导出面**；而"新增一个可被其它应用调用的
+    provider/activity"往往来自依赖升级，且不会有任何编译或测试信号。返回 (ok, 说明)。
+    """
+    r = run([aapt2, "dump", "xmltree", apk, "--file", "AndroidManifest.xml"], env=env)
+    if r.returncode != 0:
+        return False, "aapt2 dump xmltree 失败"
+    rows, kind, name, exported = [], None, None, None
+
+    def flush():
+        if kind and name and exported == "true":
+            rows.append((kind, name))
+
+    for ln in r.stdout.splitlines():
+        t = ln.strip()
+        m = re.match(r"^E: (activity|activity-alias|provider|service|receiver)\b", t)
+        if m:
+            flush()
+            kind, name, exported = m.group(1), None, None
+            continue
+        m = re.search(r'android:name\(0x[0-9a-f]+\)="([^"]+)"', t)
+        if m and name is None:
+            name = m.group(1)
+        m = re.search(r"android:exported\(0x[0-9a-f]+\)=(\w+)", t)
+        if m:
+            exported = m.group(1).lower()
+    flush()
+    got = set(rows)
+    if got == EXPECTED_EXPORTED:
+        return True, "%d 个导出组件与基准一致" % len(got)
+    extra = sorted(got - EXPECTED_EXPORTED)
+    missing = sorted(EXPECTED_EXPORTED - got)
+    parts = []
+    if extra:
+        parts.append("多出：" + "；".join("%s %s" % (k, n) for k, n in extra))
+    if missing:
+        parts.append("少了：" + "；".join("%s %s" % (k, n) for k, n in missing))
+    return False, "导出组件与基准不符（" + " ｜ ".join(parts) + "）"
+
+
 def sha256_of(path):
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -594,6 +650,14 @@ def main():
         if not gk_ok:
             raise Fail("APK 内内核版本与声明不一致：\n      %s" % gk_detail)
         say("  ✅ ⑧ 内核版本：%s" % gk_detail)
+
+        # ⑨ 导出组件基准（2026-10-03 新增）。依赖升级带进新导出面时，这里会红。
+        ex_ok, ex_detail = check_exported_components(aapt2, env, apks[0])
+        if not ex_ok:
+            raise Fail("清单的导出组件与基准不一致：\n      %s\n"
+                       "      若这是有意的（如依赖带进的新组件并已评估/披露），请同步 "
+                       "tools/verify_release.py 的 EXPECTED_EXPORTED 并写进改动说明。" % ex_detail)
+        say("  ✅ ⑨ 导出组件：%s" % ex_detail)
 
         print("✅ 校验通过，可以发布。校验和（可直接贴进发布说明）：")
         print()
