@@ -26,6 +26,12 @@
 6. **提示级**：签名之后是否又改过 `app/src` / 构建脚本 ——「工作区干净」只说明
    *此刻*没有未提交改动，并不保证 APK 是从 HEAD 构建的。只改文档不影响产物，
    故这里只提示不拦；按提交时间判断，可能多报，宁可多提醒。
+7. 依赖完整性（调 `tools/verify_deps.py`）：构件与公布散列不符**就拦**；
+   「一项都没校验成」也拦（闸门不能形同虚设）。
+8. **APK 里实际装的内核**与 `gradle/libs.versions.toml` 声明的 GeckoView 版本一致 ——
+   从 `lib/*/libxul.so` 里找内核构建号，与声明逐字符比对。为什么需要它：依赖声明、
+   内核自报、APK 内实物是**三个**不同来源，只前两者一致并不说明打出来的包是对的
+   （过期的 AAR / 构建缓存都可能让包里的内核与声明不符，而门禁与单测都看不出来）。
 
 依赖：Python 3 标准库 + 本机 Android SDK 的 `apksigner` / `aapt2`。
 """
@@ -37,6 +43,7 @@ import re
 import shutil
 import subprocess
 import sys
+import zipfile
 
 def _use_utf8_output():
     """把 stdout / stderr 重配为 UTF-8（无法解码的字符用 replace 兜底）。
@@ -363,6 +370,53 @@ def check_apk_freshness(root, apks):
     return sorted({l.strip() for l in (r.stdout or "").splitlines() if l.strip()})
 
 
+def check_apk_gecko_build(root, apk):
+    """⑧ APK 内 `libxul.so` 的内核构建号是否与 `gradle/libs.versions.toml` 声明一致。
+
+    返回 (ok, 说明)。三个来源（依赖声明 / 内核自报 BuildConfig / 包内实物）里，
+    只有这一条能证明**打出去的包**用的是声明的内核 —— 过期的 AAR 或构建缓存会让
+    前两者一致而实物不符，而单测和 lint 都看不见。
+    """
+    toml = os.path.join(root, "gradle", "libs.versions.toml")
+    m = re.search(r'^geckoView\s*=\s*"([^"]+)"', open(toml, encoding="utf-8").read(), re.M)
+    if not m:
+        return False, "在 gradle/libs.versions.toml 里找不到 geckoView 声明"
+    declared = m.group(1)                      # 形如 157.0.20260924084938
+    major = declared.split(".")[0]
+    build_id = declared.split(".")[-1]
+    targets = []
+    with zipfile.ZipFile(apk) as z:
+        for name in z.namelist():
+            if name.startswith("lib/") and name.endswith("/libxul.so"):
+                targets.append(name)
+        if not targets:
+            return False, "%s 里没有 lib/*/libxul.so" % os.path.basename(apk)
+        # 逐个 ABI 检查（分包各自带一份内核，任何一份不符都说明打包链出了问题）
+        for name in sorted(targets):
+            found_id = found_rv = False
+            with z.open(name) as f:
+                tail = b""
+                while True:
+                    chunk = f.read(1 << 20)
+                    if not chunk:
+                        break
+                    buf = tail + chunk
+                    if build_id.encode() in buf:
+                        found_id = True
+                    if ("rv:" + major).encode() in buf:
+                        found_rv = True
+                    if found_id and found_rv:
+                        break
+                    tail = buf[-64:]
+            if not (found_id and found_rv):
+                return False, (
+                    "%s 的 %s 里没找到内核 %s（构建号 %s / rv:%s）："
+                    "包里的内核与声明不符 ⇒ 可能是过期的 AAR 或构建缓存"
+                    % (os.path.basename(apk), name, declared, build_id, major)
+                )
+    return True, "%s（%d 份 libxul.so 均为声明版本）" % (declared, len(targets))
+
+
 def sha256_of(path):
     h = hashlib.sha256()
     with open(path, "rb") as fh:
@@ -532,6 +586,14 @@ def main():
             (l.strip() for l in dep.stdout.splitlines() if l.startswith("结果：")), "已核对"
         )
         say("  ✅ ⑦ 依赖完整性：%s" % dep_summary)
+
+        # ⑧ APK 内实物内核与声明一致（2026-10-03 新增）。
+        # 为什么加：有人问过「内核版本到底准不准」—— 依赖声明、内核自报 BuildConfig、
+        # 包内 libxul.so 是三个来源；前两者一致**不**说明打出来的包是对的。
+        gk_ok, gk_detail = check_apk_gecko_build(root, apks[0])
+        if not gk_ok:
+            raise Fail("APK 内内核版本与声明不一致：\n      %s" % gk_detail)
+        say("  ✅ ⑧ 内核版本：%s" % gk_detail)
 
         print("✅ 校验通过，可以发布。校验和（可直接贴进发布说明）：")
         print()
