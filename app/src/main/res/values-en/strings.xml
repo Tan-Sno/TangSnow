@@ -363,6 +363,8 @@
     <string name="consent_agree">Agree and continue</string>
     <string name="consent_disagree">Disagree</string>
     <string name="consent_starting">Starting…</string>
+    <string name="kernel_unavailable_title">Browser engine failed to start</string>
+    <string name="kernel_unavailable_message">Initialization failed, so the browser could not start. Please try again; if it keeps happening, restart the app. Nothing was loaded before your consent, and no information was collected.</string>
 
     <!-- About TangSnow -->
     <string name="about_privacy_summary">Privacy summary</string>

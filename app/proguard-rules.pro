@@ -27,7 +27,7 @@
 # 当前事实口径（2026-09-26 首次清点，2026-09-29 复核更正；别把这段当成「已经剥了什么」）：
 #  · release 里实际保留的是 Log.w ×5（MainActivity 三处：主页图解码两处 + 局域网权限
 #    请求启动失败一处；ClearDataUseCase 两处：kernel clear failed / local clear failed）
-#    与 Log.e ×2（LegalActivity），消息均不含 URL / 搜索词。
+#    与 Log.e ×3（LegalActivity 两处 + SessionManager 的「GeckoRuntime 初始化失败」一处），消息均不含 URL / 搜索词。
 #  · 另有 Log.d ×2（SessionManager 与 ExtensionPrompts 各一处，都是「GeckoResult 已被内核
 #    结算、本次应答丢弃」的留痕）与 Log.i ×1（SessionManager 的权限拒绝留痕，它另在
 #    BuildConfig.DEBUG 门内）：d / i / v 三级一律靠下面的剥离规则移除，release 不存在。

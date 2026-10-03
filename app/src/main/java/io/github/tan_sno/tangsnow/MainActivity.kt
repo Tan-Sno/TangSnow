@@ -685,6 +685,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         buildMoreSheet()
         setupBackPress()
 
+        // ⚠️ 内核门槛（2026-10-03）：**任何**进主界面的路径都先确认运行时可用 —— 没有运行时去建
+        // `GeckoSession` 必崩（2.1.6/2.1.7「点同意就闪退」正是这个形状）。`warmUp` 是幂等的
+        // （已建好就直接返回 true），所以正常路径上这一步只是一次读取。
+        if (!io.github.tan_sno.tangsnow.browser.BrowserSessionManager.warmUp(applicationContext, prefs)) {
+            showKernelUnavailable()
+            return
+        }
+
         val active = sessionManager.activeTab
         if (active == null) {
             // 冷启动的两条路径（2026-10-01 CR-012 起）：
@@ -3023,6 +3031,22 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 updateTabsBadge()
             }
         }
+    }
+
+    /**
+     * 内核不可用时的收口：**如实告知**并结束本页。
+     *
+     * 与同意页的同名处置是一对：那里是"同意后首次建内核"，这里是"任何其它入口"（冷启动、
+     * 外部链接、分享进来、配置变更重建……）。两处都宁可少走一步，也不带着空运行时继续建会话。
+     */
+    private fun showKernelUnavailable() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.kernel_unavailable_title)
+            .setMessage(R.string.kernel_unavailable_message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.dlg_ok) { _, _ -> finish() }
+            .create()
+            .let { runCatching { it.show() } }
     }
 
     // ------------------------------------------------------------- 工具

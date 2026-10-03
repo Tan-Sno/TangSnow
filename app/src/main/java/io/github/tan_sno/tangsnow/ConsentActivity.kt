@@ -160,7 +160,22 @@ class ConsentActivity : AppCompatActivity() {
         binding.btnAgree.text = getString(R.string.consent_starting)
         binding.root.post {
             if (isFinishing || isDestroyed) return@post
-            io.github.tan_sno.tangsnow.browser.BrowserSessionManager.warmUp(applicationContext, prefs)
+            val ok = io.github.tan_sno.tangsnow.browser.BrowserSessionManager.warmUp(applicationContext, prefs)
+            if (!ok) {
+                // ⚠️ 内核没建起来 ⇒ **绝不能**再进主界面：那里会建 GeckoSession，没有运行时必崩
+                // （2.1.6/2.1.7「点同意就闪退」就是这么来的）。如实告知、留在本页可重试 —— 不留静默。
+                agreed = false
+                binding.btnAgree.isEnabled = true
+                binding.btnDisagree.isEnabled = true
+                binding.btnAgree.text = getString(R.string.consent_agree)
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.kernel_unavailable_title)
+                    .setMessage(R.string.kernel_unavailable_message)
+                    .setPositiveButton(R.string.dlg_ok, null)
+                    .create()
+                    .let { dialogs.track(it) }
+                return@post
+            }
             openMainAndFinish()
         }
     }
