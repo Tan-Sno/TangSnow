@@ -12,7 +12,8 @@ data class HomeShortcut(val name: String, val url: String)
 /**
  * 类型安全的偏好设置封装。
  *  - 用属性访问，杜绝散落的字符串 key 与强制类型转换。
- *  - getter 对异常值兜底，setter 统一走 [SharedPreferences.apply]。
+ *  - getter 对异常值兜底，setter 统一走 [SharedPreferences.apply]
+ *    （**唯一例外**：acceptedPolicyVersion 用 commit，一致性关键写入，见其 KDoc）。
  */
 class PreferenceStore(context: Context) {
 
@@ -215,11 +216,24 @@ class PreferenceStore(context: Context) {
     /**
      * 已接受的隐私政策/用户协议版本（见 [LegalDocs.POLICY_VERSION]）。
      * 小于当前版本说明需要重新征得同意（首次安装或政策更新后）。
+     *
+     * ⚠️ setter 用 **[SharedPreferences.commit]** 而非 [SharedPreferences.apply]——本仓的**唯一例外**
+     * （类注释的「setter 统一走 apply()」即指此）：
+     *  - 这是「一生只写一次、丢了后果用户可直接感知」的一致性关键写入：丢失 ⇒ 已点过同意的用户
+     *    在下次启动被整页重签（外部审查报告 ② 实测复现，成因未定位，本改动消除其中
+     *    「异步落盘未及冲刷即进程死亡」这一类成因）；
+     *  - 成本可控：仅同意页点「同意」与政策升版两个时机在主线程写一次，几毫秒；
+     *    debug 构建的 StrictMode 会报一条 DiskWriteViolation（penaltyLog，仅日志）——已知、接受。
+     * ⚠️ commit 治不了**数据被外部清除**（`pm clear` / 系统设置清除）——那类场景与本改动无关，
+     *    判别方法见施工报告 ②（抓 shared_prefs 文件内容 + 看语言初选页是否一并重现）。
      */
     var acceptedPolicyVersion: Int
         get() = prefs.getInt(KEY_POLICY_VERSION, 0)
+        // @SuppressLint：这是全仓**唯一**刻意用 commit 的写入（缘由见上方 KDoc）——
+        // 就地豁免而非 lint.xml 路径豁免，让其余任何 commit() 的用法仍会被 lint 点名。
+        @android.annotation.SuppressLint("ApplySharedPref")
         set(value) {
-            prefs.edit().putInt(KEY_POLICY_VERSION, value).apply()
+            prefs.edit().putInt(KEY_POLICY_VERSION, value).commit()
         }
 
     // --------------------------------------------------------- 定制主页
