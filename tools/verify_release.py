@@ -98,11 +98,15 @@ EXPECTED_PERMISSIONS = {
 # `org.mozilla.gecko.GeckoClipboardContentProvider`（exported=true、**无权限保护**，任何应用可查询），
 # 同时 `androidx.profileinstaller` 的 `ProfileInstallReceiver` 也在（受 `android.permission.DUMP` 保护，
 # 只有 shell/系统能触发 ⇒ 无害）。前两个是应用自己的入口，后两个来自依赖 —— 增删都必须是有意的。
+# 每项是 (类型, 组件名, android:permission 或 None)。**把"保护"也写进来**是有意的：
+# 只记名字的话，「有人悄悄把 provider 的权限收口去掉」不会红。
 EXPECTED_EXPORTED = {
-    ("activity", "io.github.tan_sno.tangsnow.ConsentActivity"),        # LAUNCHER（同意页）
-    ("activity", "io.github.tan_sno.tangsnow.MainActivity"),           # http/https 的 ACTION_VIEW 入口
-    ("provider", "org.mozilla.gecko.GeckoClipboardContentProvider"),   # GeckoView 157 新增（内核剪贴板）
-    ("receiver", "androidx.profileinstaller.ProfileInstallReceiver"),  # androidx 基线配置安装，受 DUMP 保护
+    ("activity", "io.github.tan_sno.tangsnow.ConsentActivity", None),       # LAUNCHER（同意页）
+    ("activity", "io.github.tan_sno.tangsnow.MainActivity", None),          # http/https 的 ACTION_VIEW 入口
+    # GeckoView 157 带进的内核剪贴板 provider：本仓在 AndroidManifest.xml 里用合并规则补了 DUMP 收口
+    ("provider", "org.mozilla.gecko.GeckoClipboardContentProvider", "android.permission.DUMP"),
+    # androidx 基线配置安装，自带 DUMP 保护（仅 shell/系统可触发）
+    ("receiver", "androidx.profileinstaller.ProfileInstallReceiver", "android.permission.DUMP"),
 }
 
 # SDK 级别：与 app/build.gradle.kts 的 defaultConfig 一致。
@@ -384,12 +388,13 @@ def check_apk_freshness(root, apks):
     return sorted({l.strip() for l in (r.stdout or "").splitlines() if l.strip()})
 
 
-def check_apk_gecko_build(root, apk):
-    """⑧ APK 内 `libxul.so` 的内核构建号是否与 `gradle/libs.versions.toml` 声明一致。
+def check_apk_gecko_build(root, apks):
+    """⑧ 每个 APK 内 `libxul.so` 的内核构建号是否与 `gradle/libs.versions.toml` 声明一致。
 
-    返回 (ok, 说明)。三个来源（依赖声明 / 内核自报 BuildConfig / 包内实物）里，
-    只有这一条能证明**打出去的包**用的是声明的内核 —— 过期的 AAR 或构建缓存会让
-    前两者一致而实物不符，而单测和 lint 都看不见。
+    三个来源（依赖声明 / 内核自报 BuildConfig / 包内实物）里，只有这一条能证明**打出去的包**
+    用的是声明的内核 —— 过期的 AAR 或构建缓存会让前两者一致而实物不符，而单测和 lint 都看不见。
+    逐包检查（三个 ABI 分包各自带一份内核，任何一份不符都说明打包链出了问题）。
+    返回 (ok, 说明)。
     """
     toml = os.path.join(root, "gradle", "libs.versions.toml")
     m = re.search(r'^geckoView\s*=\s*"([^"]+)"', open(toml, encoding="utf-8").read(), re.M)
@@ -398,78 +403,93 @@ def check_apk_gecko_build(root, apk):
     declared = m.group(1)                      # 形如 157.0.20260924084938
     major = declared.split(".")[0]
     build_id = declared.split(".")[-1]
-    targets = []
-    with zipfile.ZipFile(apk) as z:
-        for name in z.namelist():
-            if name.startswith("lib/") and name.endswith("/libxul.so"):
-                targets.append(name)
-        if not targets:
-            return False, "%s 里没有 lib/*/libxul.so" % os.path.basename(apk)
-        # 逐个 ABI 检查（分包各自带一份内核，任何一份不符都说明打包链出了问题）
-        for name in sorted(targets):
-            found_id = found_rv = False
-            with z.open(name) as f:
-                tail = b""
-                while True:
-                    chunk = f.read(1 << 20)
-                    if not chunk:
-                        break
-                    buf = tail + chunk
-                    if build_id.encode() in buf:
-                        found_id = True
-                    if ("rv:" + major).encode() in buf:
-                        found_rv = True
-                    if found_id and found_rv:
-                        break
-                    tail = buf[-64:]
-            if not (found_id and found_rv):
-                return False, (
-                    "%s 的 %s 里没找到内核 %s（构建号 %s / rv:%s）："
-                    "包里的内核与声明不符 ⇒ 可能是过期的 AAR 或构建缓存"
-                    % (os.path.basename(apk), name, declared, build_id, major)
-                )
-    return True, "%s（%d 份 libxul.so 均为声明版本）" % (declared, len(targets))
+    total = 0
+    for apk in apks:
+        with zipfile.ZipFile(apk) as z:
+            targets = [n for n in z.namelist()
+                       if n.startswith("lib/") and n.endswith("/libxul.so")]
+            if not targets:
+                return False, "%s 里没有 lib/*/libxul.so" % os.path.basename(apk)
+            for name in sorted(targets):
+                found_id = found_rv = False
+                with z.open(name) as f:
+                    tail = b""
+                    while True:
+                        chunk = f.read(1 << 20)
+                        if not chunk:
+                            break
+                        buf = tail + chunk
+                        if build_id.encode() in buf:
+                            found_id = True
+                        if ("rv:" + major).encode() in buf:
+                            found_rv = True
+                        if found_id and found_rv:
+                            break
+                        tail = buf[-64:]
+                if not (found_id and found_rv):
+                    return False, (
+                        "%s 的 %s 里没找到内核 %s（构建号 %s / rv:%s）：包里的内核与声明不符 "
+                        "⇒ 可能是过期的 AAR 或构建缓存"
+                        % (os.path.basename(apk), name, declared, build_id, major)
+                    )
+                total += 1
+    return True, "%s（共 %d 份 libxul.so，均为声明版本）" % (declared, total)
 
 
-def check_exported_components(aapt2, env, apk):
-    """⑨ 清单里 `exported=true` 的组件集合是否等于 [EXPECTED_EXPORTED]。
+def check_exported_components(aapt2, env, apks):
+    """⑨ 清单里 `exported=true` 的组件集合（含 `android:permission`）是否等于 [EXPECTED_EXPORTED]。
 
-    为什么单列一项：第 4 项只比权限集合，**看不见组件导出面**；而"新增一个可被其它应用调用的
-    provider/activity"往往来自依赖升级，且不会有任何编译或测试信号。返回 (ok, 说明)。
+    为什么单列一项：第 4 项只比权限集合，**看不见组件导出面**；而"多出一个能被别的应用调用的
+    provider/activity"往往来自依赖升级，且不会有任何编译或测试信号。把 `android:permission`
+    一起比也有意为之：不然"有人悄悄把收口去掉"不会红。
+
+    只看第一个分包即可：ABI 分包共用同一份清单（差异只在 `lib/`）。返回 (ok, 说明)。
     """
+    apk = apks[0]
     r = run([aapt2, "dump", "xmltree", apk, "--file", "AndroidManifest.xml"], env=env)
     if r.returncode != 0:
         return False, "aapt2 dump xmltree 失败"
-    rows, kind, name, exported = [], None, None, None
+    rows, kind, name, exported, permission = [], None, None, None, None
 
     def flush():
         if kind and name and exported == "true":
-            rows.append((kind, name))
+            rows.append((kind, name, permission))
 
     for ln in r.stdout.splitlines():
         t = ln.strip()
         m = re.match(r"^E: (activity|activity-alias|provider|service|receiver)\b", t)
         if m:
             flush()
-            kind, name, exported = m.group(1), None, None
+            kind, name, exported, permission = m.group(1), None, None, None
             continue
         m = re.search(r'android:name\(0x[0-9a-f]+\)="([^"]+)"', t)
         if m and name is None:
             name = m.group(1)
+            continue
         m = re.search(r"android:exported\(0x[0-9a-f]+\)=(\w+)", t)
         if m:
             exported = m.group(1).lower()
+            continue
+        m = re.search(r'android:permission\(0x[0-9a-f]+\)="([^"]+)"', t)
+        if m and permission is None:
+            permission = m.group(1)
     flush()
+
     got = set(rows)
+
+    def show(items):
+        return "；".join("%s %s%s" % (k, n, "" if p is None else "（权限 " + p + "）")
+                         for k, n, p in items)
+
     if got == EXPECTED_EXPORTED:
-        return True, "%d 个导出组件与基准一致" % len(got)
+        return True, "%d 个导出组件（含权限保护）与基准一致" % len(got)
+    parts = []
     extra = sorted(got - EXPECTED_EXPORTED)
     missing = sorted(EXPECTED_EXPORTED - got)
-    parts = []
     if extra:
-        parts.append("多出：" + "；".join("%s %s" % (k, n) for k, n in extra))
+        parts.append("多出：" + show(extra))
     if missing:
-        parts.append("少了：" + "；".join("%s %s" % (k, n) for k, n in missing))
+        parts.append("少了：" + show(missing))
     return False, "导出组件与基准不符（" + " ｜ ".join(parts) + "）"
 
 
@@ -646,13 +666,13 @@ def main():
         # ⑧ APK 内实物内核与声明一致（2026-10-03 新增）。
         # 为什么加：有人问过「内核版本到底准不准」—— 依赖声明、内核自报 BuildConfig、
         # 包内 libxul.so 是三个来源；前两者一致**不**说明打出来的包是对的。
-        gk_ok, gk_detail = check_apk_gecko_build(root, apks[0])
+        gk_ok, gk_detail = check_apk_gecko_build(root, apks)
         if not gk_ok:
             raise Fail("APK 内内核版本与声明不一致：\n      %s" % gk_detail)
         say("  ✅ ⑧ 内核版本：%s" % gk_detail)
 
         # ⑨ 导出组件基准（2026-10-03 新增）。依赖升级带进新导出面时，这里会红。
-        ex_ok, ex_detail = check_exported_components(aapt2, env, apks[0])
+        ex_ok, ex_detail = check_exported_components(aapt2, env, apks)
         if not ex_ok:
             raise Fail("清单的导出组件与基准不一致：\n      %s\n"
                        "      若这是有意的（如依赖带进的新组件并已评估/披露），请同步 "

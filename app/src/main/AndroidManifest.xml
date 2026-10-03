@@ -141,5 +141,21 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!--
+            ⚠️ 收口：GeckoView 157 通过清单合并带进一个 **exported** provider
+            （`org.mozilla.gecko.GeckoClipboardContentProvider`，authority `<applicationId>.clipboard`，
+            用于让别的应用读取「网页通过异步剪贴板写入的内容」）。它默认**没有任何 permission 保护**
+            ⇒ 系统里任何应用都能查询它。2026-10-03 实测（`aapt2 dump xmltree`）确认它确实进了签名包，
+            故在此补上 `android.permission.DUMP` 收口：
+              · 同 UID 调用**不受权限校验影响** ⇒ 本应用与内核自己的子进程照常工作；
+              · 其它应用（含 Mozilla 注释里提到的 Chrome）不再能查询。
+            内核的 `Clipboard` 类依赖该 provider，**不要用 tools:node="remove" 直接删掉**
+            （那会让网页的「异步剪贴板自定义格式」失效）。要放开本收口必须是有意的决定，
+            并同步 `tools/verify_release.py` 的 `EXPECTED_EXPORTED` 基准。
+        -->
+        <provider
+            android:name="org.mozilla.gecko.GeckoClipboardContentProvider"
+            android:permission="android.permission.DUMP"
+            tools:node="merge" />
     </application>
 </manifest>
