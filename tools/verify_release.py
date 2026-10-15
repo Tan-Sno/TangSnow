@@ -34,6 +34,13 @@
    （过期的 AAR / 构建缓存都可能让包里的内核与声明不符，而门禁与单测都看不出来）。
 9. `exported=true` 的组件集合 == 基准：依赖升级会悄悄带进新的导出面（如 GeckoView 157 的
    剪贴板 provider），而只比权限集合的检查看不见它。
+10. **包内原生库形态**：`lib/*.so` 必须走 deflate，且条目的 local header extra 不得超阈。
+    为什么需要它（2026-10-15 从 Rust 线 10-07 的安装攻坚搬来）：AGP 为 16KB 页设备做 zip 层
+    对齐时，会把 ~14KB 的 padding 写进 `.so` 条目的 **local header extra field**，安装器的
+    libziparchive 在提取阶段拒收（`res=-113`，用户端只看到「解析包出现问题」）；而
+    aapt2 / apksigner / Java `ZipFile` 全读得动 —— ①–⑨ 因此可以**全绿却装不上**。
+    修复项是 `useLegacyPackaging = true`（.so 走 deflate、安装时解压），所以这里两道都查：
+    「是不是 deflate」= 修复有没有生效，「padding 多长」= 就算没对齐也别漏。
 
 依赖：Python 3 标准库 + 本机 Android SDK 的 `apksigner` / `aapt2`。
 """
@@ -72,13 +79,23 @@ EXPECTED_CERT_SHA256 = "af9542c452c164036d9dce01d6ce2a6d6b1bd20c7f2900e9f0bcfec7
 
 EXPECTED_PACKAGE = "io.github.tan_sno.tangsnow"
 
-# ABI 分包：文件名 → (ABI, versionCode 的 ABI 序号)
-# versionCode = 基准 * 10 + 序号（见 app/build.gradle.kts 的 splits 配置）
-ABI_SPLITS = {
-    "app-arm64-v8a-release.apk": ("arm64-v8a", 1),
-    "app-armeabi-v7a-release.apk": ("armeabi-v7a", 2),
-    "app-x86_64-release.apk": ("x86_64", 3),
-}
+# ABI 分包：ABI → versionCode 的 ABI 序号。versionCode = 基准 * 10 + 序号
+# （见 app/build.gradle.kts 的 splits 配置）。
+ABI_ORDER = {"arm64-v8a": 1, "armeabi-v7a": 2, "x86_64": 3}
+
+# 2026-10-15 起 `app` 有了 `core` flavor 维度，产物名随之变成
+# `app-<flavor>-<abi>-release.apk`。**一次发布只允许一个 flavor** —— 两个 flavor 共用
+# applicationId 与同一套 versionCode，混发等于让用户在两份实现之间无声升降。所以名单按
+# --flavor 生成，而目录里出现的**另一个 flavor** 的包会落进「预期之外的 APK」被拦下。
+DEFAULT_FLAVOR = "coreKotlin"
+
+
+def abi_splits(flavor: str) -> dict:
+    """文件名 → (ABI, versionCode 的 ABI 序号)，按 flavor 生成。"""
+    return {
+        "app-%s-%s-release.apk" % (flavor, abi): (abi, order)
+        for abi, order in ABI_ORDER.items()
+    }
 
 # 权限基准：与 README「隐私」一节、隐私政策第 2 条披露的一致。
 # 最后一项由 AndroidX 自动生成（应用自签、不涉及数据访问），README 亦有说明。
@@ -528,8 +545,8 @@ def selftest():
        因为它是全脚本第一道、也是"产物能否对应到提交"的前提。它同时验**两个方向**：
        干净 ⇒ 不拦；有一处未提交 ⇒ **必须拦**。只有双向都过，才说明它既不放过脏工作区、
        也不是"永远失败"。
-    ❌ 不覆盖：第 ⑦⑧⑨ 项（依赖 APK 与 build-tools）。要自证它们得先造出一个"内核构建号不符"
-       或"多了一个导出组件"的 APK —— 那要么二进制改包、要么先有一份可签名的产物，成本与
+    ❌ 不覆盖：第 ⑦⑧⑨⑩ 项（依赖 APK、Gradle 缓存与 build-tools）。要自证它们得先造出一个"内核构建号不符"
+       或"多了一个导出组件"、"`.so` 改成 stored"的 APK —— 那要么二进制改包、要么先有一份可签名的产物，成本与
        风险都远大于收益。**这一段是已知缺口，写在这里是为了别假装它是全覆盖的。**
 
     用法：`python tools/verify_release.py --selftest`（不需要任何 APK）。
@@ -616,7 +633,7 @@ def selftest():
     bad = [r for r in results if not r[0]]
     print("自检结果：%s（%d 项）" % ("全部通过" if not bad else "有失败项", len(results)))
     if not bad:
-        print("⚠️ 已知未覆盖：第 ⑦⑧⑨ 项（依赖 APK / build-tools）无法离线自证，见函数注释。")
+        print("⚠️ 已知未覆盖：第 ⑦⑧⑨⑩ 项（依赖 APK / Gradle 缓存 / build-tools）无法离线自证，见函数注释。")
     return 1 if bad else 0
 
 
@@ -628,6 +645,9 @@ def main():
                     help="仓库根（默认由脚本自身位置推断；自检与「在别处试跑」才需要传）")
     ap.add_argument("--selftest", action="store_true",
                     help="跑发布门禁的自检并退出（不需要 APK / SDK）")
+    ap.add_argument("--flavor", default=DEFAULT_FLAVOR,
+                    help="本次发布的内核实现 flavor（`core` 维度下的产品名），默认 %s；"
+                         "APK 名单按 app-<flavor>-<abi>-release.apk 生成" % DEFAULT_FLAVOR)
     ap.add_argument("--quiet", action="store_true", help="只输出结论与校验和")
     args = ap.parse_args()
 
@@ -671,7 +691,9 @@ def main():
         exp = read_gradle_expectations(root)
         say("  ✅ ② 构建脚本声明：%s (versionCode %d)" % (exp["versionName"], exp["versionCode"]))
 
-        apks = [os.path.join(apk_dir, n) for n in ABI_SPLITS]
+        splits = abi_splits(args.flavor)
+        say("      flavor: %s ⇒ %s" % (args.flavor, "、".join(sorted(splits))))
+        apks = [os.path.join(apk_dir, n) for n in splits]
         missing = [p for p in apks if not os.path.isfile(p)]
         if missing:
             raise Fail("缺少 APK：\n      " + "\n".join(os.path.basename(p) for p in missing))
@@ -679,7 +701,7 @@ def main():
         # （旧包/第四个分包）。宁可在发布前拦下清点，不让它悄悄混出去（2026-10-01 外部审查）。
         extra = sorted(
             n for n in os.listdir(apk_dir)
-            if n.lower().endswith(".apk") and n not in ABI_SPLITS
+            if n.lower().endswith(".apk") and n not in splits
         )
         if extra:
             raise Fail("发布目录里出现预期之外的 APK（不在校验链内，清点后再发布）：\n      "
@@ -697,7 +719,7 @@ def main():
         problems = []
         checksums = []
 
-        for name, (abi, order) in ABI_SPLITS.items():
+        for name, (abi, order) in splits.items():
             apk = os.path.join(apk_dir, name)
             want_code = exp["versionCode"] * 10 + order
 
@@ -800,6 +822,36 @@ def main():
                        "      若这是有意的（如依赖带进的新组件并已评估/披露），请同步 "
                        "tools/verify_release.py 的 EXPECTED_EXPORTED 并写进改动说明。" % ex_detail)
         say("  ✅ ⑨ 导出组件：%s" % ex_detail)
+
+        # ⑩ 包内原生库形态（2026-10-15 自 Rust 线的 10-07 安装攻坚搬来，两道断言缺一不可）。
+        # 只查 padding 不够：stored 且 padding 小的包同样走安装器提取路径；只查 deflate 也不够：
+        # 修复回退时会立刻反映在这里。
+        not_deflated = []
+        for apk in apks:
+            with zipfile.ZipFile(apk) as z:
+                not_deflated += [
+                    "%s：%s" % (os.path.basename(apk), i.filename)
+                    for i in z.infolist()
+                    if i.filename.startswith("lib/") and i.filename.endswith(".so")
+                    and i.compress_type != zipfile.ZIP_DEFLATED
+                ]
+        if not_deflated:
+            raise Fail(
+                "%d 个 `.so` 不是 deflate ⇒ `useLegacyPackaging` 未生效，16K 对齐的 padding 会被"
+                "写进 local header，安装器 libziparchive 可能拒收（res=-113，"
+                "「解析包出现问题」）：\n      %s\n"
+                "      修法见 app/build.gradle.kts 的 packaging/jniLibs 配置与 Rust 线攻坚报告。"
+                % (len(not_deflated), "\n      ".join(not_deflated[:6]))
+            )
+        pad = subprocess.run(
+            [sys.executable, os.path.join(root, "tools", "check_zip_padding.py")] + list(apks),
+            capture_output=True, text=True, cwd=root,
+        )
+        if pad.returncode != 0:
+            tail = (pad.stdout + "\n[stderr]\n" + pad.stderr).strip().splitlines()[-8:]
+            raise Fail("APK 本地头 padding 超阈（安装器拒收风险），发布前必须查清：\n      %s"
+                       % "\n      ".join(tail))
+        say("  ✅ ⑩ 原生库形态：三 ABI 的 .so 全部 deflate，本地头 padding 在阈内")
 
         print("✅ 校验通过，可以发布。校验和（可直接贴进发布说明）：")
         print()

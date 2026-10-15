@@ -421,14 +421,57 @@ android {
         localeFilters.addAll(listOf("en", "zh", "zh-rCN", "zh-rHK", "zh-rTW"))
     }
 
-    // ABI 拆分：GeckoView 原生库（.so，未压缩存储）约占包体 86%，按 ABI 独立出包可大幅瘦身；
+    // ABI 拆分：GeckoView 原生库（.so）约占包体 86%，按 ABI 独立出包可大幅瘦身；
     // 不生成包含全部 ABI 的 universal APK（体积巨大且无必要）。
+    // ⚠️ 存储形态见下方 packaging —— 是 deflate，不是未压缩存储（2026-10-15 改，原因见那段）。
     splits {
         abi {
             isEnable = true
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = false
+        }
+    }
+
+    // 内核实现维度（2026-10-15，Rust 线转正的第一步）：
+    //  · coreKotlin —— 纯 Kotlin 实现，**主线默认**，产物与今日完全等价；
+    //  · coreRust   —— 同一批纯逻辑改由 `libtangsnow_core.so`（Rust）承担，源码在仓库根的
+    //                  `tangsnow-rs/`，`.so` 与本 flavor 的桥接代码放 `app/src/coreRust/`
+    //                  （flavor 的 java/ 与 jniLibs/ 按约定目录自动接管，无需 sourceSets 声明）。
+    // ⚠️ 两个 flavor **共用同一 applicationId 与同一套 versionCode 派生**（基准×10+ABI 序号），
+    //    所以**一次只能发布其中一个**：同号换 flavor 安装会被系统按同版本重装处理，
+    //    混发会让用户在自己都没选过的两份实现之间来回升降。发布目录也只允许出现选定
+    //    flavor 的三颗包 —— `tools/verify_release.py --flavor` 就是按这个规则拦的。
+    //    现在 coreRust 只是「能编译、能打包、`.so` 进得了包」的骨架，具体逐函数接线见
+    //    `notes-tangsnow/STATUS.md` 的 P2/P3。
+    flavorDimensions += "core"
+    productFlavors {
+        create("coreKotlin") {
+            dimension = "core"
+        }
+        create("coreRust") {
+            dimension = "core"
+        }
+    }
+
+    // ⚠️ useLegacyPackaging = true 是从 Rust 线 2026-10-07 安装攻坚搬来的**修复项**，删前必读：
+    //
+    // 症状：release 包在真机报「解析包出现问题」；API26 模拟器复现为
+    //   INSTALL_FAILED_NO_MATCHING_ABIS / "Failed to extract native libraries, res=-113"。
+    // 根因：AGP 为 16KB 页设备做 zip 层对齐时，把对齐 padding（~14KB）写进 `.so` 条目的
+    //   **local header extra field**。Java 的 ZipFile / Python zipfile 都读得动，但安装器的
+    //   C++ libziparchive 在提取阶段校验 local extra 失败 ⇒ -113。对照实验（同一产物仅改
+    //   padding）：16K padding 版必败，`zipalign -P 4` 重写版（padding 1734B，与官方 1878B
+    //   同量级）必成 —— 证据闭环，不是猜测。
+    // 修复：`useLegacyPackaging = true` ⇒ .so 以 deflate 压缩存储、安装时解压提取，完全绕开
+    //   local-header padding。代价：安装期多一步解压、/data 双份占用；APK 体积反而略降。
+    //   运行时 16KB 页兼容不受影响 —— 内核 .so 本身是 4K 对齐，提取后照常映射。
+    // 历史对照：2.1.6（4K 时代，padding 小）可装；**2.2.0 全系列（16K padding）全败**。
+    //   本地 app/release/ 那三颗已发布产物实测 13 个 .so 全部 stored、8 个 padding
+    //   8574–15506B ⇒ 正是这一形态。把关：tools/verify_release.py 第 ⑩ 项 + tools/check_zip_padding.py。
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 
@@ -460,7 +503,7 @@ androidComponents {
             val offset = abiCodes[abi]
                 ?: error(
                     "ABI「${abi ?: "universal（未拆分）"}」未登记 versionCode 偏移。"
-                        + "请同步本表与 tools/verify_release.py 的 ABI_SPLITS，"
+                        + "请同步本表与 tools/verify_release.py 的 ABI_ORDER / abi_splits(--flavor)，"
                         + "或恢复 isUniversalApk = false。"
                 )
             output.versionCode.set(output.versionCode.get() * 10 + offset)

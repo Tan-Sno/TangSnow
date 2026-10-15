@@ -48,8 +48,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
 
       # lint 的 checkAllWarnings = true 是项目的硬门禁：全警告口径下必须 `No issues found`
-      - name: Unit tests + lint
-        run: ./gradlew :app:testDebugUnitTest :app:lintDebug --console=plain
+      # 2026-10-15 起 `app` 有 `core` flavor 维度 ⇒ **两个 flavor 都要跑**：只跑一个的话，
+      # Rust 那份实现的编译错误、警告与它的单测都可以悄悄进主线，而 parity 的全部意义
+      # 就是让两边同时受同一批断言约束。
+      - name: Unit tests + lint (both core flavors)
+        run: ./gradlew :app:testCoreKotlinDebugUnitTest :app:testCoreRustDebugUnitTest :app:lintCoreKotlinDebug :app:lintCoreRustDebug --console=plain
 
       # 发布门禁**自证**：verify_release.py 的失败表现是抛异常、成功是打印 ✅ ——
       # 也就是说它自己的解析逻辑一旦坏了，最可能的表现是**静默放行**而不是误报。
