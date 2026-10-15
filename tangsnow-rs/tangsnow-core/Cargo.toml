@@ -1,0 +1,28 @@
+[package]
+name = "tangsnow-core"
+version = "0.1.0"
+edition = "2021"
+description = "棠雪 TangSnow 的 Rust 核心逻辑库：从 Kotlin 纯逻辑模块（UrlUtils/BookmarkHtml/SearchEngines/HistoryRepo）逐行移植，测试用例与 JVM 单测同源"
+license = "Apache-2.0"
+
+[lib]
+name = "tangsnow_core"
+crate-type = ["lib", "cdylib"]
+
+[features]
+default = []
+# Android JNI 桥接：host 测试不需要；交叉编译时开启
+jni = ["dep:jni", "dep:serde", "dep:serde_json"]
+
+[dev-dependencies]
+proptest = "1"
+
+[dependencies]
+regex = "1"
+fancy-regex = "0.14"     # Kotlin 正则里的 lookbehind/lookahead 在 regex crate 不支持，这里兜住 HOST_PATTERN 与 HREF_ATTR
+idna = "1"               # 对齐 java.net.IDN.toASCII 的域名转 ASCII
+url = "2"                # 对齐 android.net.Uri.parse 的搜索结果页解析（displayForUrl）
+jni = { version = "0.21", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }

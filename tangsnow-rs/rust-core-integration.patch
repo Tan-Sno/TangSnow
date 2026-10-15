@@ -1,0 +1,163 @@
+diff --git a/app/proguard-rules.pro b/app/proguard-rules.pro
+index 9cb7514..d50617c 100644
+--- a/app/proguard-rules.pro
++++ b/app/proguard-rules.pro
+@@ -53,3 +53,6 @@
+     public static *** d(...);
+     public static *** i(...);
+ }
++
++# ===== Rust 核心（tangsnow-core）JNI 桥：类名与 native 方法不可被 R8 改名/移除 =====
++-keep class io.github.tan_sno.tangsnow.core.CoreNative { *; }
+diff --git a/app/src/main/java/io/github/tan_sno/tangsnow/data/BookmarkHtml.kt b/app/src/main/java/io/github/tan_sno/tangsnow/data/BookmarkHtml.kt
+index e2b9606..c92ce79 100644
+--- a/app/src/main/java/io/github/tan_sno/tangsnow/data/BookmarkHtml.kt
++++ b/app/src/main/java/io/github/tan_sno/tangsnow/data/BookmarkHtml.kt
+@@ -115,7 +115,14 @@ object BookmarkHtml {
+      * 计数与收集共用**同一趟**扫描（不额外扫文本）：达到上限后不再构造 Entry（内存仍有界），
+      * 只累加被丢弃的条数，解码也一并省掉（这些条目不会被使用）。
+      */
+-    internal fun parseImportCounted(text: String): Pair<List<Entry>, Int> {
++    internal fun parseImportCounted(text: String, nowMs: Long = System.currentTimeMillis()): Pair<List<Entry>, Int> =
++        if (io.github.tan_sno.tangsnow.core.CoreNative.available) {
++            io.github.tan_sno.tangsnow.core.CoreBridge.parseImportCounted(text, nowMs)
++        } else {
++            parseImportCountedImpl(text, nowMs)
++        }
++
++    private fun parseImportCountedImpl(text: String, nowMs: Long): Pair<List<Entry>, Int> {
+         if (text.length > MAX_IMPORT_CHARS) return emptyList<Entry>() to 0
+         val out = ArrayList<Entry>()
+         var dropped = 0
+@@ -215,6 +222,16 @@ object BookmarkHtml {
+     fun sanitize(
+         raw: List<Entry>,
+         existingUrls: Set<String>,
++    ): Pair<List<Entry>, Int> =
++        if (io.github.tan_sno.tangsnow.core.CoreNative.available) {
++            io.github.tan_sno.tangsnow.core.CoreBridge.sanitize(raw, existingUrls)
++        } else {
++            sanitizeImpl(raw, existingUrls)
++        }
++
++    private fun sanitizeImpl(
++        raw: List<Entry>,
++        existingUrls: Set<String>,
+     ): Pair<List<Entry>, Int> {
+         val out = ArrayList<Entry>(raw.size.coerceAtMost(MAX_IMPORT_COUNT))
+         val seen = HashSet<String>(existingUrls)
+@@ -268,7 +285,14 @@ object BookmarkHtml {
+      * 导出：把全部书签序列化为 Netscape 书签 HTML。
+      * url 与 title 做最小 HTML 转义（& < > "），与主流浏览器导出格式兼容。
+      */
+-    fun export(bookmarks: List<Bookmark>): String = buildString {
++    fun export(bookmarks: List<Bookmark>): String =
++        if (io.github.tan_sno.tangsnow.core.CoreNative.available) {
++            io.github.tan_sno.tangsnow.core.CoreBridge.export(bookmarks) ?: exportImpl(bookmarks)
++        } else {
++            exportImpl(bookmarks)
++        }
++
++    private fun exportImpl(bookmarks: List<Bookmark>): String = buildString {
+         append("<!DOCTYPE NETSCAPE-Bookmark-file-1>\n")
+         append("<!-- This is an automatically generated file. It will be read and overwritten. DO NOT EDIT! -->\n")
+         append("<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n")
+diff --git a/app/src/main/java/io/github/tan_sno/tangsnow/data/SearchEngines.kt b/app/src/main/java/io/github/tan_sno/tangsnow/data/SearchEngines.kt
+index d1907d1..ff858ae 100644
+--- a/app/src/main/java/io/github/tan_sno/tangsnow/data/SearchEngines.kt
++++ b/app/src/main/java/io/github/tan_sno/tangsnow/data/SearchEngines.kt
+@@ -28,6 +28,9 @@ data class SearchEngine(
+     val queryParam: String? = null,
+ ) {
+     fun searchUrl(query: String): String {
++        if (io.github.tan_sno.tangsnow.core.CoreNative.available) {
++            return io.github.tan_sno.tangsnow.core.CoreNative.searchUrlFromTemplate(template, query)
++        }
+         // 用自带的纯函数 percentEncode 而非 android.net.Uri.encode：
+         // 语义一致（逐字节相同），但让本方法可在 JVM 单测里直接验证
+         val encoded = percentEncode(query.trim())
+@@ -139,6 +142,15 @@ object SearchEngines {
+      * 非搜索结果页返回 null。
+      */
+     fun displayForUrl(url: String, engines: List<SearchEngine>): String? {
++        if (io.github.tan_sno.tangsnow.core.CoreNative.available) {
++            for (engine in engines) {
++                val param = engine.queryParam ?: continue
++                val r = io.github.tan_sno.tangsnow.core.CoreNative.displayForUrl(url, engine.template, param)
++                    ?: continue
++                if (r.isNotBlank()) return r
++            }
++            return null
++        }
+         // ⚠️ 这个 `?: return null` 在生产里确实**不可达**（`android.net.Uri.parse` 标了 @NonNull，
+         // 解析失败也返回空 Uri 而不是 null）—— 外部审查 CR-014 把它报成死分支，结论对。
+         // **判定保留**：删掉省不下任何东西，而它标记了"这里依赖 parse 的非空契约"；
+diff --git a/app/src/main/java/io/github/tan_sno/tangsnow/data/repo/HistoryRepo.kt b/app/src/main/java/io/github/tan_sno/tangsnow/data/repo/HistoryRepo.kt
+index 4ac20d4..08c90e6 100644
+--- a/app/src/main/java/io/github/tan_sno/tangsnow/data/repo/HistoryRepo.kt
++++ b/app/src/main/java/io/github/tan_sno/tangsnow/data/repo/HistoryRepo.kt
+@@ -22,6 +22,12 @@ object HistoryRepo {
+     suspend fun add(url: String, title: String): Unit = withContext(Dispatchers.IO) {
+         val lower = url.lowercase()
+         if (SKIP_PREFIXES.any { lower.startsWith(it) }) return@withContext
++        // Rust 核心同口径过滤（差分测试锁定）；.so 缺失时上面 Kotlin 判定已兜底
++        if (io.github.tan_sno.tangsnow.core.CoreNative.available &&
++            io.github.tan_sno.tangsnow.core.CoreNative.shouldSkipHistoryUrl(url)
++        ) {
++            return@withContext
++        }
+         BrowserDb.get(ApplicationScope.context)
+             .touchHistory(url, title.trim().ifBlank { null })
+     }
+diff --git a/app/src/main/java/io/github/tan_sno/tangsnow/util/UrlUtils.kt b/app/src/main/java/io/github/tan_sno/tangsnow/util/UrlUtils.kt
+index b77a161..e84c339 100644
+--- a/app/src/main/java/io/github/tan_sno/tangsnow/util/UrlUtils.kt
++++ b/app/src/main/java/io/github/tan_sno/tangsnow/util/UrlUtils.kt
+@@ -127,6 +127,9 @@ object UrlUtils {
+      * 二是 `Uri.parse` 对无 scheme 的裸 host 会把整串当成 path。这里自己拆。
+      */
+     internal fun isLocalNetworkAddress(input: String): Boolean {
++        if (io.github.tan_sno.tangsnow.core.CoreNative.available) {
++            return io.github.tan_sno.tangsnow.core.CoreNative.isLocalNetworkAddress(input)
++        }
+         val host = hostOf(input)?.trim()?.trimEnd('.')?.lowercase().orEmpty()
+         if (host.isEmpty()) return false
+         if (host == "localhost" || host.endsWith(".localhost")) return false
+@@ -326,6 +329,13 @@ object UrlUtils {
+     fun resolveInfo(input: String, engine: SearchEngine): Resolved? {
+         val trimmed = input.trim()
+         if (trimmed.isEmpty()) return null
++        // Rust 核心（tangsnow-core）：可用时走 native，行为与 Kotlin 实现逐口径一致
++        // （差分测试锁定）；失败/缺失自动回落 Kotlin 路径。
++        if (io.github.tan_sno.tangsnow.core.CoreNative.available) {
++            val r = io.github.tan_sno.tangsnow.core.CoreNative.resolveInfo(trimmed, engine.template)
++                ?: return null
++            return Resolved(r[0], r[1] == "1")
++        }
+         return when {
+             trimmed.startsWith("http://", ignoreCase = true) ||
+                 trimmed.startsWith("https://", ignoreCase = true) -> Resolved(trimmed, false)
+@@ -373,6 +383,9 @@ object UrlUtils {
+     private val TRAILING_URL_PUNCTUATION = """.,;:!?'""" + "()[]{}<>\"“”‘’）］｝]》」』›»。"
+ 
+     fun extractUrlFromText(text: String): String? {
++        if (io.github.tan_sno.tangsnow.core.CoreNative.available) {
++            return io.github.tan_sno.tangsnow.core.CoreNative.extractUrlFromText(text)
++        }
+         val raw = URL_IN_TEXT.find(text)?.value ?: return null
+         val cut = CJK_URL_CUTTER.find(raw)?.range?.first ?: raw.length
+         var url = raw.substring(0, cut)
+diff --git a/gradle.properties b/gradle.properties
+index fc85885..01fee35 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -9,7 +9,8 @@
+ # 4G 而非 3G：release 的 minifyReleaseWithR8 + optimizeReleaseResources 要处理
+ # 约 194MB 的包（GeckoView 原生库占 86%、其 Kotlin/Java 面须整体 keep），3G 堆偏紧，
+ # 触发 GC 抖动会显著拖慢全量构建。本机 16G 内存，4G 堆安全。
+-org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
++org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -XX:+UseSerialGC -Dfile.encoding=UTF-8
++kotlin.daemon.jvmargs=-Xmx768m
+ # 并行执行独立任务 + 复用构建缓存，显著加快迭代编译
+ org.gradle.parallel=true
+ org.gradle.caching=true

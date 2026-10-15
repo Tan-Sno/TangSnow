@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = ["tangsnow-core"]
+
+[profile.release]
+opt-level = "z"     # 面向 Android 体积优先
+lto = true
+codegen-units = 1   # 单编译单元：跨 crate 全局优化，进一步压体积
+panic = "abort"     # JNI 边界不允许 unwind
+strip = true
