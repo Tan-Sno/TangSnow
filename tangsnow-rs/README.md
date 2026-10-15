@@ -31,7 +31,7 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
 | `bookmark_html` | `data/BookmarkHtml.kt` | 295 | `BookmarkHtmlTest`(23) |
 | `history` | `data/repo/HistoryRepo.kt` 纯函数 | 96 | — |
 
-**验证结果**：`cargo test` **213/213 通过**（2026-10-15 实测，12 个测试二进制合计；旧口径写的 70/70、210/210 均已过期），其中
+**验证结果**：`cargo test` **213/213 通过**（2026-10-15 实测，12 个测试二进制合计；旧口径写的 70/70、210/210 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
 - 30 + 15 个差分用例与 JVM 单测同源（同输入 ⇒ 同输出，含防钓鱼 `@` 检查、
   IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对）；
 - **IDNA 差分 3 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
@@ -50,7 +50,7 @@ panic=abort），18 个 JNI 符号以 `tan_1sno` 正确转义导出。
 ```
 tangsnow-rs/
 ├── Cargo.toml                # workspace（release: opt-level=z + LTO + panic=abort）
-├── tangsnow-core/            # 核心库（host 测试 210/210 绿；默认**不**编译 jni.rs）
+├── tangsnow-core/            # 核心库（host 测试全绿，**计数只在上方「验证结果」维护一处**；默认不编译 jni.rs）
 │   ├── src/                  # percent_encode / url_utils / search_engines /
 │   │                         # bookmark_html / history / jni(feature="jni")
 │   └── tests/                # 与 JVM 单测同源的差分测试
