@@ -309,6 +309,32 @@ class DownloadFileNameTest {
         assertTrue(DownloadRepo.isExecutableName("invoice.pdf.apk"))
     }
 
+    // ------------------------------------------------------------- 隐藏扩展名的格式控制字符
+
+    @Test
+    fun `Cf 与 Cc 类字符同样被删除，不靠码位清单堵绕过面`() {
+        // 旧实现的 INVISIBLE_FILE_CHARS 只列了 12 个码位，而 U+2060 WORD JOINER、U+00AD 软连字符、
+        // U+180E 蒙古语元音分隔符、U+08E2 都是 Cf，U+0085/U+009F（C1）都是 Cc —— 全不在清单里，
+        // 于是 `evil.apk` 后面挂一个不可见尾巴，末段扩展名就成了 `apk⁠`，
+        // 「安装包一律强确认」被**肉眼不可见地**绕过。这一族现在按 Unicode 类别删除。
+        val tails = listOf('\u2060', '\u00AD', '\u180E', '\u08E2', '\u0085', '\u009F')
+        for (tail in tails) {
+            val clean = DownloadRepo.sanitizeFileName("evil.apk$tail")
+            val at = tail.code.toString(16).uppercase()
+            assertTrue("尾字符 U+$at 未被删除：$clean", clean.endsWith(".apk"))
+            assertTrue("尾字符 U+$at 逃过了可执行判定：$clean", DownloadRepo.isExecutableName(clean))
+        }
+    }
+
+    @Test
+    fun `普通空格不在删除之列`() {
+        // 刻意没有把 \\p{Zs} 加进去：U+0020 就在 Zs 里，删它等于把「季度 报告.pdf」改成
+        // 「季度报告.pdf」—— 那是伤内容，不是防绕过。
+        assertEquals("季度 报告.pdf", DownloadRepo.sanitizeFileName("季度 报告.pdf"))
+        // 而**结尾**的空白另有 TRAILING_SPACE_OR_DOT 负责，两条机制互不越界。
+        assertEquals("a.pdf", DownloadRepo.sanitizeFileName("a.pdf  "))
+    }
+
     // ------------------------------------------------------------- MIME 归一
 
     @Test

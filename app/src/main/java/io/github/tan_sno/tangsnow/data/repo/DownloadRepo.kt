@@ -226,9 +226,17 @@ object DownloadRepo {
      * 它们不携带任何用户想要的信息，而替换会让 `evil.apk<U+200B>` 变成 `evil.apk_` ——
      * `isExecutableName` 取最后一段扩展名仍是 `apk_`，照旧判不中，「可执行文件一律强确认」
      * 被绕过且用户肉眼不可见（外部审查 P4）。删除则还原真实可见名 `evil.apk`，闸门命中。
+     *
+     * **2026-10-15 追加 Unicode 类别** `\p{Cf}`（格式）/ `\p{Cc}`（控制）/ `\p{Zl}` `\p{Zp}`
+     * （行、段分隔符）：上面那串是**码位清单**，而这一族成员远不止它 —— 实测 U+2060 WORD JOINER、
+     * U+00AD 软连字符、U+180E 蒙古语元音分隔符、U+08E2 都是 Cf，C1（U+0080–U+009F）都是 Cc，
+     * 全都不在旧清单里 ⇒ `evil.apk⁠` 这类尾巴照旧判不中。旧清单 12 个成员**全部**落在 Cc/Cf 内，
+     * 所以这是严格超集：一个都不会少删，只会多删本该删的。
+     * ⚠️ 刻意**不加 `\p{Zs}`** —— 普通空格 U+0020 就在 Zs 里，删它等于改坏正常文件名
+     * （首尾空白另有 [TRAILING_SPACE_OR_DOT] 负责）。
      */
     private val INVISIBLE_FILE_CHARS =
-        Regex("""[\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u061C]""")
+        Regex("""[\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u061C]|\p{Cf}|\p{Cc}|\p{Zl}|\p{Zp}""")
 
     /** 结尾的空白与点（Windows 会静默丢弃，或造成路径穿越） */
     private val TRAILING_SPACE_OR_DOT = Regex("""[\s.]+$""")
