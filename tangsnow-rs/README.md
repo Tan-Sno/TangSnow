@@ -31,7 +31,7 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
 | `bookmark_html` | `data/BookmarkHtml.kt` | 295 | `BookmarkHtmlTest`(23) |
 | `history` | `data/repo/HistoryRepo.kt` 纯函数 | 96 | — |
 
-**验证结果**：`cargo test` **70/70 通过**，其中
+**验证结果**：`cargo test` **210/210 通过**（2026-10-15 实测，12 个测试二进制合计；旧口径写的 70/70 已过期），其中
 - 30 + 15 个差分用例与 JVM 单测同源（同输入 ⇒ 同输出，含防钓鱼 `@` 检查、
   IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对）；
 - 22 个书签用例含 **500 例固定种子随机语料差分**（线性实现 vs 参考正则实现）；
@@ -47,7 +47,7 @@ panic=abort），18 个 JNI 符号以 `tan_1sno` 正确转义导出。
 ```
 tangsnow-rs/
 ├── Cargo.toml                # workspace（release: opt-level=z + LTO + panic=abort）
-├── tangsnow-core/            # 核心库（host 测试 70/70 绿）
+├── tangsnow-core/            # 核心库（host 测试 210/210 绿；默认**不**编译 jni.rs）
 │   ├── src/                  # percent_encode / url_utils / search_engines /
 │   │                         # bookmark_html / history / jni(feature="jni")
 │   └── tests/                # 与 JVM 单测同源的差分测试
