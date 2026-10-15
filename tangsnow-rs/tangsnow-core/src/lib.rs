@@ -19,7 +19,7 @@
 //!    的设计在 Rust 侧原样保留，并有对抗语料测试钉住。
 //! 3. **明确记录口径差异**：正则 `\s`/`\w`（Java 默认 ASCII，Rust 默认 Unicode）、
 //!    `Character.isWhitespace` 与 Rust `char::is_whitespace` 等差异处，用显式 ASCII
-//!    类 / 自实现 `java_is_whitespace` 抹平，无法抹平的在 README 差异表中列明。
+//!    类 / 自实现 `java_is_whitespace` 抹平，无法抹平的在 README「已知口径差异」表中列明。
 
 pub mod bookmark_html;
 pub mod bitmaps;

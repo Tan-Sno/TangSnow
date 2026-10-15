@@ -31,9 +31,12 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
 | `bookmark_html` | `data/BookmarkHtml.kt` | 295 | `BookmarkHtmlTest`(23) |
 | `history` | `data/repo/HistoryRepo.kt` 纯函数 | 96 | — |
 
-**验证结果**：`cargo test` **210/210 通过**（2026-10-15 实测，12 个测试二进制合计；旧口径写的 70/70 已过期），其中
+**验证结果**：`cargo test` **213/213 通过**（2026-10-15 实测，12 个测试二进制合计；旧口径写的 70/70、210/210 均已过期），其中
 - 30 + 15 个差分用例与 JVM 单测同源（同输入 ⇒ 同输出，含防钓鱼 `@` 检查、
   IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对）；
+- **IDNA 差分 3 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
+  `IDN.toASCII` 的**实测行为**上，含本仓唯一一处**有意分歧**（退化输入 `.`）与 8 条已记录的口径差异，
+  详见本文件「已知口径差异」表；
 - 22 个书签用例含 **500 例固定种子随机语料差分**（线性实现 vs 参考正则实现）；
 - **复杂度哨兵**：2MB 对抗输入（`<a >` 重复 / 无 `>` 收尾）毫秒级完成，
   钉住 Kotlin 侧「单趟线性扫描防 O(n²)」的设计不变量。
@@ -85,10 +88,25 @@ bash tools/build-android.sh         # 产出 bridge/jniLibs/<abi>/libtangsnow_co
 
 | 点 | Kotlin | Rust | 影响 |
 |---|---|---|---|
-| IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | 未分配码位的异常输入判定不同；常规中文域名一致 |
+| IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | **8 类实测分歧 + 1 类已修**，逐条见下表 |
 | 字母判定 | `isLetterOrDigit`（L*+Nl+Nd） | `is_alphabetic/is_numeric`（含 No） | 仅影响 scheme 合法性判定中的罕见 Unicode 数字 |
 | 标题截断 | `take(200)` 按 UTF-16 单元 | 按 char | 仅含星形平面的超长标题截断点差 1-2 字符 |
 | nbsp 处理 | `Character.isWhitespace(nbsp)=false` | 已用 `java_is_whitespace` 对齐 | 已抹平；正则 `\S` 类已按 Java ASCII 口径改写 |
+
+### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」）
+
+| # | 输入 | 主线 (Java) | Rust | 性质 |
+|---|---|---|---|---|
+| 1 | `ß.de` | `ss.de` | `xn--zca.de` | Java 用**过渡映射**（ß→ss），正是 IDNA2008 废弃它的原因（同形字/抢注）；Rust 更新更严 |
+| 2 | `FAß.de` | `fass.de` | `xn--fa-hia.de` | 同上 |
+| 3 | `ς.com` | `xn--4xa.com` | `xn--3xa.com` | UTS46 把行尾 sigma 折叠为 σ ⇒ **同一主机转出不同 ASCII**；两侧都把它当键用时（历史是否访问过、可信目标、参数剥离、会话恢复）必须知道这点 |
+| 4 | `ＡＢ.CD` | `ab.CD` | `ab.cd` | 同上（大小写折叠差异，键相等性受影响） |
+| 5 | `a\u{200d}b.com` | `ab.com` | `<None>` | Java 抹掉零宽继续转，Rust 拒 |
+| 6 | `xn--.com`、`xn--xn--a.com` | 原样放行 | `<None>` | Rust 做 punycode 回环校验，Java 完全不验 |
+| 7 | `.`（单点） | `.` | `<None>` | 退化输入，Rust 拒 |
+| 8 | `\u{0378}.com`（未分配码位） | `xn--zva.com`（`ALLOW_UNASSIGNED` 放行） | `<None>` | 原表那句"未分配码位判定不同"指的就是这类，罕见但确实不同 |
+
+**已修**：空标签（`a..b.com`、`.example.com`、`a...b`、`..`）此前 Rust **放过**，比浏览器和主线都宽松 —— 结果是同一条输入主线当搜索词、Rust flavor 当网址导航。现两侧一致拒，而**尾点**（`example.com.`）两边都保留。
 
 `display_for_url` 用 WHATWG `url` crate 替代 `android.net.Uri`：对 http/https
 结果页的 host 与查询参数解码语义一致（`+`→空格、取首个同名参数）。

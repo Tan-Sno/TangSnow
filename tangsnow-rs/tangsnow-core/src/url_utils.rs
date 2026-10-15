@@ -71,7 +71,7 @@ fn host_pattern_matches(s: &str) -> bool {
 ///
 /// Kotlin 用 `java.net.IDN.toASCII(hostOnly, ALLOW_UNASSIGNED)`（IDNA2003）；
 /// Rust `idna` crate 是 UTS46（IDNA2008）。常用 CJK 域名（已分配码位）两者结果一致，
-/// 极少数未分配码位输入的差异见 README 差异表。
+/// 极少数未分配码位输入的差异见 README「已知口径差异」表。
 pub fn to_ascii_url(input: &str) -> Option<String> {
     if input.chars().any(java_is_whitespace) {
         return None;
@@ -89,6 +89,16 @@ pub fn to_ascii_url(input: &str) -> Option<String> {
     let rest = &input[host.len()..]; // Kotlin removePrefix(host)
     let host_only = host.split(':').next().unwrap();
     let port = &host[host_only.len()..];
+    // 空标签口径以**主线 `IDN.toASCII` 的实测行为**为准（2026-10-15 用 JBR 25.0.3 逐条量过）：
+    // 开头或中间的空白标签抛 IllegalArgumentException（Kotlin 侧 runCatching → null），
+    // 但**尾点被容忍**（`example.com.` 原样通过；`idna` 自己就保留这个根点，别再补一次——
+    // 补了会输出 `example.com..`）。此前 Rust 把 `a..b.com` 直接放过，比浏览器和主线都宽松：
+    // 那条主机会被"当网址导航"，而主线把它当搜索词。
+    // 唯一有意分歧：退化输入 `.` 这里拒（Java 返回 "."），已记入 README「已知口径差异」表。
+    let trimmed_host = host_only.strip_suffix('.').unwrap_or(host_only);
+    if trimmed_host.split('.').any(|label| label.is_empty()) {
+        return None;
+    }
     let ascii = idna::domain_to_ascii(host_only).ok()?;
     // 转出的结果必须仍是合法域名形态（含点、无空白/控制符），避免把搜索词硬转
     if !ascii.contains('.') || ascii.chars().any(|c| java_is_whitespace(c) || (c as u32) < 0x20) {
