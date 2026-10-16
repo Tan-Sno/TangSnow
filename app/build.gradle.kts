@@ -474,7 +474,7 @@ android {
     //    混发会让用户在自己都没选过的两份实现之间来回升降。发布目录也只允许出现选定
     //    flavor 的三颗包 —— `tools/verify_release.py --flavor` 就是按这个规则拦的。
     //    现在 coreRust 只是「能编译、能打包、`.so` 进得了包」的骨架，具体逐函数接线见
-    //    `notes-tangsnow/STATUS.md` 的 P2/P3。
+    //    git 提交历史（2026-10-15 起）。
     flavorDimensions += "core"
     productFlavors {
         create("coreKotlin") {

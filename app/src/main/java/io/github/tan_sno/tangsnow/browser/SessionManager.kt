@@ -1719,7 +1719,7 @@ class BrowserSessionManager private constructor(
     // ⇒ 异常逃出 `GeckoRuntime.create()`，被 `warmUp` 的 `runCatching` 吞掉后**运行时根本没建起来**，
     // 随后主界面建 GeckoSession 即崩（2.1.6/2.1.7「点同意就闪退」的根因）。
     // 结论：**configFilePath 在 Android 上不可用**（即使解析成功也会被 catch-and-ignore，覆盖从不生效）。
-    // 详见 notes-tangsnow/STATUS.md。
+    // 详见 git 提交历史。
 
     /**
      * 运行时级指纹保护是否开启（跟随跟踪保护档位，见 [runtime] 中的说明）。

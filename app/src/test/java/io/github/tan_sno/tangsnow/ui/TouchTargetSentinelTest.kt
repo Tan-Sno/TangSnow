@@ -46,7 +46,7 @@ import javax.xml.parsers.DocumentBuilderFactory
  *
  * 直接断言 0 会让门禁一落地就把仓库打红，那种门禁活不过一天。因此：**每条已知的小目标都必须
  * 写进 `touch_target_min.xml` 并附理由**，改完一处删一条 —— 门禁只负责"不许新增"，
- * 存量靠豁免表当**棘轮**推进。表由 `notes-tangsnow/tools/static-touch-target-audit.py`
+ * 存量靠豁免表当**棘轮**推进。表由维护者的静态审计脚本（仓外工具）
  * 生成与校对（`--check` 能发现"布局改了但表没更新"）。
  */
 class TouchTargetSentinelTest {

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 由 notes-tangsnow/tools/static-touch-target-audit.py 生成，请勿手改；
+<!-- 由维护者的静态审计脚本（仓外工具）生成，请勿手改；
      豁免请填 exempt 属性（会被人为保留），改完布局请重跑工具。 -->
 <touchTargets>
     <target kind="violation" layout="item_extension_catalog.xml" key="btnAction" minSideDp="36" widthDp="80" heightDp="36" exempt="宽度已有 minWidth=80dp，高度 36dp 待加到 48dp。见 PLAN 批 2">app\src\main\java\io\github\tan_sno\tangsnow\ExtensionsActivity.kt:1153</target>
