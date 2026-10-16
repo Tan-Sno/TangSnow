@@ -125,6 +125,206 @@ class ReleaseGateConsistencyTest {
         )
     }
 
+    /**
+     * 2026-10-15 整理：`libtangsnow_core.so` 在仓库里**只许有一份**（flavor 那份）。
+     * 此前 `tangsnow-rs/dist/jniLibs/` 与 `app/src/coreRust/jniLibs/` 各存一份，实测三对文件
+     * SHA-256 两两相同 —— 两份跟踪副本就是"重编了拷一边、忘另一边"的温床，而构建只读 flavor。
+     */
+    @Test
+    fun `随包 so 只有一份真相`() {
+        val abis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        val flavor = abis.map { File(repoRoot(), "app/src/coreRust/jniLibs/$it/libtangsnow_core.so") }
+        val missing = flavor.filter { !it.isFile || it.length() == 0L }
+        assertTrue(
+            "coreRust flavor 的 `.so` 缺失或为空 ⇒ 这个 flavor 打出来的包里没有 Rust 内核" +
+                "（AGP 按约定目录读 app/src/coreRust/jniLibs/<abi>/，**不**读 tangsnow-rs/dist/）：\n" +
+                missing.joinToString("\n") { "  ${it.path}" },
+            missing.isEmpty(),
+        )
+
+        val ignore = File(repoRoot(), "tangsnow-rs/.gitignore").readText()
+        assertTrue(
+            "tangsnow-rs/.gitignore 里缺 `/dist/jniLibs/` 这条 —— 那样 `tools/build-android.sh` 的产物" +
+                "会再次被提交，仓里就又有了第二份 `.so`（本测试与 gitignore 是同一件事的两道闸）",
+            "/dist/jniLibs/" in ignore,
+        )
+
+        // 落点目录里若还有文件（本机重编过），必须与 flavor 那份逐字节相同：
+        // 不一致只有两种正解 —— 把新的拷进 flavor，或把落点清掉。两种都得人做一次决定，别让它并存。
+        val drift = abis.mapNotNull { abi ->
+            val out = File(repoRoot(), "tangsnow-rs/dist/jniLibs/$abi/libtangsnow_core.so")
+            val ship = File(repoRoot(), "app/src/coreRust/jniLibs/$abi/libtangsnow_core.so")
+            when {
+                !out.isFile -> null
+                sha256(out) == sha256(ship) -> null
+                else -> "  $abi：落点=${sha256(out).take(16)}… flavor=${sha256(ship).take(16)}…"
+            }
+        }
+        assertTrue(
+            "dist/jniLibs 里的产物与 flavor 那份不一致 —— 随包出去的只有 flavor 那一份，" +
+                "要么把新产物拷过去、要么把落点删掉：\n" + drift.joinToString("\n"),
+            drift.isEmpty(),
+        )
+    }
+
+    /** flavor 之前的预览通道残件：**不得回到仓库**（已移到仓外归档，理由逐条写在消息里）。 */
+    @Test
+    fun `flavor 之前的预览通道残件不得回到仓库`() {
+        val retired = listOf(
+            "tangsnow-rs/rust-core-integration.patch" to
+                "它改 app/src/main 的调用点，而 CoreNative 只存在于 coreRust 源集 ⇒ 打上去 coreKotlin " +
+                "当场编译不过；实测它仍能 `git apply` 干净应用，所以留在公开仓里就是一个能点的陷阱",
+            "tangsnow-rs/bridge/gradle-integration.gradle.kts" to
+                "它把 sourceSets[main].jniLibs 指向 tangsnow-rs/bridge/jniLibs ⇒ 第二份 jniLibs 来源，" +
+                "flavor 的约定目录已经取代它",
+            "tangsnow-rs/bridge/CoreNative.kt" to
+                "那份 101 行设计稿与在用的防护网桥不是一份东西，照它拷会把正式实现覆盖掉（外部审查 L4）",
+        ).map { (path, why) -> File(repoRoot(), path) to why }.filter { (f, _) -> f.exists() }
+        assertTrue(
+            "这些 pre-flavor 残件又出现在仓库里了。要查它们改过什么，去 " +
+                "git 历史，不要放回构建可见的路径：\n" +
+                retired.joinToString("\n") { (f, why) -> "  ${f.path} —— $why" },
+            retired.isEmpty(),
+        )
+    }
+
+    /**
+     * **`tangsnow-rs/tools/build-android.sh` 里已修好的三处口径不得再漂回去**（2026-10-16）。
+     *
+     * 为什么这条只能钉源码：这台机器上没有 Rust 的 android target，三颗随包 `.so` 是在**另一台
+     * Linux** 上交叉编译出来的（STATUS 记着这条环境限制）⇒ 脚本坏了本地一声不响，只有下次重编
+     * 或装机才看得见。它与 `第 ⑩ 项依赖的 padding 检查脚本存在且真被门禁调用` 属于同一类：
+     * 构建链路里的**工具文件**一旦被改，门禁与 flavor 的产物就跟着错，而 gradle 看不见。
+     *
+     * 钉的三处（都是 2026-10-15 外部审查 L1 与同日实测修掉的）：
+     *  ① NDK 的 llvm prebuilt 目录按 `uname` 探测、`NDK_HOST_BIN` 可手工覆盖，且**零候选与多候选
+     *     都 exit 1** —— 原先写死 `linux-x86_64`，换宿主时症状是"找不到链接器"，指不回这一行；
+     *     静默猜一个则可能拿错工具链产出装不上的包。
+     *  ② `RUSTFLAGS` 里的 `-Wl,-z,max-page-size=16384`：少了它，产出的 `.so` 在 16KB 页内核的
+     *     设备上被 PackageManager 在解析阶段拒收（症状与第 ⑩ 项那个 res=-113 同族），
+     *     而 ①–⑨ 全绿看不出来。
+     *  ③ 三行 `cp` 跟着 `$PROFILEDIR` 走：曾经写死 `release/`，于是文档里的 `--debug`
+     *     用法是"编得出、拷不出"。
+     */
+    @Test
+    fun `重编 so 的脚本仍带着宿主探测 16K 对齐与 profile 拷贝这三处修复`() {
+        val script = File(repoRoot(), "tangsnow-rs/tools/build-android.sh")
+        assertTrue(
+            "tangsnow-rs/tools/build-android.sh 不见了 ⇒ 仓库里再也没有能重建随包 `.so` 的入口" +
+                "（三 ABI 的链接器与 16K 对齐参数只写在这一个脚本里）",
+            script.isFile,
+        )
+        val sh = script.readText()
+
+        assertTrue(
+            "脚本不再支持 NDK_HOST_BIN 手工覆盖 —— 非 Linux 宿主就没有出路了（L1 留的口子）",
+            "\${NDK_HOST_BIN:-}" in sh,
+        )
+        assertTrue(
+            "脚本不再按 uname 探测宿主目录：写死 linux-x86_64 时，darwin/windows 上的报错落在 cargo 里，" +
+                "指不回这一行（L1）",
+            "case \"\$(uname -s)\" in" in sh,
+        )
+        for (prefix in listOf("linux-", "darwin-", "windows-")) {
+            assertTrue("宿主探测缺少 $prefix 这一支（NDK 的 prebuilt 目录名随宿主而变）", "\"$prefix\"" in sh)
+        }
+        assertTrue(
+            "prebuilt 候选为**零**时必须报错退出：静默继续就是把「ANDROID_NDK_HOME 指错了」说成链接错误",
+            "matches[@]} -eq 0" in sh,
+        )
+        assertTrue(
+            "prebuilt 候选为**多个**时必须报错退出并让人用 NDK_HOST_BIN 指定：静默挑第一个就是拿错工具链",
+            "matches[@]} -eq 1" in sh,
+        )
+        assertTrue(
+            "RUSTFLAGS 里丢了 max-page-size=16384 ⇒ 产出的 .so 在 16KB 页设备上被拒收（「解析包出现问题」），" +
+                "而发布门禁 ①–⑨ 全绿看不出来；改这行请连同 build.gradle.kts 的 useLegacyPackaging 说明一起看",
+            "max-page-size=16384" in sh,
+        )
+        assertEquals(
+            "三 ABI 的 cp 必须都跟着 \$PROFILEDIR（曾写死 release/ ⇒ 文档里的 --debug 编得出拷不出）",
+            3,
+            sh.split("\$PROFILEDIR/libtangsnow_core.so").size - 1,
+        )
+        assertTrue(
+            "cp 路径里又出现写死的 /release/ ⇒ --debug 那次会 cp 失败（产物明明编出来了）",
+            "/release/libtangsnow_core.so" !in sh,
+        )
+        assertTrue(
+            "脚本末尾不再指向 app/src/coreRust/jniLibs —— 那里是 `.so` 的唯一跟踪副本，" +
+                "拷错地方就是造第二份真相（见 随包 so 只有一份真相）",
+            "app/src/coreRust/jniLibs" in sh,
+        )
+    }
+
+    /** 只为比较"是不是同一颗产物"，手算 SHA-256，不额外引依赖。 */
+    private fun sha256(f: File): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        f.inputStream().use { ins ->
+            val buf = ByteArray(1 shl 20)
+            while (true) {
+                val n = ins.read(buf)
+                if (n < 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    }
+
+    /**
+     * **能照抄的命令行必须带 flavor**（2026-10-16）。
+     *
+     * 判据故意收窄到"含 `./gradlew` 的行"：文档正文里解释"旧名字已失效"的句子是**该留的**
+     * （`README.md` 里就有一句 "Bare `:app:lintDebug` ... no longer resolve"），
+     * 而真正坑人的是**可照抄的那一行** —— 加 `core` flavor 之后：
+     *  · `:app:lintDebug` / `:app:testDebugUnitTest` 变成 ambiguous，直接报任务名不存在；
+     *  · 不带 flavor 的 `:app:assembleRelease` 会把**两套**（6 个 APK）一起打进 `app/release/`，
+     *    而发版按"一次一个 flavor"判，多出来的三颗会被当成"预期之外的 APK"。
+     * 这两条都是 2026-10-16 实测（dry-run）确认的，不是推断。
+     */
+    @Test
+    fun `文档与CI里的 gradlew 命令都带 flavor`() {
+        val scanned = listOf(
+            "README.md", "README.zh-CN.md", "CONTRIBUTING.md", "CONTRIBUTING.zh-CN.md",
+            "docs", ".github/PULL_REQUEST_TEMPLATE.md", ".github/workflows/ci.yml",
+            "tangsnow-rs/README.md", "tangsnow-rs/自建验证指南.md",
+        )
+        val bare = Regex(""":app:(?:lint|test|assemble|bundle|package)(?:Debug|Release)(?![A-Za-z])""")
+        val offenders = mutableListOf<String>()
+        var gradlewLines = 0
+        for (rel in scanned) {
+            val root = File(repoRoot(), rel)
+            val files = when {
+                root.isDirectory -> root.walkTopDown()
+                    .filter { it.isFile && it.extension.lowercase() in setOf("md", "yml", "yaml") }.toList()
+                root.isFile -> listOf(root)
+                else -> {
+                    offenders += "  $rel —— 扫描面里的文件/目录不见了（文档改名要同步本测试）"
+                    continue
+                }
+            }
+            files.forEach { file ->
+                file.readText().lineSequence().forEachIndexed { index, line ->
+                    if (!line.contains("./gradlew")) return@forEachIndexed
+                    gradlewLines++
+                    bare.find(line)?.let {
+                        offenders += "  ${file.relativeTo(repoRoot())}:${index + 1} 「${it.value}」不带 flavor"
+                    }
+                }
+            }
+        }
+        assertTrue(
+            "一条 `./gradlew` 都没扫到 ⇒ 扫描面已经失效（文档被移走/改名），这道门等于没在跑",
+            gradlewLines > 0,
+        )
+        assertTrue(
+            "这些行是照抄就会失败的命令，应带 flavor（:app:lintCoreKotlinDebug / " +
+                ":app:testCoreRustDebugUnitTest / :app:assembleCoreKotlinRelease）；实际命中 " +
+                offenders.size + " 处：" + offenders.joinToString(" ｜ "),
+            offenders.isEmpty(),
+        )
+    }
+
     /** 把 `"a" to 1`（Kotlin）与 `"a": 1`（Python 字典）都解析成有序对；形状不符直接失败（不静默跳过）。 */
     private fun pairsOf(text: String): List<Pair<String, Int>> =
         text.split(",").map { it.trim() }.filter { it.isNotEmpty() }.map { entry ->

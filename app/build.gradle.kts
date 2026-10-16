@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **251**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **274**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -348,8 +348,37 @@ android {
         //   普通空格**不在**删除之列）⇒ +2；同日主线加 `useLegacyPackaging` 与门禁第 ⑩ 项，
         //   同日再加 `ReleaseGateConsistencyTest`（4 例：两张 ABI 表必须一致、flavor 名与产物文件名口径、
         //   ⑩ 依赖的 padding 脚本在位且阈值未动、`useLegacyPackaging` 与其说明在位）⇒ +4），
-        //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则 testDebugUnitTest 直接红。
-        //   两条新哨兵已主动验证会红（临时改坏 ⇒ 6 条 FAILED）。
+        //   同日再加 `BridgeSignatureParityTest`（3 例：每个 Kotlin `external fun` 都有同名同形参数
+        //   个数的 Rust 导出、白名单之外的新孤儿、重名与 `tan_1sno` 转义及 `#[no_mangle]` 配对）⇒ +3。
+        //   ⚠️ 本行只数**共享源集** `app/src/test`：coreRust 专有的 `app/src/testCoreRust`
+        //   （`CoreBridgeDecodeTest`，4 例）不在其内 —— 那些用例引用只存在于一个 flavor 的符号，
+        //   在 coreKotlin 里根本编译不出来，把它们计入会让这个哨兵自己变成假话。
+        //   同日整理轮再加 3 例：`ReleaseGateConsistencyTest` 2 例（随包 `.so` 只有一份真相 —— flavor
+        //   三颗在位 + `tangsnow-rs/.gitignore` 的 `/dist/jniLibs/` 规则在位 + 落点若有产物必须与
+        //   flavor 逐字节相同；pre-flavor 残件不得回到仓库）与 `ProguardLogRuleConsistencyTest` 1 例
+        //   （coreRust flavor 源集的 release 日志与 proguard 注释里的「另计 w ×0、e ×3」一致）⇒ +3，
+        //   2026-10-16 再加 `SearchEngineTableParityTest`（3 例：内置引擎表的 id/模板/queryParam/顺序、
+        //   主机别名表、`DEFAULT_ID` 与 `CUSTOM_ID_PREFIX` 两个常量且默认 id 在表内 —— 这两张表在
+        //   Kotlin 与 Rust 里**各抄一份**、此前无人比对，初跑即抓到 Rust 少登记一行 `"bing" → bing.com`）
+        //   ⇒ +3；同日扫描轮再加 `PercentEncodeSetParityTest`（2 例：百分号编码的「未保留标点集」在
+        //   UrlUtils / Rust percent_encode / CoreNative 兜底实现**三处拷贝**必须同集合，且两侧的
+        //   十六进制表都是大写 `0123456789ABCDEF`）⇒ +2；再加 `CrossLanguageLiteralParityTest`
+        //   （10 例：scheme 三张表、可执行扩展名表、历史跳过前缀、兜底文件名，再加书签实体正则、
+        //   崩溃日志的两个正则、CJK 截断字符类、链接尾随标点表 —— **并排读两侧源码**比对，
+        //   因为原先 `tests/*_parity.rs` 那批是**镜像**用例，改一侧清单它照绿，属假覆盖）⇒ +10；
+        //   同日再加 `文档与CI里的 gradlew 命令都带 flavor`（1 例：扫所有可照抄的 `./gradlew` 行，
+        //   出现不带 flavor 的 lintDebug/testDebugUnitTest/assembleRelease 就红 —— 实测这两个任务名
+        //   在 flavor 维度之后已解析不了，而文档与 PR 模板里 5 处正是那么写的，已一并改对）⇒ +1，合计 **273**。
+        //   同日纪律轮再加 1 例：`ReleaseGateConsistencyTest.重编 so 的脚本仍带着宿主探测 16K 对齐与 profile
+        //   拷贝这三处修复` —— `tangsnow-rs/tools/build-android.sh` 是三 ABI `.so` 唯一的产出入口，而它跑在
+        //   **另一台 Linux**（本机没有 Rust 的 android target），所以它坏了本地一声不响：现在钉住
+        //   「uname 探宿主 + NDK_HOST_BIN 可覆盖 + 零/多候选都 exit 1」（L1）、`max-page-size=16384`
+        //   （少了它在 16KB 页设备上被 PackageManager 拒收）与「三行 cp 跟 `$PROFILEDIR`」⇒ +1，合计 **274**。
+        //   （上一版这里被我写成 274 —— `TestCountCommentTest` 当场把这句注释本身钉红了，钉子有效。）
+        //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则两个 flavor 的单测任务
+        //   （`:app:testCoreKotlinDebugUnitTest` / `:app:testCoreRustDebugUnitTest`）都直接红。
+        //   10-15 那两条新哨兵当时已主动验证会红（临时改坏 ⇒ 6 条 FAILED）；此后每加一条读源文件的
+        //   哨兵都单独跑过变异，台账逐条记了「哪个变异红在哪条用例」。
         //   ⚠️ lint 口径更新（2026-10-02）：`checkAllWarnings = true` 下现有一条**常驻**的
         //   `AndroidGradlePluginVersion` Warning（wrapper 9.6.0 → 9.8.0 的升级提示）——wrapper
         //   刻意不升（见上方版本史），该提示已在 lint.xml 按检查项豁免并写明理由；除此之外仍
