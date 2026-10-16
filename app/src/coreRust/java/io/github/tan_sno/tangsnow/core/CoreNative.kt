@@ -41,12 +41,20 @@ object CoreNative {
     /** 统一防护网：异常 → Log + 落盘 → 安全默认值。
      *  ⚠️ block 返回 T? 并做 `?: default`：JNI 的 external 声明虽为非空，但 Rust 侧
      *  任何失败都返回 null（平台类型不检查）——2026-10-09 模拟器实锤「null 静默穿透
-     *  非空声明 → Resolved(data class) 主构造 NPE 闪退」，故 null 必须就地兜底。 */
-    private inline fun <T> guard(op: String, default: T, block: () -> T?): T {
+     *  非空声明 → Resolved(data class) 主构造 NPE 闪退」，故 null 必须就地兜底。
+     *
+     *  @param nullIsResult 该函数的 **null 本身就是业务结果**（"没有链接" / "不是该引擎结果页" /
+     *  "无命中"），不是失败。为 true 时不写降级留痕：否则每次空输入、每次分享文本里没有链接都要
+     *  刷一条 ERROR，而**真**失败在 Rust 侧另有 `jlog`（`opt_str` 读入失败、`ret_str` 建串失败两条
+     *  路径都留痕，且随包进 release）。把「正常」也报成错误，代价是下次没人看这条链
+     *  （2026-10-15 外部审查 L3）。 */
+    private inline fun <T> guard(op: String, default: T, nullIsResult: Boolean = false, block: () -> T?): T {
         if (!available) return default
         return try {
             block() ?: default.also {
-                runCatching { android.util.Log.e("CoreNative", "JNI '$op' returned null; fallback applied") }
+                if (!nullIsResult) {
+                    runCatching { android.util.Log.e("CoreNative", "JNI '$op' returned null; fallback applied") }
+                }
             }
         } catch (t: Throwable) {
             runCatching {
@@ -74,11 +82,11 @@ object CoreNative {
 
     /** 地址栏解析：返回 `[url, isSearch]`（isSearch 为 "1"/"0"）；null = 空输入 */
     fun resolveInfo(input: String, template: String): Array<String>? =
-        guard("resolveInfo", null) { resolveInfoImpl(input, template) }
+        guard("resolveInfo", null, nullIsResult = true) { resolveInfoImpl(input, template) }
 
     /** 从分享文本提取第一个 http(s) 链接；null = 无链接 */
     fun extractUrlFromText(text: String): String? =
-        guard("extractUrlFromText", null) { extractUrlFromTextImpl(text) }
+        guard("extractUrlFromText", null, nullIsResult = true) { extractUrlFromTextImpl(text) }
 
     /** 是否落在局域网（RFC 1918 / 链路本地 / IPv6 ULA / .local，mapped IPv6 已覆盖） */
     fun isLocalNetworkAddress(input: String): Boolean =
@@ -218,7 +226,7 @@ object CoreNative {
     // ---------------------------------------------------------------- 下载文件名
 
     fun dlParseFileName(contentDisposition: String?, url: String?): String? =
-        guard("dlParseFileName", null) { dlParseFileNameImpl(contentDisposition, url) }
+        guard("dlParseFileName", null, nullIsResult = true) { dlParseFileNameImpl(contentDisposition, url) }
 
     /** 降级默认值是**安全名**而不是原串：原串带着 `/`、`..\`、绝对路径，而 API 26-28 分支
      *  的 `File(dir, name)` 里 child 为绝对路径时结果即 child、`..` 逐级上跳 —— 该分支的不变式
@@ -245,7 +253,7 @@ object CoreNative {
 
     /** tag 名规整成可比较版本号（各剥一次 v/V + 贪婪数字段）；空串 = 无法识别 */
     fun upNormalizeVersion(raw: String): String? =
-        guard("upNormalizeVersion", null) { upNormalizeVersionImpl(raw) }
+        guard("upNormalizeVersion", null, nullIsResult = true) { upNormalizeVersionImpl(raw) }
 
     /** 远端版本是否更新（逐段整数比较，缺失段补 0；任一侧不可解析 → false） */
     fun upIsNewer(remote: String, local: String): Boolean =
@@ -257,11 +265,11 @@ object CoreNative {
 
     /** ABI 资产匹配；名单以 '\n' 连接传入。null = 无命中 */
     fun upPickAsset(assetNamesJoined: String, supportedAbisJoined: String): String? =
-        guard("upPickAsset", null) { upPickAssetImpl(assetNamesJoined, supportedAbisJoined) }
+        guard("upPickAsset", null, nullIsResult = true) { upPickAssetImpl(assetNamesJoined, supportedAbisJoined) }
 
     /** 自定义搜索引擎/快捷方式 URL 规范化；null = 非法输入 */
     fun prefsNormalizeUrl(input: String): String? =
-        guard("prefsNormalizeUrl", null) { prefsNormalizeUrlImpl(input) }
+        guard("prefsNormalizeUrl", null, nullIsResult = true) { prefsNormalizeUrlImpl(input) }
 
     // ---------------------------------------------------------------- 网页表单时间
 
@@ -270,7 +278,7 @@ object CoreNative {
      * 返回 "规范化值|秒形态标记"，null = 不可解析。WEEK 归一为该周周一。
      */
     fun dtParseLoose(kind: String, raw: String): String? =
-        guard("dtParseLoose", null) { dtParseLooseImpl(kind, raw) }
+        guard("dtParseLoose", null, nullIsResult = true) { dtParseLooseImpl(kind, raw) }
 
     /** 选择器产出按解析时记录的形态格式化回交；null = 字段越界。 */
     fun dtFormatChosen(
