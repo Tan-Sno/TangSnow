@@ -61,3 +61,28 @@ pub const JAVA_WS_CLASS: &str = r"[ \t\n\x0B\x0C\r]";
 
 /// Java 默认正则里 `\S` 的等价类（ASCII 空白的补集，**包含**全部非 ASCII 字符）。
 pub const JAVA_NON_WS_CLASS: &str = r"[^ \t\n\x0B\x0C\r]";
+
+/// 解 JNI `GetStringUTFChars` 的字节 —— 它是 **modified UTF-8（CESU-8）**，不是 UTF-8。
+///
+/// 两处必须记住的编码差异：
+///  - 星平面字符（emoji、生僻字）在 Java 侧写成**两个代理项、各 3 字节共 6 字节**，
+///    按 UTF-8 解是非法序列；
+///  - `U+0000` 写成 `0xC0 0x80`（不是单个 `0x00`，否则 C 字符串会在中途截断）。
+///
+/// 所以这一层的正确写法只有"按 CESU-8 解"。原先 `opt_str` 直接用
+/// `CStr::to_string_lossy()`（走 `from_utf8_lossy`），一颗 emoji 被静默换成**六个** `U+FFFD`
+/// （实测：校验器在每个非法字节处各换一个，2026-10-15 复核 H3 时更正了台账里「两个」的说法）；
+/// 而出向 `JNIEnv::new_string` 用的是 `cesu8::to_java_cesu8` —— 一进一出不同源，
+/// 于是「导出再导入」不可逆（书签标题、搜索词、URL 都会被污染）。2026-10-15 外部审查 H3。
+///
+/// 把解码从 `JNIEnv` 上摘下来还有一个原因：JNI 层在本机没有 JVM 参与不了测试
+/// （`cargo test --features jni` 只保证能编能链），纯函数才能被 host 用例钉住。
+///
+/// 坏输入（残缺代理对等）回落 `from_utf8_lossy`，与 jni 0.21.1
+/// `From<&JNIStr> for Cow<str>` 的口径一致 —— 边界上不抛、不 panic。
+pub fn decode_java_modified_utf8(bytes: &[u8]) -> String {
+    match cesu8::from_java_cesu8(bytes) {
+        Ok(cow) => cow.into_owned(),
+        Err(_) => String::from_utf8_lossy(bytes).into_owned(),
+    }
+}

@@ -23,6 +23,10 @@ fancy-regex = "0.14"     # Kotlin 正则里的 lookbehind/lookahead 在 regex cr
 idna = "1"               # 对齐 java.net.IDN.toASCII 的域名转 ASCII
 url = "2"                # 对齐 android.net.Uri.parse 的搜索结果页解析（displayForUrl）
 jni = { version = "0.21", optional = true }
+# JNI 字符串边界的 modified UTF-8（CESU-8）编解码。不是可选依赖：解码抽成了纯函数，
+# host 测试（不开 `jni` feature）也要能钉住它。出向 `JNIEnv::new_string` 用的就是同一个 crate，
+# 两侧同源才能保证「导出→导入可逆」。
+cesu8 = "1"
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 chrono = { version = "0.4", default-features = false, features = ["alloc"] }

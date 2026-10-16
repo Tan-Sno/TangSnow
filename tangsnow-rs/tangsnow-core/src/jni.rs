@@ -1,10 +1,14 @@
 //! Android JNI 桥接（feature = "jni" 时编译）。
 //!
-//! Kotlin 侧声明见 `bridge/CoreNative.kt`（包 `io.github.tan_sno.tangsnow.core`，
-//! 类 `CoreNative`）。⚠️ 包名含下划线：JNI 名称转义 `tan_sno` → `tan_1sno`。
+//! Kotlin 侧声明见 `app/src/coreRust/java/io/github/tan_sno/tangsnow/core/CoreNative.kt`
+//! （coreRust flavor 源集，包 `io.github.tan_sno.tangsnow.core`，类 `CoreNative`）。
+//! ⚠️ 包名含下划线：JNI 名称转义 `tan_sno` → `tan_1sno`。
+//! 两侧符号与形参个数由 `app/src/test/.../BridgeSignatureParityTest` 钉住（gradle 门禁）。
 //!
 //! 边界约定：
-//!  - 字符串一律 UTF-8 传值；Rust 返回「可空」用 null string 表示；
+//!  - 入向按 Java 的 **modified UTF-8（CESU-8）** 解、出向按它编（两侧同源，见
+//!    [`crate::decode_java_modified_utf8`]）；Rust 内部一律 UTF-8；
+//!  - Rust 返回「可空」用 null string 表示（Kotlin 侧 `guard` 就地兜底，见其 KDoc）；
 //!  - 结构化数据（书签条目）在边界上走 JSON（serde_json），核心 API 保持类型化；
 //!  - 本层不做任何 panic 路径：release 构建为 `panic = "abort"`，
 //!    FFI 侧崩溃即进程死亡，因此只允许 infallible 操作出边界。
@@ -23,7 +27,10 @@ fn opt_str(env: &mut JNIEnv, s: &JString) -> Option<String> {
         return None;
     }
     match env.get_string(s) {
-        Ok(v) => Some(v.to_string_lossy().into_owned()),
+        // ⚠️ 必须按 modified UTF-8（CESU-8）解，见 [`crate::decode_java_modified_utf8`]。
+        // 这里的 `to_bytes()` 拿到的是 JNI 原样给出的字节，`to_string_lossy()` 会按 UTF-8
+        // 硬解，一颗 emoji 静默变成六个 U+FFFD（2026-10-15 外部审查 H3）。
+        Ok(v) => Some(crate::decode_java_modified_utf8(v.to_bytes())),
         Err(e) => {
             let p = if env.exception_occurred().is_ok() { "yes" } else { "no" };
             jlog(&format!("opt_str: get_string failed err={e:?}, pending_ex={p}"));

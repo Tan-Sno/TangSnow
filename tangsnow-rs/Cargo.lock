@@ -622,6 +622,7 @@ dependencies = [
 name = "tangsnow-core"
 version = "0.1.0"
 dependencies = [
+ "cesu8",
  "chrono",
  "fancy-regex",
  "idna",
