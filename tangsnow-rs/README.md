@@ -5,11 +5,11 @@
 > 发布完全不受影响。收编它只有一个理由：此前这份源码**只存在于 `<OLD_RUST_WORKSPACE>` 这一块盘上，
 > 被该仓的 `.git/info/exclude` 排除、不在任何 remote**，坏一次就永久失去重建三颗 `.so` 的能力。
 >
-> 落地路径记在 `notes-tangsnow/STATUS.md` 的 2026-10-15 一节：P1 加 `core` flavor 维度
+> 落地路径见 git 历史（2026-10-15 起）：P1 加 `core` flavor 维度
 > （`.so` + `CoreNative.kt`/`CoreBridge.kt` 进 `app/src/coreRust/`）→ P2 逐函数双实现缝 →
 > P3 跨 flavor 共享 parity 用例。在那之前，这里的 `cargo test` 只能在本机 host 目标上跑
-> （`android` 三个 target 未安装，且 `tools/build-android.sh:22` 写死 `prebuilt/linux-x86_64`
-> ⇒ `.so` 的交叉编译从来不是这台 Windows 做的）。
+> （`android` 三个 target 未安装 ⇒ `.so` 的交叉编译从来不是这台 Windows 做的；
+> `tools/build-android.sh` 的 NDK 宿主目录按 `uname` 自动探测，可用 `NDK_HOST_BIN` 覆盖）。
 
 把 [TangSnow](https://github.com/Tan-Sno/TangSnow)（Kotlin/GeckoView Android 浏览器）中
 **零 Android 依赖的纯逻辑模块**移植为 Rust 核心库 `tangsnow-core`，经 JNI 供 App 调用。
@@ -31,7 +31,7 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
 | `bookmark_html` | `data/BookmarkHtml.kt` | 295 | `BookmarkHtmlTest`(23) |
 | `history` | `data/repo/HistoryRepo.kt` 纯函数 | 96 | — |
 
-**验证结果**：`cargo test` **213/213 通过**（2026-10-15 实测，12 个测试二进制合计；旧口径写的 70/70、210/210 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
+**验证结果**：`cargo test` **224/224 通过**（2026-10-16 实测，14 个测试二进制合计；旧口径写的 70/70、210/210、213/213、223/223 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
 - 30 + 15 个差分用例与 JVM 单测同源（同输入 ⇒ 同输出，含防钓鱼 `@` 检查、
   IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对）；
 - **IDNA 差分 3 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
@@ -39,11 +39,35 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
   详见本文件「已知口径差异」表；
 - 22 个书签用例含 **500 例固定种子随机语料差分**（线性实现 vs 参考正则实现）；
 - **复杂度哨兵**：2MB 对抗输入（`<a >` 重复 / 无 `>` 收尾）毫秒级完成，
-  钉住 Kotlin 侧「单趟线性扫描防 O(n²)」的设计不变量。
+  钉住 Kotlin 侧「单趟线性扫描防 O(n²)」的设计不变量；
+- **JNI 边界 8 例**（2026-10-15 加，外部审查 H3/M5/L8 的落点）：
+  `tests/modified_utf8.rs` 5 例把 modified UTF-8（CESU-8）的解码钉成纯函数用例（星平面字符
+  往返、`U+0000` 写作 `0xC0 0x80`、坏输入只换替换字符不 panic），
+  `tests/jni_boundary_parity.rs` 3 例是**源码级哨兵**——因为 `jni.rs` 关在
+  `#[cfg(feature = "jni")]` 后面、host 一行也跑不到那层，只能像 `TestCountCommentTest`
+  那样把"必须走 CESU-8 解码""`displayForUrl` 的 id 由 Kotlin 传入""数组长度用 `try_from` 收窄"
+  钉成红灯；`tests/search_engines_parity.rs` 另加 2 例（别名表按真 id 命中、`template_only` 等价）。
 
-**交叉编译**：NDK r27c 直连 clang，三 ABI release 产物在 `bridge/jniLibs/`
-（arm64-v8a 2.2M / armeabi-v7a 1.4M / x86_64 2.4M，opt-level=z + LTO + strip +
-panic=abort），18 个 JNI 符号以 `tan_1sno` 正确转义导出。
+- **两张手抄表的跨语言比对（2026-10-16）**：`app/src/test/.../SearchEngineTableParityTest`（Kotlin 侧，3 例）
+  逐条比对 `SearchEngines.kt` 与 `search_engines.rs` 的内置引擎表（id / 模板 / queryParam / **顺序**）与
+  `HOST_ALIASES`（含「别名键必须是内置 id」）。它**第一次跑就抓到一条真漂移**：Rust 少了
+  `"bing" → ["bing.com"]` 这一整行（⇒ 国际版引擎在 `www.bing.com` 结果页静默不回显关键词），
+  已补，另加一条行为用例 `国际版引擎的结果页落在无区域前缀主机上也回显`。
+  ⚠️ 同 H3/M5：补的是源码，随包 `.so` 不重建就不带它。
+
+**交叉编译**：NDK r27c 直连 clang，重编落点是 `dist/jniLibs/`（**该目录已不被 git 跟踪**，
+2026-10-15 整理：此前它与 `app/src/coreRust/jniLibs/` 各存一份逐字节相同的 `.so`，
+两份跟踪副本就是"改一边忘一边"的口径），**唯一进仓、进构建的副本在
+`app/src/coreRust/jniLibs/<abi>/libtangsnow_core.so`**。产物形状：arm64-v8a 2.2M /
+armeabi-v7a 1.4M / x86_64 2.4M，opt-level=z + LTO + strip + panic=abort，**34** 个 JNI 符号
+以 `tan_1sno` 正确转义导出（2026-10-15 从产物里实测；原先这里写 18 —— 与 `STATUS.md`
+记的「.so 34 导出 vs Kotlin 31 `external`」也对不上）。
+
+⚠️ **随包 `.so` 是 2026-10-10 那一批**（`app/src/coreRust/jniLibs/` 那三颗，实测），**不含**
+2026-10-15 的 H3（CESU-8）与 M5（`displayForUrlImpl` 多一个形参）。
+本机没有 android target、`.so` 在那台 Linux 环境交叉编译 ⇒ 源码与产物之间的偏差已知且在案：
+重建之前，`displayForUrlImpl` 在真机上会以 `UnsatisfiedLinkError` 形式被 `guard` 兜成降级
+（关键词回显失效），CESU-8 那条仍是旧行为。接线（PLAN 的 W1/W2/W3）之前必须先重建 `.so`。
 
 ## 结构
 
@@ -54,12 +78,27 @@ tangsnow-rs/
 │   ├── src/                  # percent_encode / url_utils / search_engines /
 │   │                         # bookmark_html / history / jni(feature="jni")
 │   └── tests/                # 与 JVM 单测同源的差分测试
-├── bridge/
-│   ├── CoreNative.kt         # Kotlin 侧 JNI 声明（含 available 降级门）
-│   ├── gradle-integration.gradle.kts   # Gradle 接入片段
-│   └── jniLibs/<abi>/libtangsnow_core.so   # 预构建产物
+├── dist/                   # 只剩重编落点（`jniLibs/`，已 gitignore）；2026-10-15 清空
+│   └── (已归档) CoreNative.kt 设计稿 / gradle-integration.gradle.kts / rust-core-integration.patch
 └── tools/build-android.sh    # 直连 NDK 重编脚本（不依赖 cargo-ndk）
 ```
+
+**dist/ 里那三样东西的下落**（2026-10-15 整理，别再在仓里找）：
+- `CoreNative.kt`（101 行设计稿）—— **删除**。它与在用的防护网桥不是一份东西，
+  留着就会被 `自建验证指南.md` 那样的步骤引用去、把人引到「拷过去覆盖正式实现」。
+- `gradle-integration.gradle.kts`（pre-flavor 的 `sourceSets["main"].jniLibs` 片段）——
+  移到仓外归档（**不进仓库**；需查历史请走 git 历史）。
+  主线靠 flavor 的约定目录自动接管，这段一旦被 apply 就是**第二份 jniLibs 来源**。
+- `rust-core-integration.patch`（改 `src/main` 调用点的旧接入）—— 移到
+  仓外归档（**不进仓库**；需查历史请走 git 历史）。
+  移走的原因不是"它失效了"：实测它**仍能 `git apply` 干净应用**，而打上去会让 coreKotlin
+  编译不过（`src/main` 不能引用 flavor 专有符号）⇒ 留在公开仓里就是一个能点的陷阱，
+  要查历史请走 git 历史。
+  `ReleaseGateConsistencyTest` 钉着这两个路径**不得回到仓库里**。
+
+Kotlin 侧的 JNI 声明在 `app/src/coreRust/java/io/github/tan_sno/tangsnow/core/`
+（`CoreNative.kt` 防护网桥 + `CoreBridge.kt` JSON 适配）。
+两侧符号与形参个数的一致性由 `app/src/test/.../BridgeSignatureParityTest` 钉。
 
 ## Kotlin 侧接入（渐进式，风险从低到高）
 
@@ -78,7 +117,7 @@ JNI 边界约定（见 `src/jni.rs` 头注）：
 ```bash
 export ANDROID_NDK_HOME=$HOME/ndk/android-ndk-r27c   # r25+ 均可
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
-bash tools/build-android.sh         # 产出 bridge/jniLibs/<abi>/libtangsnow_core.so
+bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core.so
 ```
 
 踩坑记录：cargo target `armv7-linux-androideabi` 对应的 NDK 包装器名是

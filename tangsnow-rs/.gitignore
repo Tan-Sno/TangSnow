@@ -1,3 +1,9 @@
 /target
 **/target
 Cargo.lock.orig
+# `tools/build-android.sh` 的重编落点，**不再是第二份真相**（2026-10-15 整理）：
+# 此前这里躺着与 `app/src/coreRust/jniLibs/` 逐字节相同的三颗 `.so`（实测 SHA-256 两两相同），
+# 两份跟踪副本 = 改一边忘一边，而构建真正读的是 flavor 那一份。
+# 现在 flavor 里的三份是唯一的跟踪副本；这里只是重编输出目录，拷过去即可（脚本末段有命令）。
+# 一致性由 `ReleaseGateConsistencyTest` 钉：若这里又出现文件且与 flavor 不符，门禁直接红。
+/dist/jniLibs/
