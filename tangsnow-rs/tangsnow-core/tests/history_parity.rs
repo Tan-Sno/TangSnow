@@ -40,7 +40,10 @@ fn 普通网页进历史() {
 
 #[test]
 fn 前缀清单与_kotlin_侧一致() {
-    // 与 Kotlin 侧 HistoryRepo.SKIP 常量对齐的锚点测试：增删前缀必须双侧同步
+    // ⚠️ 这是**镜像锚点**，不是跨语言比对：清单硬编码在本用例里，只防「Rust 侧无声改动」。
+    // Kotlin 侧 `HistoryRepo.SKIP_PREFIXES` 改了这里**照样绿**（2026-10-16 同类扩散扫描轮发现
+    // 整个 `tests/*_parity.rs` 系列都是这个形状，而别名表漏行就是这么漏掉的）。
+    // 真正的两表并排比对在 `app/src/test/java/.../util/CrossLanguageLiteralParityTest`。
     assert_eq!(
         SKIP_PREFIXES,
         ["about:", "chrome:", "data:", "blob:", "javascript:", "moz-extension:"]
