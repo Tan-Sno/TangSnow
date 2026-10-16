@@ -97,15 +97,29 @@
 - Android SDK `platforms;android-37`（API 37，minor level 2）
 
 ```bash
-./gradlew :app:assembleDebug      # 构建 debug 包
-./gradlew :app:lintDebug          # 静态检查
-./gradlew :app:testDebugUnitTest  # 单元测试
+./gradlew :app:assembleCoreKotlinDebug        # 构建单个 flavor 的 debug 包（按 ABI 分包）
+./gradlew :app:lintCoreKotlinDebug :app:lintCoreRustDebug            # 静态检查（两个 flavor 都要）
+./gradlew :app:testCoreKotlinDebugUnitTest :app:testCoreRustDebugUnitTest   # 单元测试（同上）
 ```
 
-正式包请用 `:app:assembleRelease`。GeckoView 原生库（`libxul.so` 等 `.so`，未压缩存储）约占包体
-86%，因此按 ABI 独立分包（`arm64-v8a` / `armeabi-v7a` / `x86_64`），不产出 universal APK；各包的
-`versionCode` 互不相同，以便在同一设备上切换架构安装。签名凭据不放仓库，由本地未跟踪的
-`keystore.properties` 提供（缺少该文件时 release 会回退 debug 证书并打印警告，产物不可分发）。
+应用有 `core` 这一维 product flavor：`coreKotlin`（纯 Kotlin 实现，**实际发布的就是它**）与
+`coreRust`（同一批逻辑走 JNI 桥，仍是预览状态）。加了 flavor 维度之后，裸 `:app:lintDebug` /
+`:app:testDebugUnitTest` **已经解析不了**（AGP 报任务名 ambiguous），所以任务名一律带 flavor，
+并且**两个 flavor 都要跑**：只跑一个，另一个的编译错误、lint 警告与单测都能悄悄进主线（CI 就是这么配的）。
+
+正式包同样必须点名 flavor：`:app:assembleCoreKotlinRelease`。不带 flavor 的 `assembleRelease`
+会把**两套**（6 个 APK）一起打进 `app/release/`，而发版校验按"一次只发一个 flavor"判，多出来的
+会报"预期之外的 APK"。这条限制是有原因的：两个 flavor 共用同一 `applicationId`、`versionCode`
+派生也相同，混发会在用户没选过的两份实现之间来回升降。GeckoView 原生库（`libxul.so` 等 `.so`，
+未压缩存储）约占包体 86%，因此按 ABI 独立分包（`arm64-v8a` / `armeabi-v7a` / `x86_64`），
+不产出 universal APK；各包 `versionCode` 互不相同，以便在同一设备上切换架构安装。
+签名凭据不放仓库，而**任何** release 打包任务（`assemble`/`bundle`/`package`/`install` 开头且名含
+`Release`）在没有凭据时都会**直接报错** —— 三道闸门分别管"文件不存在""键缺失或为空"
+"键还是 `<<占位符>>`"这三种形态，刻意都不放行：一个名字带 `Release` 的任务，绝不该静默交出
+一个"看起来可分发"的 debug 签名产物。要在本地出正式包，三条正路：填好 `keystore.properties`；
+或用 Android Studio 的「Build → Generate Signed Bundle / APK」向导（它自带凭据，闸门认得）；
+或**仅**为验证打包链路时显式加 `-Ptangsnow.allowDebugSignedRelease`（产物仍是 debug 签名，
+照样不可分发、不可上架）。debug 构建完全不受这些影响。
 
 ## 参与贡献
 

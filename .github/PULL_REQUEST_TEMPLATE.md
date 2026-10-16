@@ -15,9 +15,10 @@ Feel free to write in Chinese if that is easier for you.
 ## Checklist
 
 - [ ] One PR solves one problem
-- [ ] `./gradlew :app:assembleDebug` passes
-- [ ] `./gradlew :app:lintDebug` passes with no new issues
-- [ ] `./gradlew :app:testDebugUnitTest` passes
+- [ ] `./gradlew :app:assembleCoreKotlinDebug` passes
+- [ ] `./gradlew :app:lintCoreKotlinDebug :app:lintCoreRustDebug` pass with no new issues
+      (both `core` flavors — one flavor alone hides the other's errors)
+- [ ] `./gradlew :app:testCoreKotlinDebugUnitTest :app:testCoreRustDebugUnitTest` pass
 - [ ] User-visible strings are maintained in both Chinese (`values/`) and English (`values-en/`), with matching key sets
 - [ ] No telemetry, analytics or advertising dependency was introduced
 - [ ] Any new network call or permission is explained in the description

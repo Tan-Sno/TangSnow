@@ -22,7 +22,7 @@ import java.io.File
  *  - 文本断言：中文（全角括号）与英文（半角括号）两侧的 `open_source_text` 都必须
  *    包含 `GeckoView（v<主版本>）` / `GeckoView (v<主版本>)`。
  *
- * 升级引擎时改了 toml 却忘改文案，`testDebugUnitTest` 直接红。
+ * 升级引擎时改了 toml 却忘改文案，两个 flavor 的单测任务直接红。
  */
 class GeckoVersionTextConsistencyTest {
 

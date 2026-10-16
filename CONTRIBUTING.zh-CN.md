@@ -45,17 +45,26 @@
 - Android Studio 2026.1 或更高版本（仅图形界面开发需要，命令行构建不需要）
 
 ```bash
-./gradlew :app:assembleDebug      # 构建
-./gradlew :app:lintDebug          # 静态检查
-./gradlew :app:testDebugUnitTest  # 单元测试
+./gradlew :app:assembleCoreKotlinDebug        # 构建（单 flavor，见下方说明）
+./gradlew :app:lintCoreKotlinDebug :app:lintCoreRustDebug            # 静态检查（两个 flavor 都要）
+./gradlew :app:testCoreKotlinDebugUnitTest :app:testCoreRustDebugUnitTest   # 单元测试（同上）
 ```
 
-构建 release（`assembleRelease`）需要仓库根目录的 `keystore.properties`（不随仓库分发）；
-文件缺失时 release 构建会**直接报错**（防止静默产出 debug 签名的可分发假象）。
-仅本地验证打包链路时，可显式加 `-Ptangsnow.allowDebugSignedRelease` 跳过该闸门
-——产物仍用 debug 证书、仍不可分发或上架。
+`app` 模块有 `core` 这一维 product flavor（`coreKotlin` = 实际发布的纯 Kotlin 实现；
+`coreRust` = 同一批逻辑走 JNI 桥，仍是预览状态）。有了 flavor 维度之后，**不带 flavor 的任务名
+已经不存在**：`:app:lintDebug`、`:app:testDebugUnitTest` 现在会因任务名 ambiguous 而直接失败。
+所以任务名一律带 flavor，且**两个都要跑** —— 只跑一个，另一个 flavor 的编译错误、lint 警告与
+单测都能悄悄进主线（CI 就是两个都跑）。
 
-提交前请确保上述三条命令均通过，且 lint 保持**零问题**。
+构建 release（`assembleCoreKotlinRelease`，或 `bundleCoreKotlinRelease`）需要仓库根目录的
+`keystore.properties`（不随仓库分发）；凭据不可用时 release 构建**直接报错** —— 三道闸门分别管
+"文件不存在""键缺失或为空""键还是 `<<占位符>>`"这三种形态，防止静默产出"看起来可分发"的
+debug 签名包。Android Studio 的「生成签名式 App Bundle / APK」向导自带凭据，闸门认得、会放行。
+仅本地验证打包链路时，可显式加 `-Ptangsnow.allowDebugSignedRelease` 跳过该闸门 —— 产物仍用
+debug 证书、仍不可分发或上架。正式包**一次只发一个 flavor**：两个 flavor 共用 `applicationId`
+且 `versionCode` 派生相同，混发会在用户没选过的两份实现之间来回升降。
+
+提交前请确保上面几条命令均通过，且 lint 保持**零问题**。
 注意本项目已开启 `checkAllWarnings`（`app/build.gradle.kts`），**warning 级问题同样会被报出** ——
 请勿为了消掉一条警告而关掉整类检查，有必要的话按现成写法逐条写明豁免理由。
 

@@ -20,7 +20,7 @@ import java.io.File
  *  2. 政策 §2 列了权限，而 `aapt dump permissions` 扫出来的比列的多一项。
  *
  * 这类问题不是「坏代码」，而是**文本落后于实现**：代码改对了、文档没跟上。
- * 靠人去读，下一次未必有人读；写成断言，`testDebugUnitTest` 会直接变红。
+ * 靠人去读，下一次未必有人读；写成断言，两个 flavor 的单测任务会直接变红。
  *
  * ## 为什么直接读文件，而不是放进 test resources
  *

@@ -23,7 +23,7 @@ import androidx.recyclerview.widget.RecyclerView
  *
  * 实现只用 `RecyclerView.Adapter` / `RecycledViewPool` 的公开 API。
  * 注意 `androidx.preference.PreferenceGroupAdapter` 是 `@RestrictTo`（库内私有），
- * 应用代码不可引用 —— `lintDebug` 的 `RestrictedApi` 会拦。
+ * 应用代码不可引用 —— `lintCoreKotlinDebug` 的 `RestrictedApi` 会拦。
  */
 fun RecyclerView.warmUpFirstRows(
     warmPositions: Int = 8,

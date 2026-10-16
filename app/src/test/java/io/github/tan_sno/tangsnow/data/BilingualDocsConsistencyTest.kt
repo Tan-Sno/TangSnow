@@ -15,7 +15,7 @@ import java.io.File
  * 双份文档的必然风险是**漂移**：改了一边忘了另一边、某节被整段删掉、语言链接指错。
  * 这类问题不报错也不崩溃，只能靠人碰巧发现；本仓库在政策文本与代码注释上已多次吃过这个亏。
  *
- * 因此把它写成断言，让 `testDebugUnitTest` 直接变红。
+ * 因此把它写成断言，让两个 flavor 的 `testCoreKotlinDebugUnitTest` / `testCoreRustDebugUnitTest` 直接变红。
  *
  * ## 覆盖范围与边界（别高估它）
  *

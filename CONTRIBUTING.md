@@ -48,19 +48,31 @@ the privacy impact.
 - Android Studio 2026.1 or later (only for GUI development; command-line builds do not need it)
 
 ```bash
-./gradlew :app:assembleDebug      # build
-./gradlew :app:lintDebug          # static analysis
-./gradlew :app:testDebugUnitTest  # unit tests
+./gradlew :app:assembleCoreKotlinDebug        # build (one flavor; see the note below)
+./gradlew :app:lintCoreKotlinDebug :app:lintCoreRustDebug            # static analysis, both flavors
+./gradlew :app:testCoreKotlinDebugUnitTest :app:testCoreRustDebugUnitTest   # unit tests, both flavors
 ```
 
-Building a release (`assembleRelease`) requires `keystore.properties` at the repo root
-(not distributed with the repository); when it is missing, release builds **fail fast** —
-this prevents silently producing a debug-signed artifact that only looks distributable.
+The `app` module has a `core` product-flavor dimension (`coreKotlin` — the shipped pure-Kotlin
+engine; `coreRust` — the same logic behind a JNI bridge, still preview-only). With a flavor
+dimension the unflavoured names are **gone**: `:app:lintDebug` and `:app:testDebugUnitTest` now
+fail as ambiguous task names, so always name the flavor — and run **both**, because checking only
+one lets the other flavor's compile errors, lint findings and tests reach `main` unnoticed (that
+is what CI does).
+
+Building a release (`assembleCoreKotlinRelease`, or `bundleCoreKotlinRelease`) requires
+`keystore.properties` at the repo root (not distributed with the repository); without usable
+credentials release builds **fail fast** — three gates cover "file absent", "key missing or
+empty" and "key still a `<<placeholder>>`". This prevents silently producing a debug-signed
+artifact that only looks distributable. Android Studio's *Generate Signed Bundle / APK* wizard is
+recognised and exempt (it injects its own credentials).
 For local verification of the packaging pipeline only, pass
 `-Ptangsnow.allowDebugSignedRelease` explicitly to skip the gate — the artifact still
 uses the debug certificate and must not be distributed or published.
+Release artifacts are one flavor at a time on purpose: both flavors share the `applicationId` and
+derive the same `versionCode`, so a mixed publication would silently swap the engine under a user.
 
-Make sure all three pass before submitting, and that lint stays at **zero issues**.
+Make sure all of the commands above pass before submitting, and that lint stays at **zero issues**.
 Note that `checkAllWarnings` is enabled (`app/build.gradle.kts`), so **warnings are reported too** —
 please do not silence a whole category of checks to get rid of one warning; if a suppression is
 genuinely warranted, follow the existing style and state the reason for each one.

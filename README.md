@@ -93,12 +93,34 @@ Requirements:
 - Android SDK `platforms;android-37` (API 37, minor level 2)
 
 ```bash
-./gradlew :app:assembleDebug      # build the debug APK
-./gradlew :app:lintDebug          # static analysis
-./gradlew :app:testDebugUnitTest  # unit tests
+./gradlew :app:assembleCoreKotlinDebug        # build one flavor's debug APKs (per ABI)
+./gradlew :app:lintCoreKotlinDebug :app:lintCoreRustDebug            # static analysis, both flavors
+./gradlew :app:testCoreKotlinDebugUnitTest :app:testCoreRustDebugUnitTest   # unit tests, both flavors
 ```
 
-Use `:app:assembleRelease` for a release build. The GeckoView native libraries (`libxul.so` and friends, stored uncompressed) make up roughly 86% of the APK, so builds are split per ABI (`arm64-v8a` / `armeabi-v7a` / `x86_64`) and no universal APK is produced; each split gets a distinct `versionCode`, so you can switch architectures on the same device. Signing credentials are not kept in the repository — they come from a local, untracked `keystore.properties` (without that file, a release build falls back to the debug certificate and prints a warning; such artifacts must not be distributed).
+The app has a `core` product-flavor dimension: `coreKotlin` (the pure-Kotlin engine, what is
+actually shipped) and `coreRust` (the same logic moved behind a JNI bridge, still preview-only).
+Bare `:app:lintDebug` / `:app:testDebugUnitTest` **no longer resolve** once a flavor dimension
+exists — they became ambiguous, so always name the flavor, and run both: checking only one lets
+the other flavor's compile errors, lint findings and tests slip in unseen (CI does exactly this).
+
+Release builds must also name one flavor: `:app:assembleCoreKotlinRelease`. A bare
+`assembleRelease` produces both flavors (six APKs) into `app/release/`, which the pre-release
+gate then rejects as unexpected artifacts — publishing is deliberately one-flavor-at-a-time
+because both flavors share the `applicationId` and derive the same `versionCode`, so a mixed
+publication would silently swap a user's engine on upgrade. The GeckoView native libraries
+(`libxul.so` and friends) make up roughly 86% of the APK, so builds are split per ABI
+(`arm64-v8a` / `armeabi-v7a` / `x86_64`) and no universal APK is produced; each split gets a
+distinct `versionCode`, so you can switch architectures on the same device. Signing credentials
+are not kept in the repository, and **any** release packaging task (`assemble`/`bundle`/`package`/
+`install` + `Release`) fails fast without them — three gates cover the three shapes of "no
+credentials": the file is absent, a key is missing/empty, or a key still holds a `<<placeholder>>`.
+That is deliberate: a task named `assembleRelease` must never silently hand back a debug-signed
+artifact that only *looks* distributable. To build a release locally, either fill in
+`keystore.properties`, use Android Studio's *Build → Generate Signed Bundle / APK* wizard (it
+supplies its own credentials and is recognised as such), or — for checking the packaging pipeline
+only — pass `-Ptangsnow.allowDebugSignedRelease`; that artifact is still debug-signed and still
+must not be distributed or published. A debug build needs none of this.
 
 ## Contributing
 
