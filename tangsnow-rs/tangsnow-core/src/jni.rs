@@ -550,7 +550,14 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_legalPar
     let m = crate::legal_text::parse(&t);
     // 扁平化 [start0, end0, start1, end1, ...]（字符索引闭区间）
     let flat: Vec<jint> = m.bold_ranges.iter().flat_map(|(a, b)| [*a as jint, *b as jint]).collect();
-    match env.new_int_array(flat.len() as i32) {
+    // 长度按 `i32::try_from` 收窄，不用 `as i32`：`as` 在超界时**静默**给出负数或错值，
+    // Kotlin 侧拿到的是长度不对的数组。要触发需要 ≥2^31 个区间端点（本机不可达），
+    // 但不可达不等于可以静默 —— 超长时按「算不出来」返回 null，由调用方回落。
+    let Ok(len) = jni::sys::jsize::try_from(flat.len()) else {
+        jlog("legalParseBoldRanges: 区间数超出 jsize 可表示范围，按加载失败处理");
+        return std::ptr::null_mut();
+    };
+    match env.new_int_array(len) {
         Ok(arr) => {
             let _ = env.set_int_array_region(&arr, 0, &flat);
             arr.into_raw()
