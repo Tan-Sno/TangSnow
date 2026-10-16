@@ -113,8 +113,16 @@ pub fn find<'a>(all: &'a [SearchEngine], id: Option<&str>) -> &'a SearchEngine {
 }
 
 /// 同一引擎「模板主机之外」的其它官方主机（全部小写、可含子域）。
+///
+/// ⚠️ 这张表与 Kotlin `data/SearchEngines.kt` 的 `HOST_ALIASES` 是**两份手抄**，
+/// 由 `app/src/test/.../SearchEngineTableParityTest` 逐条比对（2026-10-16 加）。
+/// 加它的原因是这条漂移已经发生过一次：这里曾漏登记 `"bing"`，而漏一行不报错、不崩，
+/// 只是让国际版引擎在 `www.bing.com` 结果页上静默不回显关键词。
 const HOST_ALIASES: &[(&str, &[&str])] = &[
     ("bing_cn", &["bing.com"]),
+    // 国际版模板主机是 global.bing.com；结果页常落在无区域前缀的 bing.com 上，
+    // 而 "bing.com" 比模板主机短 ⇒ `host_matches` 的子域那一支覆盖不到，必须单独登记。
+    ("bing", &["bing.com"]),
     ("baidu", &["m.baidu.com"]),
     ("sogou", &["m.sogou.com"]),
     ("so360", &["m.so.com"]),

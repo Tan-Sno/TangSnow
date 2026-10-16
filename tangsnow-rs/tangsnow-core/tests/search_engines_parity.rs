@@ -158,3 +158,55 @@ fn 自定义引擎_id_前缀() {
     };
     assert_eq!(custom.search_url("词"), "https://c.example/?s=%E8%AF%8D");
 }
+
+// ------------------------------------------------- 边界占位 id 与别名表（M5，2026-10-15）
+
+#[test]
+fn 别名表按真_id_命中而占位_id_命不中() {
+    // 把 M5 的成因钉在纯函数层：`display_for_url` → `host_matches(host, engine.id, 模板主机)`，
+    // 而 `HOST_ALIASES` 的键是引擎**真 id**。`bing_cn` 的模板主机是 cn.bing.com，
+    // 别名里另有 bing.com —— 桥层写死占位 id 时，用户在 www.bing.com 的结果页上
+    // 「回显关键词」整条失效（别名这一支永远查不到）。
+    let tpl = "https://cn.bing.com/search?q={q}";
+    let url = "https://www.bing.com/search?q=%E6%A3%A0%E9%9B%AA";
+    let real = SearchEngine::new("bing_cn", tpl, Some("q"));
+    let placeholder = SearchEngine::new("jni", tpl, Some("q"));
+    assert_eq!(display_for_url(url, &[real]).as_deref(), Some("棠雪"));
+    assert_eq!(
+        display_for_url(url, &[placeholder]),
+        None,
+        "占位 id 命不中别名表 —— JNI 的 displayForUrlImpl 因此必须由 Kotlin 把 id 传进来"
+    );
+}
+
+#[test]
+fn template_only_与_new_在只读模板的场合完全等价() {
+    // JNI 的 resolveInfo / searchUrlFromTemplate 两处以前也写 `new("jni", …)`，
+    // 现在改用 template_only：这条断言证明换构造没有改动行为（只读 template 的场合）。
+    let tpl = "https://cn.bing.com/search?q={q}";
+    assert_eq!(
+        SearchEngine::template_only(tpl).search_url("a b"),
+        SearchEngine::new("bing_cn", tpl, Some("q")).search_url("a b")
+    );
+    assert!(
+        SearchEngine::template_only(tpl).id.is_empty(),
+        "template_only 不带 id：免得后来人以为这个 id 也能在别名表里查着什么"
+    );
+}
+
+#[test]
+fn 国际版引擎的结果页落在无区域前缀主机上也回显() {
+    // 2026-10-16：Rust 的别名表曾漏登记 "bing" 这一行（由 Kotlin↔Rust 的表比对测试抓到）。
+    // 模板主机是 global.bing.com，而用户实际打开的结果页常是 www.bing.com：
+    // "bing.com" 比模板主机**短** ⇒ `host_matches` 的子域那一支覆盖不到，只能靠别名登记。
+    let e = SearchEngine::new(
+        "bing",
+        "https://global.bing.com/search?q={q}&mkt=en-US&setlang=zh-Hans",
+        Some("q"),
+    );
+    assert_eq!(
+        display_for_url("https://www.bing.com/search?q=%E6%A3%A0%E9%9B%AA", &[e]).as_deref(),
+        Some("棠雪"),
+        "别名行缺了就是静默返回 None —— 不崩、不报错，只是关键词再也不回显",
+    );
+}
