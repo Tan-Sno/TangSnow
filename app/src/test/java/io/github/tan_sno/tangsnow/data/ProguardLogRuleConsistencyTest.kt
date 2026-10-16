@@ -16,7 +16,7 @@ import java.io.File
  * 且「全仓没有任何 Log.v / Log.d 调用点」这句也已不成立（实际有 2 处 Log.d）。
  * 两次都不是崩溃，而是**合规口径失真**：读注释的人会得到错误结论。
  *
- * 故把这条不变式写成断言：改日志调用点却忘同步那段注释，`testDebugUnitTest` 直接红。
+ * 故把这条不变式写成断言：改日志调用点却忘同步那段注释，两个 flavor 的单测任务直接红。
  *
  * ## 判定规则（明确写出来，因为它用了启发式）
  *
@@ -63,10 +63,14 @@ class ProguardLogRuleConsistencyTest {
         return m.groupValues[1].toInt()
     }
 
-    /** 会进入 release 的调用点（见类注释的判定规则），返回 `相对路径:行号` 便于定位。 */
-    private fun releaseCallSites(level: String): List<String> {
-        val sourceRoot = File(repoRoot(), "app/src/main/java")
-        assertTrue("找不到主源码目录：${sourceRoot.absolutePath}", sourceRoot.isDirectory)
+    /** 会进入 release 的调用点（见类注释的判定规则），返回 `相对路径:行号` 便于定位。
+     *  源集可指定：`app/src/coreRust/java` 也要扫 —— 那个 flavor 的包里有三处 JNI 降级留痕，
+     *  而 proguard 的剥离规则对两个 flavor 是同一条。 */
+    private fun releaseCallSites(
+        level: String,
+        sourceRoot: File = File(repoRoot(), "app/src/main/java"),
+    ): List<String> {
+        assertTrue("找不到源码目录：${sourceRoot.absolutePath}", sourceRoot.isDirectory)
         val needle = "Log.$level("
         return sourceRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
@@ -135,6 +139,34 @@ class ProguardLogRuleConsistencyTest {
                     "\n（新增调用点请给它加 BuildConfig.DEBUG 守卫，或同步那段注释里的数字）",
                 declared(declaredText, level),
                 sites.size,
+            )
+        }
+    }
+
+    @Test
+    fun `coreRust flavor 源集的 release 日志与注释里的另计一致`() {
+        val declaredText = proguardText()
+        val m = Regex("""另计（coreRust flavor 专有源集）：w ×(\d+)、e ×(\d+)""").find(declaredText)
+            ?: throw AssertionError(
+                "proguard-rules.pro 里找不到「另计（coreRust flavor 专有源集）：w ×N、e ×N」这句。\n" +
+                    "那句是 **coreRust 包**里日志保留量的唯一书面依据 —— 上面那些 ×5 / ×4 只扫 " +
+                    "app/src/main/java，看不到 flavor 源集。改了措辞就同步改本测试的正则。",
+            )
+        val flavorRoot = File(repoRoot(), "app/src/coreRust/java")
+        if (!flavorRoot.isDirectory) {
+            throw AssertionError(
+                "app/src/coreRust/java 不在了，但 proguard 注释仍写着 coreRust 的另计数字 —— " +
+                    "两者必须一起走：撤掉 flavor 就同步删那句，别留一份没人负责的依据。",
+            )
+        }
+        for ((level, group) in listOf("w" to 1, "e" to 2)) {
+            assertEquals(
+                "coreRust 源集里会进 release 的 Log.$level 数量与 proguard 注释的「另计」不一致。\n" +
+                    "实际调用点：\n" + releaseCallSites(level, flavorRoot).joinToString("\n") { "  $it" } +
+                    "\n（这几处是 JNI 降级留痕，**不能**套 BuildConfig.DEBUG 门 —— 真机「.so 环境异常」" +
+                    "就再无现场证据了；要改数量请连同那段注释一起改）",
+                m.groupValues[group].toInt(),
+                releaseCallSites(level, flavorRoot).size,
             )
         }
     }

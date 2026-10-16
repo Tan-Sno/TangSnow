@@ -35,8 +35,15 @@
 #    Log.v 全仓 0 处。
 #  · 全仓 Log.w 调用点共 9 处 —— 上面会进 release 的 5 处之外，ExtensionCatalog、
 #    ExtensionsActivity 与 DownloadRepo 的 4 处都在 BuildConfig.DEBUG 门内，release 不存在。
+#  · 另计（coreRust flavor 专有源集）：w ×0、e ×3 —— 上面那 ×5 / ×4 只扫 `app/src/main/java`，
+#    而 `2026-10-15` 起 `app` 有了 `core` flavor：coreRust 源集另带三处 Log.e
+#    （CoreNative 的「JNI 返回 null 已兜底」+「JNI 抛 Throwable」、CoreBridge 的「Rust 边界
+#    JSON 不合形状」），都**必须**留在 release —— 那是真机「.so 环境异常」唯一的现场证据
+#    （fix3.3 那次全靠这条链定位）。⇒ **发 coreRust 包时 release 实际保留 e ×7（4+3）**；
+#    发 coreKotlin（当前发布通道）仍是 e ×4，本段前两句对它仍然字字成立。
+#    消息内容同样只含写死的操作名与异常对象，不含 URL / 搜索词。
 #  · 以上数字由 ProguardLogRuleConsistencyTest 钉住：改了日志调用点却忘同步本段，
-#    testDebugUnitTest 会直接红。
+#    两个 flavor 的单测任务（testCoreKotlinDebugUnitTest / testCoreRustDebugUnitTest）会直接红。
 #  · **约定**：网络类异常的 message（常带完整下载 URL）不得进 w/e —— 网络失败
 #    统一走「分类 → 人话」的路径（见 ExtensionsActivity.describeInstallError），
 #    原始异常只在 debug 构建落日志。
