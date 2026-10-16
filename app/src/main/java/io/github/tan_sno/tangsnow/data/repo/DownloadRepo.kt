@@ -497,9 +497,14 @@ object DownloadRepo {
             try {
                 val safeName = sanitizeFileName(fileName)
                 val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                // 通知栏描述**不放完整 URL**：下载地址常带签名 / token / 会话参数这类查询串，
+                // 而通知内容会进系统设置的通知历史、bugreport，用户长按还能原样复制转发。
+                // 留主机名——与崩溃日志「只到域名、不含完整网址」是同一条对外口径，
+                // 用户照样能核对「这文件是不是我说的那家」。取不到主机时回落到文件名。
+                val notifyHost = runCatching { android.net.Uri.parse(url).host }.getOrNull() ?: safeName
                 val req = DownloadManager.Request(android.net.Uri.parse(url))
                     .setTitle(safeName)
-                    .setDescription(url)
+                    .setDescription(notifyHost)
                     .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                     // 落公共「下载」目录：用户在系统文件管理里可见；同名文件由系统
                     // 自动追加序号（不会覆盖旧文件）。无需任何存储权限。
