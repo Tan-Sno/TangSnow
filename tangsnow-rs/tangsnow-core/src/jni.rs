@@ -161,7 +161,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_toAsciiU
     }
 }
 
-/// 地址栏解析：返回 `[url, isSearch]`（引擎只取 template；labelRes/label 不参与判定）。
+/// 地址栏解析：返回 `[url, isSearch]`（引擎只取 template；labelRes/label 与 id 都不参与判定）。
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_resolveInfoImpl(
     mut env: JNIEnv,
@@ -174,7 +174,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_resolveI
         jlog(&format!("resolveInfo: args failed, pending_ex={p}"));
         return std::ptr::null_mut();
     };
-    let engine = SearchEngine::new("jni", &template, None);
+    let engine = SearchEngine::template_only(&template);
     let Some(r) = url_utils::resolve_info(&input, &engine) else {
         jlog("resolveInfo: resolve_info returned None");
         return std::ptr::null_mut();
@@ -234,7 +234,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_searchUr
     let (Some(t), Some(q)) = (opt_str(&mut env, &template), opt_str(&mut env, &query)) else {
         return std::ptr::null_mut();
     };
-    let engine = SearchEngine::new("jni", &t, None);
+    let engine = SearchEngine::template_only(&t);
     ret_string(&mut env, engine.search_url(&q))
 }
 
@@ -275,12 +275,20 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_displayF
     url: JString,
     template: JString,
     query_param: JString,
+    engine_id: JString,
 ) -> jstring {
     let (Some(u), Some(t)) = (opt_str(&mut env, &url), opt_str(&mut env, &template)) else {
         return std::ptr::null_mut();
     };
     let qp = opt_str(&mut env, &query_param);
-    let engine = SearchEngine::new("jni", &t, qp.as_deref());
+    // 引擎 id 由 Kotlin 传进来：`HOST_ALIASES` 以**真 id** 为键，本层无权也不该自造。
+    // 此前写死 `"jni"` ⇒ 别名表永不命中，`bing.com` / `sm.cn` 这类「模板主机之外」的
+    // 官方结果页上「搜完回显关键词」整条失效（2026-10-15 外部审查 M5）。
+    // 空/缺失时退到 `custom_` 前缀：查不到别名 = **不配别名**，与 Kotlin 对自定义引擎的口径一致。
+    let id = opt_str(&mut env, &engine_id)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| search_engines::CUSTOM_ID_PREFIX.to_string());
+    let engine = SearchEngine::new(&id, &t, qp.as_deref());
     ret_str(&mut env, search_engines::display_for_url(&u, &[engine]))
 }
 

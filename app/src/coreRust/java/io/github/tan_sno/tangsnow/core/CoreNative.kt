@@ -153,10 +153,16 @@ object CoreNative {
     /**
      * 搜索结果页关键词回显（单引擎口径）。
      * @param template 引擎模板；@param queryParam 结果页关键词参数名（可为 null）
+     * @param engineId 引擎 id（`SearchEngine.id`）——**必须由调用方给**：Rust 侧的别名表
+     * `HOST_ALIASES` 以真 id 为键，桥层写死占位 id 会让 `bing.com` / `sm.cn` 这类
+     * 「模板主机之外」的官方结果页恒不命中（2026-10-15 外部审查 M5）。自定义引擎照常传它的
+     * `custom_*` id —— Kotlin 侧同样不给它配别名，口径一致。
      * @return 关键词；非该引擎结果页返回 null
      */
-    fun displayForUrl(url: String, template: String, queryParam: String?): String? =
-        guard("displayForUrl", null) { displayForUrlImpl(url, template, queryParam) }
+    fun displayForUrl(url: String, template: String, queryParam: String?, engineId: String): String? =
+        guard("displayForUrl", null, nullIsResult = true) {
+            displayForUrlImpl(url, template, queryParam, engineId)
+        }
 
     // ---------------------------------------------------------------- 书签
 
@@ -275,13 +281,19 @@ object CoreNative {
         day: Int,
         hour: Int,
         minute: Int,
-    ): String? = guard("dtFormatChosen", null) {
+    ): String? = guard("dtFormatChosen", null, nullIsResult = true) {
         dtFormatChosenImpl(kind, withSeconds, year, month, day, hour, minute)
     }
 
     // ================================================================
     // 以下为 native 实现（JNI 符号 = CoreNative_xxxImpl，Rust 侧已同步）。
     // 全部 private —— 调用方只能走上面的防护网包装。
+    //
+    // ⚠️ 签名与随包 `.so` 的关系：`displayForUrlImpl` 在 2026-10-15 多了 `engineId` 形参
+    // （M5），同批还有 Rust 侧的 CESU-8 解码修正（H3）。三颗 `.so` 是在那台 Linux 环境
+    // 交叉编译的，本机没有 android target ⇒ **重建之前**这两个符号在真机上分别表现为
+    // UnsatisfiedLinkError / 旧编码行为，都由 [guard] 兜住（关键词回显降级为 null）。
+    // 与 Kotlin 声明的一致性由 `BridgeSignatureParityTest` 钉，不靠人回忆。
     // ================================================================
 
     private external fun resolveInfoImpl(input: String, template: String): Array<String>?
@@ -294,7 +306,7 @@ object CoreNative {
     private external fun isPortableUrlImpl(url: String?): Boolean
     private external fun searchUrlFromTemplateImpl(template: String, query: String): String
     private external fun percentEncodeImpl(value: String): String
-    private external fun displayForUrlImpl(url: String, template: String, queryParam: String?): String?
+    private external fun displayForUrlImpl(url: String, template: String, queryParam: String?, engineId: String): String?
     private external fun bookmarkParseImpl(html: String, nowMs: Long): String?
     private external fun bookmarkSanitizeImpl(rawJson: String, existingJson: String): String?
     private external fun bookmarkExportImpl(bookmarksJson: String): String?

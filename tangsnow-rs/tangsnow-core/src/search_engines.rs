@@ -37,6 +37,22 @@ impl SearchEngine {
         }
     }
 
+    /// 只给模板、**id 不参与任何判定**的构造（`search_url` 只看 `template`）。
+    ///
+    /// 为什么要有这个名字：JNI 桥里原先到处写 `SearchEngine::new("jni", …)`，看上去像在
+    /// 拿 id 查什么表 —— 而 `HOST_ALIASES` 真的是按 id 查的，`displayForUrl` 就这样踩了坑
+    /// （别名表永不命中，2026-10-15 外部审查 M5）。用这个构造的场合必须是**根本不读 id**的场合，
+    /// 读代码的人一眼能看出来，编译器也不会让「后来这里开始读 id」悄悄发生。
+    pub fn template_only(template: &str) -> Self {
+        SearchEngine {
+            id: String::new(),
+            template: template.to_string(),
+            label: String::new(),
+            query_param: None,
+            is_custom: false,
+        }
+    }
+
     /// 生成搜索 URL（与 Kotlin `SearchEngine.searchUrl` 逐字节一致）。
     pub fn search_url(&self, query: &str) -> String {
         Self::build_search_url(&self.template, query)
