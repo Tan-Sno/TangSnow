@@ -50,6 +50,7 @@ import hashlib
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import zipfile
@@ -460,53 +461,117 @@ def check_apk_gecko_build(root, apks):
     return True, "%s（共 %d 份 libxul.so，均为声明版本）" % (declared, total)
 
 
-def check_exported_components(aapt2, env, apks):
+def native_libs_not_deflated(apks):
+    """⑩ 的第一道断言：包内 `lib/*.so` 必须是 deflate。返回不符的条目清单（空 = 通过）。
+
+    为什么值得抽成函数：这段判断坏掉的表现同样是**静默放行**而不是报错，而它管的是
+    「装得上装不上」——`useLegacyPackaging = true` 一被删掉，stored 条目就会让 16K 对齐的
+    padding 落进 local header，安装器 libziparchive 拒收（`res=-113`），而 ①–⑨ 全绿。
+    抽出来之后 `--selftest` 能用一个假包把它双向自证（2026-10-15）。
+
+    读的是中央目录里的 `compress_type`（不是自己解析 local header）⇒ 与 Java/aapt2 同源。
+    """
+    bad = []
+    for apk in apks:
+        with zipfile.ZipFile(apk) as z:
+            bad += [
+                "%s：%s" % (os.path.basename(apk), i.filename)
+                for i in z.infolist()
+                if i.filename.startswith("lib/") and i.filename.endswith(".so")
+                and i.compress_type != zipfile.ZIP_DEFLATED
+            ]
+    return bad
+
+
+def check_exported_components(aapt2, env, apks, dump=None):
     """⑨ 清单里 `exported=true` 的组件集合（含 `android:permission`）是否等于 [EXPECTED_EXPORTED]。
 
     为什么单列一项：第 4 项只比权限集合，**看不见组件导出面**；而"多出一个能被别的应用调用的
     provider/activity"往往来自依赖升级，且不会有任何编译或测试信号。把 `android:permission`
     一起比也有意为之：不然"有人悄悄把收口去掉"不会红。
 
-    只看第一个分包即可：ABI 分包共用同一份清单（差异只在 `lib/`）。返回 (ok, 说明)。
+    **遍历所有分包**（2026-10-15 修 M6）。原先只查 `apks[0]`，依据是「ABI 分包共用同一份清单
+    （差异只在 `lib/`）」—— 这句**今天**成立，但它是一句关于构建配置的断言，不是一个保证：
+    flavor 维度进来之后，清单差异完全可能只落在某个分包上（不同 flavor 的 manifest 合并、
+    某个分包带了额外的依赖组件），那时这道门就只对三分之一产物有效，而它自己不会说。
+    现在三份都验、并且**先互相比对**：分包之间不一致时报「同一份清单的假设已不成立」，
+    比甩一句「与基准不符」更能指到根因。代价是多两次 `aapt2 dump`（本地、毫秒级）。
+
+    @param dump 「apk → `aapt2 dump xmltree` 的 stdout」注入点，**只给 `--selftest` 用**：
+        本项的判定逻辑（三份互比、与基准比、形状不符要红）不需要真 APK 就能自证，
+        而"能不能从真清单里解出这些行"仍然只有产物能证明。生产路径不传，走真 aapt2。
     """
-    apk = apks[0]
-    r = run([aapt2, "dump", "xmltree", apk, "--file", "AndroidManifest.xml"], env=env)
-    if r.returncode != 0:
-        return False, "aapt2 dump xmltree 失败"
-    rows, kind, name, exported, permission = [], None, None, None, None
 
-    def flush():
-        if kind and name and exported == "true":
-            rows.append((kind, name, permission))
+    def parse(apk):
+        """把一个分包的清单解析成 {(kind, name, permission)}；返回 (集合, 错误说明)。"""
+        if dump is None:
+            r = run([aapt2, "dump", "xmltree", apk, "--file", "AndroidManifest.xml"], env=env)
+            if r.returncode != 0:
+                return None, "aapt2 dump xmltree 失败"
+            text = r.stdout
+        else:
+            text = dump(apk)
+            if text is None:
+                return None, "aapt2 dump xmltree 失败"
+        rows, kind, name, exported, permission = [], None, None, None, None
 
-    for ln in r.stdout.splitlines():
-        t = ln.strip()
-        m = re.match(r"^E: (activity|activity-alias|provider|service|receiver)\b", t)
-        if m:
-            flush()
-            kind, name, exported, permission = m.group(1), None, None, None
-            continue
-        m = re.search(r'android:name\(0x[0-9a-f]+\)="([^"]+)"', t)
-        if m and name is None:
-            name = m.group(1)
-            continue
-        m = re.search(r"android:exported\(0x[0-9a-f]+\)=(\w+)", t)
-        if m:
-            exported = m.group(1).lower()
-            continue
-        m = re.search(r'android:permission\(0x[0-9a-f]+\)="([^"]+)"', t)
-        if m and permission is None:
-            permission = m.group(1)
-    flush()
+        def flush():
+            if kind and name and exported == "true":
+                rows.append((kind, name, permission))
 
-    got = set(rows)
+        for ln in text.splitlines():
+            t = ln.strip()
+            m = re.match(r"^E: (activity|activity-alias|provider|service|receiver)\b", t)
+            if m:
+                flush()
+                kind, name, exported, permission = m.group(1), None, None, None
+                continue
+            m = re.search(r'android:name\(0x[0-9a-f]+\)="([^"]+)"', t)
+            if m and name is None:
+                name = m.group(1)
+                continue
+            m = re.search(r"android:exported\(0x[0-9a-f]+\)=(\w+)", t)
+            if m:
+                exported = m.group(1).lower()
+                continue
+            m = re.search(r'android:permission\(0x[0-9a-f]+\)="([^"]+)"', t)
+            if m and permission is None:
+                permission = m.group(1)
+        flush()
+        # 一个导出组件都没解析出来 = 形状不符（清单结构或 aapt2 输出格式变了），不是「恰好没有」
+        if not rows:
+            return None, ("没解析出任何 exported=true 的组件 —— 解析形状已飘，"
+                          "此时返回空集等于静默放行")
+        return set(rows), None
 
     def show(items):
         return "；".join("%s %s%s" % (k, n, "" if p is None else "（权限 " + p + "）")
                          for k, n, p in items)
 
+    got_by_apk = []
+    for apk in apks:
+        got, err = parse(apk)
+        if err:
+            return False, "%s：%s" % (os.path.basename(apk), err)
+        got_by_apk.append((os.path.basename(apk), got))
+
+    base_name, base = got_by_apk[0]
+    for name, got in got_by_apk[1:]:
+        if got != base:
+            only_here = sorted(got - base)
+            only_there = sorted(base - got)
+            bits = []
+            if only_here:
+                bits.append("只在 %s 有：%s" % (name, show(only_here)))
+            if only_there:
+                bits.append("只在 %s 有：%s" % (base_name, show(only_there)))
+            return False, ("%s 与 %s 的导出组件不一致 —— 「ABI 分包共用同一份清单」这个假设"
+                           "已经不再成立：%s" % (base_name, name, " ｜ ".join(bits)))
+
+    got = base
     if got == EXPECTED_EXPORTED:
-        return True, "%d 个导出组件（含权限保护）与基准一致" % len(got)
+        return True, ("%d 个导出组件（含权限保护）在 %d 个分包里完全一致，且与基准一致"
+                      % (len(got), len(got_by_apk)))
     parts = []
     extra = sorted(got - EXPECTED_EXPORTED)
     missing = sorted(EXPECTED_EXPORTED - got)
@@ -514,7 +579,7 @@ def check_exported_components(aapt2, env, apks):
         parts.append("多出：" + show(extra))
     if missing:
         parts.append("少了：" + show(missing))
-    return False, "导出组件与基准不符（" + " ｜ ".join(parts) + "）"
+    return False, "导出组件与基准不符（%s，%d 个分包同此结论）："% (base_name, len(got_by_apk)) + " ｜ ".join(parts)
 
 
 def sha256_of(path):
@@ -541,13 +606,24 @@ def selftest():
 
     ## 覆盖什么、为什么不覆盖什么
 
-    ✅ 覆盖：**不依赖 APK / SDK / 网络**的那部分判定 —— 这里选 [check_git_clean]（工作区是否干净），
-       因为它是全脚本第一道、也是"产物能否对应到提交"的前提。它同时验**两个方向**：
-       干净 ⇒ 不拦；有一处未提交 ⇒ **必须拦**。只有双向都过，才说明它既不放过脏工作区、
-       也不是"永远失败"。
-    ❌ 不覆盖：第 ⑦⑧⑨⑩ 项（依赖 APK、Gradle 缓存与 build-tools）。要自证它们得先造出一个"内核构建号不符"
-       或"多了一个导出组件"、"`.so` 改成 stored"的 APK —— 那要么二进制改包、要么先有一份可签名的产物，成本与
-       风险都远大于收益。**这一段是已知缺口，写在这里是为了别假装它是全覆盖的。**
+    ✅ 覆盖（2026-10-15 起，**四项都是"该放的放 + 该拦的拦"双向**）：
+       ① [check_git_clean]：干净 ⇒ 不拦；有一处未提交 / 有未跟踪文件 ⇒ **必须拦**。
+       ② 第 ⑦ 项（依赖完整性）：用**假 Gradle home + 假 `.module`** 跑「一致 ⇒ 放行且真的核对上了 /
+          构件被改动 ⇒ 拦并说清是散列不一致 / 一项都没能校验 ⇒ 拦（ok=0 那条收紧）」。`verify_deps.py`
+          本来就接受 `--cache`，仓库根由 CWD 向上找 `settings.gradle.kts` ⇒ 全程不联网。
+       ③ 第 ⑧ 项（包内实物内核）：用**假 APK**（单个 `lib/*/libxul.so` 条目）跑「两串都对上 ⇒ 放行 /
+          旧内核 ⇒ 拦 / 只对上构建号而 `rv:` 不符 ⇒ 拦 / 没有 libxul.so ⇒ 拦」。
+       ④ 第 ⑨ 项（导出组件面）：用**假清单**跑「三份一致放行 / 只有一个分包多导出 ⇒ 拦 /
+          解不出组件 ⇒ 拦 / 与基准不符 ⇒ 拦」四档（随 M6 一起加）。
+       ⑤ 第 ⑩ 项（原生库形态）：`native_libs_not_deflated` 抽成了函数 ⇒ 能跑「deflate + 小 padding ⇒ 放行 /
+          stored ⇒ 列出 / 14000B 的 local extra ⇒ `check_zip_padding.py` 拦」。
+
+       只有"该放的放、该拦的拦"双向都过，才说明这道门既不放过问题、也不是"永远失败"。
+
+    ❌ 不覆盖（**边界要说准**）：上面自证的是**判定逻辑**——给定这个形状就能得出这个结论。
+       它**不**等于"真 APK / 真 Gradle 缓存 / 真 aapt2 输出一定能读对"：真产物还要 aapt2 与 build-tools
+       （SDK 相关）、真 zip 的对齐与签名块、真 `.module` 的完整字段。那一段仍是已知缺口，
+       写在这里是为了别假装它是全覆盖的 —— 发版前那一次**真包全流程跑通**不可用本自检替代。
 
     用法：`python tools/verify_release.py --selftest`（不需要任何 APK）。
     """
@@ -618,6 +694,263 @@ def selftest():
             case("干净工作区不拦（正向）", clean_passes)
             case("已修改未提交会拦（反向·必须红）", dirty_blocks)
             case("未跟踪文件也会拦（反向）", untracked_blocks)
+
+            # ---- 第 ⑨ 项（导出组件面）的判定逻辑：用**假清单**自证
+            # 2026-10-15 随 M6（改成遍历所有分包）一起加。判的是「三份互比 + 与基准比 +
+            # 形状不符必须红」，这一段本来就不需要真 APK —— 需要产物的只是「能不能从真清单里
+            # 解出这些行」，那仍然留在缺口里（见函数注释与下面的收尾提示）。
+            three = ["app-arm64-v8a-release.apk", "app-armeabi-v7a-release.apk",
+                     "app-x86_64-release.apk"]
+
+            def xmltree(rows):
+                """造 `aapt2 dump xmltree` 的文本形状（每个组件：E: <kind> + name/exported/permission）。"""
+                out = ["E: manifest (Raw: \"manifest\")", "  E: application (Raw: \"application\")"]
+                for kind, name, perm in rows:
+                    out.append("  E: %s (Raw: \"%s\")" % (kind, kind))
+                    out.append("    A: android:name(0x01010003)=\"%s\" (Raw: \"%s\")" % (name, name))
+                    out.append("    A: android:exported(0x01010004)=true (Raw: \"true\")")
+                    if perm:
+                        out.append("    A: android:permission(0x01010006)=\"%s\" (Raw: \"%s\")" % (perm, perm))
+                return "\n".join(out)
+
+            base_rows = sorted(EXPECTED_EXPORTED)
+
+            def check_nine(dumps, want_ok, want_in=""):
+                got_ok, got_detail = check_exported_components(
+                    "(stub, 未调用)", {}, three, dump=lambda apk: dumps[apk])
+                if got_ok != want_ok:
+                    raise AssertionError("期望%s，实际判成%s：%s" % (
+                        "放行" if want_ok else "拦截", "放行" if got_ok else "拦截", got_detail))
+                if want_in and want_in not in got_detail:
+                    raise AssertionError("结论里应当出现「%s」，实际：%s" % (want_in, got_detail))
+
+            def nine_all_equal_passes():
+                check_nine({a: xmltree(base_rows) for a in three}, True)
+
+            def nine_one_abi_diverges_blocks():
+                # M6 的靶心：只看 apks[0] 时，另外两个分包多导出一个组件**根本看不见**。
+                dumps = {a: xmltree(base_rows) for a in three}
+                dumps[three[1]] = xmltree(base_rows + [("provider", "com.example.LeakedProvider", None)])
+                check_nine(dumps, False, "不一致")
+
+            def nine_shape_drift_blocks():
+                # 一个组件都没解出来 = 清单结构或 aapt2 输出格式变了。返回空集就是静默放行，
+                # 所以这里必须红（本项与第 4 项的权限集合不同，它看不见"多了谁"）。
+                dumps = {a: xmltree(base_rows) for a in three}
+                dumps[three[2]] = "E: manifest (Raw: \"manifest\")\n"
+                check_nine(dumps, False, "形状")
+
+            def nine_baseline_mismatch_blocks():
+                # 三份一致但仍与基准不符（少一个）—— 方向别搞反：基准是**期望集合**，不是"第一个分包"。
+                check_nine({a: xmltree(base_rows[:-1]) for a in three}, False, "少了")
+
+            case("⑨ 三个分包一致且等于基准 ⇒ 放行（正向）", nine_all_equal_passes)
+            case("⑨ 只有一个分包多导出组件 ⇒ 必须拦（M6 的靶心）", nine_one_abi_diverges_blocks)
+            case("⑨ 解不出任何导出组件 ⇒ 必须拦，不能当空集放行", nine_shape_drift_blocks)
+            case("⑨ 三份一致但少了基准组件 ⇒ 必须拦", nine_baseline_mismatch_blocks)
+
+            # ====================================================================
+            # ⑦⑧⑩：2026-10-15 起也用**离线夹具**自证（原先这三项写在"已知未覆盖"里）。
+            # 共同做法：不碰真 APK / 真 Gradle 缓存 / 真网络，只在临时目录里造出判定函数
+            # 需要读的那些字节，然后要求「该放行的放行、该拦的拦」两个方向都过。
+            # 诚实的边界：自证的是**判定逻辑**，不是「真产物一定能读对」——后者仍然只有
+            # 一次真 APK 跑通才算数（见本函数末尾的收尾提示）。
+            # ====================================================================
+            tools_dir = os.path.dirname(os.path.abspath(__file__))
+
+            def run_tool(script, args_, cwd, cache=None):
+                """跑 tools/ 下的兄弟脚本；统一按 UTF-8 解码（脚本自己会把输出重配成 UTF-8，
+                而 Windows 的 locale 是 cp936 —— 用默认编码会把中文解崩，把"编码问题"误报成"判定失败"）。"""
+                return subprocess.run(
+                    [sys.executable, os.path.join(tools_dir, script)] + list(args_),
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd,
+                )
+
+            def out_tail(r):
+                return "\n".join(((r.stdout or "") + "\n[stderr]\n" + (r.stderr or "")).strip().splitlines()[-10:])
+
+            def fake_apk(path, body=b"kernel", deflate=True, local_extra=b""):
+                """造一个**只含一个** `lib/arm64-v8a/libxul.so` 条目的最小 zip，可注入 local extra。
+
+                为什么刻意只放一个条目：往 local header 与数据之间插 extra 字节，会把后面所有
+                条目的数据整体后移，而中央目录里记的 `header_offset` 不会跟着变 ⇒ 多条目时造出来
+                的是**坏包**，测的就不是判据而是夹具了。单条目时该偏移恒为 0、不受影响。
+
+                ⚠️ 插完还必须**同步 EOCD 里的「中央目录起始偏移」**（它也跟着后移了）。这条不是
+                讲究出来的：本函数第一版就是漏了它，`zipfile` 于是从错位置读中央目录、把
+                `header_offset` 读成 100，padding 检查报的是「local header 签名异常」而不是
+                「padding 超阈」—— 用例的红/绿**看着符合预期，却都不是判据给的**。所以造完立刻
+                自检两件事：包仍能打开、条目内容读回来等于原字节。
+                """
+                with zipfile.ZipFile(path, "w") as z:
+                    z.writestr(
+                        "lib/arm64-v8a/libxul.so", body,
+                        compress_type=zipfile.ZIP_DEFLATED if deflate else zipfile.ZIP_STORED,
+                    )
+                if local_extra:
+                    with open(path, "rb") as f:
+                        raw = bytearray(f.read())
+                    if raw[:4] != b"PK\x03\x04":
+                        raise AssertionError("假包的 local header 签名不对 —— 夹具本身坏了")
+                    fnlen = struct.unpack("<H", raw[26:28])[0]
+                    extralen = struct.unpack("<H", raw[28:30])[0]
+                    data_at = 30 + fnlen + extralen
+                    raw[28:30] = struct.pack("<H", extralen + len(local_extra))
+                    raw[data_at:data_at] = bytearray(local_extra)
+                    eocd = raw.rfind(b"PK\x05\x06")
+                    if eocd < 0:
+                        raise AssertionError("假包没有 EOCD 记录 —— 夹具本身坏了")
+                    cd_at = struct.unpack("<I", raw[eocd + 16:eocd + 20])[0]
+                    raw[eocd + 16:eocd + 20] = struct.pack("<I", cd_at + len(local_extra))
+                    with open(path, "wb") as f:
+                        f.write(bytes(raw))
+                # 夹具自检：插完字节之后必须仍是一个读得懂、内容不变的 zip
+                with zipfile.ZipFile(path) as z:
+                    names = z.namelist()
+                    if names != ["lib/arm64-v8a/libxul.so"] or z.read(names[0]) != body:
+                        raise AssertionError("假包自检失败（条目或内容与预期不符）：%s" % names)
+                return path
+
+            # ---- ⑧ 包内实物内核 ────────────────────────────────────────────
+            # 用一个**不可能与真实内核撞上**的号：major=999、构建号=20990101000000。
+            nine_nine = "999.0.20990101000000"
+            fx_root = os.path.join(tmp, "fx-root")
+            os.makedirs(os.path.join(fx_root, "gradle"), exist_ok=True)
+            with open(os.path.join(fx_root, "gradle", "libs.versions.toml"), "w", encoding="utf-8") as f:
+                f.write('[versions]\ngeckoView = "%s"\n' % nine_nine)
+            apk_dir = os.path.join(tmp, "fx-apks")
+            os.makedirs(apk_dir, exist_ok=True)
+            # 判据要同时看到**构建号**与 **`rv:<major>`** 两个串（内核里两者都有），
+            # 缺一个就会被判"不符" —— 所以正夹具两个都写上（本轮第一版漏了 rv:999，
+            # 于是"正向"用例当场红：这条红是夹具的错，不是判据的错，正好说明用例是真的在跑判据）。
+            body_ok = ("Mozilla Firefox %s\nbuildid %s\nrv:%s\n"
+                       % (nine_nine, nine_nine.split(".")[-1], nine_nine.split(".")[0])).encode()
+            # 一个"过期内核"的形状：读得到字符串，但既不是声明的构建号也不是 rv:999
+            body_stale = b"Mozilla Firefox 155.0\nbuildid 20250101000000\nrv:155\n"
+
+            def eight_matching_kernel_passes():
+                p = fake_apk(os.path.join(apk_dir, "ok.apk"), body_ok)
+                ok, detail = check_apk_gecko_build(fx_root, [p])
+                if not ok:
+                    raise AssertionError("声明与包内一致却被判不符（判定逻辑坏了会往「误报」方向骗人）：%s" % detail)
+
+            def eight_stale_kernel_blocks():
+                p = fake_apk(os.path.join(apk_dir, "stale.apk"), body_stale)
+                ok, detail = check_apk_gecko_build(fx_root, [p])
+                if ok:
+                    raise AssertionError("包里是 155 的内核、声明是 999，⑧ 却放行 —— 这条门的全部意义没了")
+                if "不符" not in detail:
+                    raise AssertionError("拦下了但没指到根因（结论里应有「不符」）：%s" % detail)
+
+            def eight_missing_libxul_blocks():
+                p = os.path.join(apk_dir, "nolib.apk")
+                with zipfile.ZipFile(p, "w") as z:
+                    z.writestr("lib/arm64-v8a/libother.so", b"x", compress_type=zipfile.ZIP_DEFLATED)
+                ok, detail = check_apk_gecko_build(fx_root, [p])
+                if ok or "没有 lib" not in detail:
+                    raise AssertionError("包里没有 lib/*/libxul.so 时必须红并说清（否则空包也能过关）：%s" % detail)
+
+            def eight_only_one_marker_blocks():
+                # 判据要**两个串都在**（构建号 + `rv:<major>`）才算对上。只对上构建号的那一档
+                # 正是"半新半旧"的形状（例如换了 AAR 但缓存里还留着旧 selfreport），
+                # 若哪天有人把 `and` 写成 `or`，这条就是唯一会红的地方。
+                body = ("Mozilla Firefox 999.0\nbuildid %s\nrv:155\n"
+                        % nine_nine.split(".")[-1]).encode()
+                p = fake_apk(os.path.join(apk_dir, "half.apk"), body)
+                ok, detail = check_apk_gecko_build(fx_root, [p])
+                if ok:
+                    raise AssertionError("只对上构建号、`rv:` 仍是 155，⑧ 却放行 ⇒ and/or 写错了")
+                if "不符" not in detail:
+                    raise AssertionError("拦下了但没指到根因：%s" % detail)
+
+            case("⑧ 包内构建号与声明一致 ⇒ 放行（正向）", eight_matching_kernel_passes)
+            case("⑧ 包里是过期内核 ⇒ 必须拦（⑧ 的本职）", eight_stale_kernel_blocks)
+            case("⑧ 只对上构建号、`rv:` 不符 ⇒ 必须拦（and 不是 or）", eight_only_one_marker_blocks)
+            case("⑧ 包里根本没有 libxul.so ⇒ 必须拦", eight_missing_libxul_blocks)
+
+            # ---- ⑦ 依赖完整性 ─────────────────────────────────────────────
+            # verify_deps.py 自带 --cache，且仓库根由 CWD 向上找 settings.gradle.kts 决定
+            # ⇒ 一个假 Gradle home + 一份假 .module 就能完整自证，全程不联网。
+            dep_root = os.path.join(tmp, "dep-root")
+            os.makedirs(os.path.join(dep_root, "gradle"), exist_ok=True)
+            open(os.path.join(dep_root, "settings.gradle.kts"), "w").close()
+            with open(os.path.join(dep_root, "gradle", "libs.versions.toml"), "w", encoding="utf-8") as f:
+                f.write('[versions]\nzxingCore = "0.0.1-selftest"\n')
+            pkg_dir = os.path.join(tmp, "dep-cache", "caches", "modules-2",
+                                   "files-2.1", "com.google.zxing", "core", "0.0.1-selftest", "abc")
+            os.makedirs(pkg_dir, exist_ok=True)
+            jar_path = os.path.join(pkg_dir, "core-0.0.1-selftest.jar")
+            module_path = os.path.join(pkg_dir, "core-0.0.1-selftest.module")
+
+            def write_artifact(on_disk, published_from):
+                """写构件字节 + 一份 .module（公布散列按 `published_from` 算）。
+                两者给不同字节，就是「下载之后构件被改动」的形状。"""
+                with open(jar_path, "wb") as f:
+                    f.write(on_disk)
+                sha512 = hashlib.sha512(published_from).hexdigest()
+                with open(module_path, "w", encoding="utf-8") as f:
+                    f.write('{"formatVersion":"1.1","variants":[{"files":['
+                            '{"name":"core-0.0.1-selftest.jar","sha512":"%s"}]}]}' % sha512)
+
+            def seven_consistent_passes():
+                write_artifact(b"selftest artifact bytes", b"selftest artifact bytes")
+                r = run_tool("verify_deps.py", ["--cache", os.path.join(tmp, "dep-cache")], dep_root)
+                if r.returncode != 0:
+                    raise AssertionError("构件与公布散列一致却被拦：\n%s" % out_tail(r))
+                if "一致 1 项" not in (r.stdout or ""):
+                    raise AssertionError("放行是真放行了，但**一项都没核对**（应打「一致 1 项」）：\n%s" % out_tail(r))
+
+            def seven_tampered_artifact_blocks():
+                write_artifact(b"selftest artifact bytes TAMPERED", b"selftest artifact bytes")
+                r = run_tool("verify_deps.py", ["--cache", os.path.join(tmp, "dep-cache")], dep_root)
+                if r.returncode == 0:
+                    raise AssertionError("下载后构件被改动，⑦ 却放行 —— 供应链闸门形同虚设")
+                if "不一致" not in (r.stdout or ""):
+                    raise AssertionError("拦下了但没说清是散列不一致（会被人当成脚本崩）：\n%s" % out_tail(r))
+
+            def seven_nothing_verifiable_blocks():
+                write_artifact(b"selftest artifact bytes", b"selftest artifact bytes")
+                empty = os.path.join(tmp, "dep-cache-empty")
+                os.makedirs(empty, exist_ok=True)
+                r = run_tool("verify_deps.py", ["--cache", empty], dep_root)
+                if r.returncode == 0:
+                    raise AssertionError("缓存里一个构件都没有，⑦ 却返回 0 —— "
+                                         "「ok=0 也拦」那条收紧（2026-10-01）失效了")
+
+            case("⑦ 构件与公布散列一致 ⇒ 放行，且确实核对上了（正向）", seven_consistent_passes)
+            case("⑦ 构件被改动过 ⇒ 必须拦并说清是散列不一致", seven_tampered_artifact_blocks)
+            case("⑦ 一项都没能校验 ⇒ 必须拦，不能亮绿灯", seven_nothing_verifiable_blocks)
+
+            # ---- ⑩ 原生库形态 ─────────────────────────────────────────────
+            def ten_deflate_and_small_padding_passes():
+                p = fake_apk(os.path.join(apk_dir, "good.apk"), body_ok, local_extra=b"p" * 100)
+                bad = native_libs_not_deflated([p])
+                if bad:
+                    raise AssertionError("deflate 条目被误报成 stored（误报会让人白跑一次重打包）：%s" % bad)
+                r = run_tool("check_zip_padding.py", [p], tmp)
+                if r.returncode != 0:
+                    raise AssertionError("100B 的 local extra 远小于阈值却被拦下（夹具或判据有问题）：\n%s"
+                                         % out_tail(r))
+
+            def ten_stored_blocks():
+                p = fake_apk(os.path.join(apk_dir, "stored.apk"), body_ok, deflate=False)
+                bad = native_libs_not_deflated([p])
+                if len(bad) != 1:
+                    raise AssertionError("stored 的 `.so` 必须被列出来（这是 `useLegacyPackaging` 被删的指纹），"
+                                         "实际得到：%s" % bad)
+
+            def ten_16k_padding_blocks():
+                p = fake_apk(os.path.join(apk_dir, "pad16k.apk"), body_ok, local_extra=b"\x00" * 14000)
+                if native_libs_not_deflated([p]):
+                    raise AssertionError("夹具自己不该被 ⑩ 的第一道判据拦下")
+                r = run_tool("check_zip_padding.py", [p], tmp)
+                if r.returncode == 0 or "PAD-FAIL" not in (r.stdout or ""):
+                    raise AssertionError("14000B 的 local extra（16K 对齐 padding 特征，阈 8192）没被拦 —— "
+                                         "这就是装不上却全绿的那一类（res=-113）：\n%s" % out_tail(r))
+
+            case("⑩ deflate + 小 padding ⇒ 放行（正向）", ten_deflate_and_small_padding_passes)
+            case("⑩ stored 的 .so ⇒ 必须列出（useLegacyPackaging 被删的指纹）", ten_stored_blocks)
+            case("⑩ 16K padding 特征 ⇒ check_zip_padding 必须拦", ten_16k_padding_blocks)
         finally:
             for k, v in saved.items():
                 if v is None:
@@ -633,7 +966,8 @@ def selftest():
     bad = [r for r in results if not r[0]]
     print("自检结果：%s（%d 项）" % ("全部通过" if not bad else "有失败项", len(results)))
     if not bad:
-        print("⚠️ 已知未覆盖：第 ⑦⑧⑨⑩ 项（依赖 APK / Gradle 缓存 / build-tools）无法离线自证，见函数注释。")
+        print("⚠️ 自证的是**判定逻辑**（⑦⑧⑨⑩ 双向），不是「真产物一定能读对」：真 APK / 真 Gradle 缓存 /\n"
+              "   真 aapt2 输出仍只有跑一次真包才算数 —— 发版前那次真包全流程**不能**用本自检替代。")
     return 1 if bad else 0
 
 
@@ -826,15 +1160,7 @@ def main():
         # ⑩ 包内原生库形态（2026-10-15 自 Rust 线的 10-07 安装攻坚搬来，两道断言缺一不可）。
         # 只查 padding 不够：stored 且 padding 小的包同样走安装器提取路径；只查 deflate 也不够：
         # 修复回退时会立刻反映在这里。
-        not_deflated = []
-        for apk in apks:
-            with zipfile.ZipFile(apk) as z:
-                not_deflated += [
-                    "%s：%s" % (os.path.basename(apk), i.filename)
-                    for i in z.infolist()
-                    if i.filename.startswith("lib/") and i.filename.endswith(".so")
-                    and i.compress_type != zipfile.ZIP_DEFLATED
-                ]
+        not_deflated = native_libs_not_deflated(apks)
         if not_deflated:
             raise Fail(
                 "%d 个 `.so` 不是 deflate ⇒ `useLegacyPackaging` 未生效，16K 对齐的 padding 会被"
