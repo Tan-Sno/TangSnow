@@ -19,6 +19,13 @@ indent_size = 4
 [*.{py,yml,yaml,gradle,kts}]
 indent_size = 4
 
+# Rust 源码与 Cargo/Toml 清单：与仓库 4 缩进族一致（.rs 属性/cmd 记 —— Cargo.lock 由工具生成不受影响）
+[*.rs]
+indent_size = 4
+
+[*.toml]
+indent_size = 4
+
 [*.{js,ts,json}]
 indent_size = 2
 
