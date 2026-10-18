@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# AI生成（标记必须在 shebang 之下；coding 声明占第 2 行是 PEP 263 认的窗口）
 """发布前校验：把「人工核对的那几件事」变成可重复、会失败的断言。
 
     python tools/verify_release.py                 # 校验 app/release 下的三个包
@@ -357,7 +358,13 @@ def apk_permissions(aapt2, env, apk):
     r = run([aapt2, "dump", "permissions", apk], env=env)
     if r.returncode != 0:
         raise Fail("aapt2 读取权限失败：%s" % apk)
-    return set(re.findall(r"uses-permission: name='([^']+)'", r.stdout))
+    # aapt2 的 `dump permissions` 会把带 maxSdkVersion 的权限打成
+    # `uses-permission-sdk-23: name='...'`——旧正则只认 `uses-permission:`，那类声明会被整条漏掉
+    # （既不进集合，也就永远无法与 EXPECTED_PERMISSIONS 比对）。
+    # ⚠️ **当前无触发面**（2026-10-17 实测现役 4 个真包：只出现 `uses-permission:` 一种前缀，
+    # 新旧正则解出的集合逐字节相同）⇒ 这条是**防未来**的加固，不是修了某个现役漏检；
+    # 真出现 `-sdk-NN` 声明时第 ④ 项会当场红，那正是想要的。
+    return set(re.findall(r"uses-permission(?:-sdk-\d+)?: name='([^']+)'", r.stdout))
 
 
 def apk_signature(apksigner, env, apk):
@@ -594,6 +601,77 @@ def sha256_of(path):
 # 主流程
 # ---------------------------------------------------------------------------
 
+
+
+# ---- ⑪ 原生库的 ELF 页对齐（2026-10-18 本机对 7 个真 APK 实测后定下的形状）----
+ALIGN_16K = 16384
+# 16KB 页只存在于 arm64 / x86_64 设备；32 位 armeabi-v7a 不要求（且上游 GeckoView 的 13 个库
+# 实测全是 0x1000 ⇒ 把它们纳进断言只会让门禁因别人的产物而永久红）。
+ALIGNED_ABIS = {"arm64-v8a", "x86_64"}
+OWN_LIBS = ("libtangsnow_core.so",)
+
+
+def elf_min_load_align(data):
+    """返回 ELF 里 PT_LOAD 段的最小 p_align；读不出结构就返回 None（调用方按 fail-closed 处理）。"""
+    import struct
+    if len(data) < 64 or data[:4] != b"\x7fELF":
+        return None
+    is64, le = (data[4] == 2), ("<" if data[5] == 1 else ">")
+    if is64:
+        phoff, = struct.unpack_from(le + "Q", data, 0x20)
+        phes, = struct.unpack_from(le + "H", data, 0x36)
+        phnum, = struct.unpack_from(le + "H", data, 0x38)
+        af, asz = 48, "Q"
+    else:
+        phoff, = struct.unpack_from(le + "I", data, 0x1C)
+        phes, = struct.unpack_from(le + "H", data, 0x2A)
+        phnum, = struct.unpack_from(le + "H", data, 0x2C)
+        af, asz = 28, "I"
+    if not phes or not phnum or phnum > 64 or phoff + phes * phnum > len(data):
+        return None
+    best = None
+    for i in range(phnum):
+        o = phoff + i * phes
+        p_type, = struct.unpack_from(le + "I", data, o)
+        p_align, = struct.unpack_from(le + asz, data, o + af)
+        if p_type == 1:  # PT_LOAD
+            best = p_align if best is None else min(best, p_align)
+    return best
+
+
+def so_page_alignment_problems(apks):
+    """⑪：我们产的 `lib/<abi>/*.so` 在 arm64/x86_64 上必须 p_align >= 16384。
+
+    为什么要加这道：第 ⑩ 项查的是 **APK 层**（zip compress_type 与 local header padding），
+    而"16KB 页内核设备上被 PackageManager 拒收"取决于 **ELF 层**的段对齐 —— 两层是两回事，
+    此前只有一句 `RUSTFLAGS=-Wl,-z,max-page-size=16384` 的注释守着，没有任何回归保护。
+    非 ELF / 读不出程序头一律按**问题**处理，不许"看不懂就跳过"。
+    返回 (拦下的条目, 仅报告的条目)。
+
+    实测边界（2026-10-18 在仓外副本对 15 个真包跑过一遍）：拦下 0 条 ⇒ 现网产物本来就合规；
+    「仅报告」那一档在真包上**当前无触发面**（arm64/x86_64 里上游库已经是 0x4000，
+    只有 armeabi-v7a 是 0x1000 而它按 ABI 规则不参评）⇒ 它只由 selftest 第 5 档夹具自证，
+    别把它当成"真包上一直在报的东西"。
+    """
+    import os
+    import zipfile
+    bad, note = [], []
+    for apk in apks:
+        with zipfile.ZipFile(apk) as z:
+            for n in z.namelist():
+                if not (n.startswith("lib/") and n.endswith(".so")):
+                    continue
+                abi, name = n.split("/")[1], os.path.basename(n)
+                if abi not in ALIGNED_ABIS:
+                    continue
+                al = elf_min_load_align(z.read(n))
+                where = "%s!%s" % (os.path.basename(apk), n)
+                if al is None:
+                    bad.append("%s：读不出 ELF 程序头（非 ELF 或结构异常）" % where)
+                elif al < ALIGN_16K:
+                    (bad if name in OWN_LIBS else note).append("%s：p_align=0x%X < 0x4000" % (where, al))
+    return bad, note
+
 def selftest():
     """发布门禁的自检：**证明它真的会拦，而不是一路绿灯。**
 
@@ -617,6 +695,9 @@ def selftest():
           解不出组件 ⇒ 拦 / 与基准不符 ⇒ 拦」四档（随 M6 一起加）。
        ⑤ 第 ⑩ 项（原生库形态）：`native_libs_not_deflated` 抽成了函数 ⇒ 能跑「deflate + 小 padding ⇒ 放行 /
           stored ⇒ 列出 / 14000B 的 local extra ⇒ `check_zip_padding.py` 拦」。
+       ⑥ 第 ⑪ 项（原生库 **ELF 段对齐**，和 ⑩ 的 APK 层是两回事）：用手造的假 ELF（只写到 `p_align`）跑
+          「16KB/64KB 放行 / arm64 只有 4KB ⇒ 拦 / armeabi-v7a 的 4KB ⇒ 不参评 / 非 ELF ⇒ fail-closed /
+          上游库不足 ⇒ 只报告不拦」五档（2026-10-18 加，形状由对 7 个真 APK 的实测定）。
 
        只有"该放的放、该拦的拦"双向都过，才说明这道门既不放过问题、也不是"永远失败"。
 
@@ -951,6 +1032,77 @@ def selftest():
             case("⑩ deflate + 小 padding ⇒ 放行（正向）", ten_deflate_and_small_padding_passes)
             case("⑩ stored 的 .so ⇒ 必须列出（useLegacyPackaging 被删的指纹）", ten_stored_blocks)
             case("⑩ 16K padding 特征 ⇒ check_zip_padding 必须拦", ten_16k_padding_blocks)
+            # ---- ⑪ ELF 段对齐（假 ELF：只造到 p_align 那几个字节即可；5 档双向）----
+            def fake_elf_so(align):
+                import struct
+                phdr = bytearray(56)
+                struct.pack_into("<I", phdr, 0, 1)                 # p_type = PT_LOAD
+                struct.pack_into("<Q", phdr, 48, align)            # p_align
+                hdr = bytearray(64)
+                hdr[0:4] = b"\x7fELF"
+                hdr[4], hdr[5] = 2, 1                             # 64-bit, little endian
+                struct.pack_into("<Q", hdr, 0x20, 64)              # e_phoff
+                struct.pack_into("<H", hdr, 0x36, 56)              # e_phentsize
+                struct.pack_into("<H", hdr, 0x38, 1)               # e_phnum
+                return bytes(hdr) + bytes(phdr)
+
+            def apk_with_so(path, abi_to_align):
+                import zipfile as zf
+                with zf.ZipFile(path, "w", zf.ZIP_DEFLATED) as z:
+                    for abi, al in abi_to_align.items():
+                        z.writestr("lib/%s/libtangsnow_core.so" % abi, fake_elf_so(al))
+
+            def p(tag, abi_to_align):
+                """每条用例一个独立文件名：共用 tmp 目录，但绝不共用产物（防夹具之间互相污染出假绿）。"""
+                fp = os.path.join(tmp, "app-%s.apk" % tag)
+                apk_with_so(fp, abi_to_align)
+                return fp
+
+            def ten_elf_align_passes():
+                fp = p("align-ok", {"arm64-v8a": 0x4000, "x86_64": 0x10000, "armeabi-v7a": 0x1000})
+                bad, _ = so_page_alignment_problems([fp])
+                if bad:
+                    raise AssertionError("合格产物被拦了：%s" % bad)
+
+            def ten_elf_align_blocks_4k():
+                fp = p("align-4k", {"arm64-v8a": 0x1000})
+                bad, _ = so_page_alignment_problems([fp])
+                if not bad:
+                    raise AssertionError("4KB 对齐的 arm64 产物必须拦（16KB 页设备会拒收）")
+
+            def ten_elf_align_skips_v7a():
+                fp = p("align-v7a", {"armeabi-v7a": 0x1000})
+                bad, _ = so_page_alignment_problems([fp])
+                if bad:
+                    raise AssertionError("armeabi-v7a 不该进这条断言（实测上游 13 个库都是 0x1000）：%s" % bad)
+
+            def ten_elf_align_blocks_unreadable():
+                fp = p("align-junk", {"x86_64": 0x4000})
+                import zipfile as zf
+                with zf.ZipFile(fp, "a") as z:
+                    z.writestr("lib/x86_64/libjunk.so", b"not an elf at all")
+                bad, _ = so_page_alignment_problems([fp])
+                if not bad:
+                    raise AssertionError("读不出 ELF 结构时必须 fail-closed，不许静默跳过")
+
+            def ten_elf_align_reports_upstream():
+                """别人的产物不足 16KB ⇒ **只报告不拦**，但报告必须非空（否则这条分支永远没人走）。"""
+                fp = p("align-upstream", {"arm64-v8a": 0x4000})
+                import zipfile as zf
+                with zf.ZipFile(fp, "a") as z:
+                    z.writestr("lib/arm64-v8a/libxul.so", fake_elf_so(0x1000))
+                bad, note = so_page_alignment_problems([fp])
+                if bad:
+                    raise AssertionError("上游库的 4KB 不该变成我们的红灯：%s" % bad)
+                if not note:
+                    raise AssertionError("上游库不足 16KB 必须进报告，否则「仅报告」这一档等于没实现")
+
+            case("⑪ ELF 段对齐：16KB/64KB 放行、v7a 不参评", ten_elf_align_passes)
+            case("⑪ ELF 段对齐：arm64 只有 4KB ⇒ 必须拦", ten_elf_align_blocks_4k)
+            case("⑪ ELF 段对齐：armeabi-v7a 的 4KB ⇒ 不得拦", ten_elf_align_skips_v7a)
+            case("⑪ ELF 段对齐：非 ELF ⇒ 必须拦（fail-closed）", ten_elf_align_blocks_unreadable)
+            case("⑪ ELF 段对齐：上游库不足 ⇒ 只报告不拦", ten_elf_align_reports_upstream)
+
         finally:
             for k, v in saved.items():
                 if v is None:
@@ -966,7 +1118,7 @@ def selftest():
     bad = [r for r in results if not r[0]]
     print("自检结果：%s（%d 项）" % ("全部通过" if not bad else "有失败项", len(results)))
     if not bad:
-        print("⚠️ 自证的是**判定逻辑**（⑦⑧⑨⑩ 双向），不是「真产物一定能读对」：真 APK / 真 Gradle 缓存 /\n"
+        print("⚠️ 自证的是**判定逻辑**（⑦⑧⑨⑩⑪ 双向），不是「真产物一定能读对」：真 APK / 真 Gradle 缓存 /\n"
               "   真 aapt2 输出仍只有跑一次真包才算数 —— 发版前那次真包全流程**不能**用本自检替代。")
     return 1 if bad else 0
 
@@ -1129,6 +1281,9 @@ def main():
         dep = subprocess.run(
             [sys.executable, os.path.join(root, "tools", "verify_deps.py")],
             capture_output=True, text=True, cwd=root,
+            # 子脚本会打印中文：Windows 上以 cp936 解码 stdout 会抛 UnicodeDecodeError，
+            # 崩在这行就看不到真正的结论（本文件 run_tool 早为同一原因固定了 utf-8）。
+            encoding="utf-8", errors="replace",
         )
         if dep.returncode != 0:
             # stdout 与 stderr 都要带上：子脚本自身崩溃（如编码问题）时真凶在 stderr，
@@ -1172,12 +1327,20 @@ def main():
         pad = subprocess.run(
             [sys.executable, os.path.join(root, "tools", "check_zip_padding.py")] + list(apks),
             capture_output=True, text=True, cwd=root,
+            encoding="utf-8", errors="replace",
         )
         if pad.returncode != 0:
             tail = (pad.stdout + "\n[stderr]\n" + pad.stderr).strip().splitlines()[-8:]
             raise Fail("APK 本地头 padding 超阈（安装器拒收风险），发布前必须查清：\n      %s"
                        % "\n      ".join(tail))
         say("  ✅ ⑩ 原生库形态：三 ABI 的 .so 全部 deflate，本地头 padding 在阈内")
+        bad_align, note_align = so_page_alignment_problems(apks)
+        if bad_align:
+            raise Fail("⑪ 原生库页对齐不足 16KB（这类库在 16KB 页设备上会在解析阶段被拒，" +
+                       "症状与 ⑩ 的 res=-113 同族，而 ①–⑩ 全绿看不出来）：\n  " + "\n  ".join(bad_align))
+        say("  ✅ ⑪ 原生库 ELF 段对齐：我们产的 .so 在 arm64/x86_64 全部 >=16KB" +
+            ("（⚠️ 另有非本仓产物不足：\n     " + "\n     ".join(note_align) + "）" if note_align else ""))
+
 
         print("✅ 校验通过，可以发布。校验和（可直接贴进发布说明）：")
         print()

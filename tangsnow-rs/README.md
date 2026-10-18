@@ -31,7 +31,7 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
 | `bookmark_html` | `data/BookmarkHtml.kt` | 295 | `BookmarkHtmlTest`(23) |
 | `history` | `data/repo/HistoryRepo.kt` 纯函数 | 96 | — |
 
-**验证结果**：`cargo test` **224/224 通过**（2026-10-16 实测，14 个测试二进制合计；旧口径写的 70/70、210/210、213/213、223/223 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
+**验证结果**：`cargo test` **232/232 通过**（2026-10-17 实测，15 个测试二进制合计；旧口径写的 70/70、210/210、213/213、223/223、224/224、231/231 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
 - 30 + 15 个差分用例与 JVM 单测同源（同输入 ⇒ 同输出，含防钓鱼 `@` 检查、
   IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对）；
 - **IDNA 差分 3 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
@@ -47,6 +47,18 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
   `#[cfg(feature = "jni")]` 后面、host 一行也跑不到那层，只能像 `TestCountCommentTest`
   那样把"必须走 CESU-8 解码""`displayForUrl` 的 id 由 Kotlin 传入""数组长度用 `try_from` 收窄"
   钉成红灯；`tests/search_engines_parity.rs` 另加 2 例（别名表按真 id 命中、`template_only` 等价）。
+- **2026-10-17 回归批 7 例**（`tests/regression_2026_10_17.rs`）：把当轮修掉的 6 处跨语言口径缺陷
+  逐条钉住——`java_is_whitespace` 的 4 个码点（含 `java_trim` 连带）、`display_for_url` 只取
+  **首个**同名参数、`is_newer` 段解析按 Kotlin `toIntOrNull`（i32）、`pick_asset` 的 ABI 大小写
+  不敏感、`LOCALHOST_RE`/`URL_IN_TEXT_RE` 只折叠 ASCII 且取反类须 `(?u:…)` 包住；每条注释都写明
+  「旧实现会给出什么」，便于日后有人质疑旧行为时一眼看到当时的复现。
+- **2026-10-17 `dt_prompts` 口径批**：用真 JBR（JDK 25）把 Kotlin 侧 `WebPrompts.kt` 实际调用的
+  `DateTimeFormatter` 行为逐条量出来，订正 Rust 侧三处**与实测相反**的口径 —— 连同模块注释里那三条
+  错误断言一起改（错注释比错代码更贵）：字段宽度 `HH/mm/ss/MM/dd` **恰好两位**（旧实现按「SMART
+  接受 1–2 位」把 `9:5` 也收下）、`24:00[:00]` 是**午夜特例**（纯时间归 `00:00`；带日期**进位次日**，
+  旧实现一律拒收）、超界**日钳到月末**（`2026-02-30` → 02-28、闰年 `2024-02-30` → 02-29，旧实现直接
+  拒收）；另有 `yyyy` = `YEAR_OF_ERA` 不含 0 年这条随之补上。整张实测矩阵钉在
+  `smart_matrix_matches_real_jvm_2026_10_17`，避免口径再凭印象漂移。
 
 - **两张手抄表的跨语言比对（2026-10-16）**：`app/src/test/.../SearchEngineTableParityTest`（Kotlin 侧，3 例）
   逐条比对 `SearchEngines.kt` 与 `search_engines.rs` 的内置引擎表（id / 模板 / queryParam / **顺序**）与
@@ -129,7 +141,7 @@ bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core
 |---|---|---|---|
 | IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | **8 类实测分歧 + 1 类已修**，逐条见下表 |
 | 字母判定 | `isLetterOrDigit`（L*+Nl+Nd） | `is_alphabetic/is_numeric`（含 No） | 仅影响 scheme 合法性判定中的罕见 Unicode 数字 |
-| 标题截断 | `take(200)` 按 UTF-16 单元 | 按 char | 仅含星形平面的超长标题截断点差 1-2 字符 |
+| 标题截断 | `take(200)` 按 UTF-16 单元 | 按 char（码点） | BMP 文本一致；含星形面字符时**最多差一倍**（每个星形面字符在 Kotlin 侧占 2 个 UTF-16 单元，200 单元只能装 100 个），且 Kotlin 可能在代理对中间切断留下孤立代理 |
 | nbsp 处理 | `Character.isWhitespace(nbsp)=false` | 已用 `java_is_whitespace` 对齐 | 已抹平；正则 `\S` 类已按 Java ASCII 口径改写 |
 
 ### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」）

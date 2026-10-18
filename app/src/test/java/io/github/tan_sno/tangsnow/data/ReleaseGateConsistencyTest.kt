@@ -257,6 +257,94 @@ class ReleaseGateConsistencyTest {
         )
     }
 
+    @Test
+    fun `第 ⑪ 项的 ELF 页对齐门禁在位且范围没被悄悄改掉`() {
+        // 这道门禁的**形状是实测出来的**（2026-10-18 对 7 个真 APK）：arm64-v8a / x86_64 里连上游
+        // GeckoView 的库都已 >=0x4000，而 armeabi-v7a 的 13 颗全是 0x1000 ⇒ 把 32 位纳进断言，
+        // 门禁会因**别人的产物**永久红。"只查这两个 ABI、只拦自家那颗"不是随手写的，所以逐条钉住。
+        // 全部用**行首前缀 + substring**解析而不是正则：这条断言要跨 Python/Kotlin 两层字符串，
+        // 能用普通字符串匹配住的，就别为它多背一层转义。
+        assertTrue(
+            "⑪ 的判定函数不见了 —— 删它要连着改 selftest 的夹具与状态说明，不许静默消失",
+            "def so_page_alignment_problems(" in gateText,
+        )
+        assertTrue(
+            "⑪ 的 ELF 解析函数不见了（读不出程序头必须 fail-closed，不许「看不懂就跳过」）",
+            "def elf_min_load_align(data)" in gateText,
+        )
+        val abisLine = gateText.lines().firstOrNull { it.trimStart().startsWith("ALIGNED_ABIS = {") }
+            ?: error("tools/verify_release.py 里找不到 ALIGNED_ABIS = {...}（改了写法就同步改本测试）")
+        val abis = abisLine.substringAfter("{").substringBefore("}").split(",")
+            .map { it.trim().trim('"') }.filter { it.isNotEmpty() }.toSet()
+        assertEquals(
+            "参评 ABI 变了：加进 armeabi-v7a 就会因上游 0x1000 永久红；减到空集则这条门禁形同虚设",
+            setOf("arm64-v8a", "x86_64"), abis,
+        )
+        val ownLine = gateText.lines().firstOrNull { it.trimStart().startsWith("OWN_LIBS = (") }
+            ?: error("tools/verify_release.py 里找不到 OWN_LIBS = (...)")
+        val own = ownLine.substringAfter("(").substringBefore(")").split(",")
+            .map { it.trim().trim('"') }.filter { it.isNotEmpty() }.toSet()
+        assertEquals(
+            "⑪ 只该拦我们自己产的 .so：libxul.so 的对齐是 Mozilla 的事，不该变成我们的红灯",
+            setOf("libtangsnow_core.so"), own,
+        )
+        assertTrue(
+            "阈值不再是 16384 ⇒ 和 16KB 页设备的要求脱钩了（改阈值必须写清依据哪台设备）",
+            "ALIGN_16K = 16384" in gateText,
+        )
+        // 函数在 ≠ 门禁在：第 ⑨ 项 M6 就是「函数抽出来了，但只查 apks[0]」那一类形状。
+        val callAt = gateText.indexOf("bad_align, note_align = so_page_alignment_problems(apks)")
+        assertTrue(
+            "⑪ 的判定函数没人调用 —— 留着函数不等于门禁还在（调用点找不到了）",
+            callAt >= 0,
+        )
+        val after = gateText.substring(callAt, (callAt + 400).coerceAtMost(gateText.length))
+        assertTrue(
+            "⑪ 调用之后没有 raise Fail ⇒ 不足 16KB 只会多打印一行字，等于没拦",
+            "raise Fail" in after,
+        )
+        val cases = gateText.split("case(\"⑪").size - 1
+        assertTrue(
+            "⑪ 的 --selftest 夹具少于 5 档 ⇒ 双向自证被削（放行 / 拦 / 不参评 / fail-closed / 只报告）",
+            cases >= 5,
+        )
+    }
+
+    @Test
+    fun `tangsnow-rs 的测试数与 README 声明一致，且 README 点名的差分文件都在`() {
+        // README 自己写着「Rust 侧计数没有像 Kotlin 那样被 `TestCountCommentTest` 钉住」⇒ 这里把它钉上。
+        // 顺带拦住一类具体事故：新增 `tests/*.rs` 却忘了 `git add` ⇒ 检出树里少一批用例而 README 仍写旧数
+        // （`regression_2026_10_17.rs` 此刻正是**未跟踪**状态，靠人提醒不算数）。
+        val rsRoot = File(repoRoot(), "tangsnow-rs")
+        val readme = File(rsRoot, "README.md").readText()
+        val m = Regex("`cargo test` \\*\\*(\\d+)/(\\d+) 通过\\*\\*").find(readme)
+            ?: error("tangsnow-rs/README.md 里找不到「`cargo test` **N/N 通过**」那句（改了写法就同步改本测试）")
+        assertEquals(
+            "那句写成 N/N，两个数本来就该相同；不同说明其中一个是手抄错的",
+            m.groupValues[2], m.groupValues[1],
+        )
+        val declared = m.groupValues[1].toInt()
+        val actual = rsRoot.walkTopDown()
+            .onEnter { dir -> dir.name != "target" } // 构建目录里的 .rs 不是源码（本仓有 tangsnow-rs/target）
+            .filter { it.isFile && it.extension == "rs" }
+            .sumOf { f -> f.readLines().count { it.trimStart().startsWith("#[test]") } }
+        assertEquals(
+            "README 声明的 `cargo test` 数 ≠ 仓库里实际的 `#[test]` 数 —— 要么改了测试没同步文档，" +
+                "要么测试文件没进版本库（后者最危险：换台机器检出就少一批）",
+            declared, actual,
+        )
+        val named = Regex("tests/[a-z0-9_]+\\.rs").findAll(readme).map { it.value }.toSet()
+        assertTrue(
+            "README 里一个差分文件都没点名 ⇒ 说明它的写法变了，本测试要跟着改（不许静默空集放行）",
+            named.isNotEmpty(),
+        )
+        val missing = named.filter { !File(File(rsRoot, "tangsnow-core"), it).exists() }
+        assertTrue(
+            "README 指着不存在的差分文件：$missing —— 补文件、把文件纳入版本库，或改文档，别留假指路",
+            missing.isEmpty(),
+        )
+    }
+
     /** 只为比较"是不是同一颗产物"，手算 SHA-256，不额外引依赖。 */
     private fun sha256(f: File): String {
         val md = java.security.MessageDigest.getInstance("SHA-256")

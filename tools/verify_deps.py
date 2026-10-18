@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# AI生成（标记必须在 shebang 之下，否则 shebang 失效）
 """依赖完整性校验（供应链加固，**只读**）：核对本地 Gradle 缓存里的构件与官方公布的校验和。
 
 ## 为什么要有它
@@ -221,7 +222,16 @@ def main() -> int:
             unverifiable.append("%s（libs.versions.toml 里没有 %s）" % (coord, key))
             continue
         files, module = cache_files(args.cache, group, artifact, version)
-        target = [f for f in files if f.endswith(suffix)]
+        # 同一模块目录里除主构件外还躺着 -sources/-javadoc/-tests 等附加 jar 与 .pom/.module。
+        # 旧写法 `[f for f in files if f.endswith(suffix)]` 取 target[0]，顺序取决于目录枚举：
+        # 附加 jar 排在前面时会拿 **sources jar** 去比对主构件的公布散列 ⇒ 假红灯（2026-10-17 修）。
+        # 顺序：先认「artifact-version+suffix」精确名，再退回排除附加分类器的宽松匹配。
+        exact = "%s-%s%s" % (artifact, version, suffix)
+        target = [f for f in files if os.path.basename(f) == exact]
+        if not target:
+            classifiers = ("-sources" + suffix, "-javadoc" + suffix, "-tests" + suffix)
+            target = [f for f in files
+                      if f.endswith(suffix) and not os.path.basename(f).endswith(classifiers)]
         name = "%s:%s:%s" % (group, artifact, version)
         if not target:
             unverifiable.append("%s（缓存里找不到 %s 构件）" % (name, suffix))

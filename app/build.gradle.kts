@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **274**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **276**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -373,7 +373,16 @@ android {
         //   拷贝这三处修复` —— `tangsnow-rs/tools/build-android.sh` 是三 ABI `.so` 唯一的产出入口，而它跑在
         //   **另一台 Linux**（本机没有 Rust 的 android target），所以它坏了本地一声不响：现在钉住
         //   「uname 探宿主 + NDK_HOST_BIN 可覆盖 + 零/多候选都 exit 1」（L1）、`max-page-size=16384`
-        //   （少了它在 16KB 页设备上被 PackageManager 拒收）与「三行 cp 跟 `$PROFILEDIR`」⇒ +1，合计 **274**。
+        //   （少了它在 16KB 页设备上被 PackageManager 拒收）与「三行 cp 跟 `$PROFILEDIR`」⇒ +1，合计 **274**；
+        //   2026-10-18 门禁轮再加 1 例：`ReleaseGateConsistencyTest.第 ⑪ 项的 ELF 页对齐门禁在位且范围
+        //   没被悄悄改掉` —— 钉住 ⑪ 的四个**实测出来的**设计决定（参评 ABI 只有 arm64-v8a/x86_64、
+        //   只拦自家 `libtangsnow_core.so`、阈值 16384、判定函数被 main() 真调用且不足就 raise Fail），
+        //   再加「夹具不少于 5 档」⇒ +1，合计 **275**；
+        //   同日再加 1 例：`ReleaseGateConsistencyTest.tangsnow-rs 的测试数与 README 声明一致，且 README
+        //   点名的差分文件都在` —— `tangsnow-rs/README.md` 自己写着「Rust 侧计数没有被 TestCountCommentTest
+        //   钉住」，那句 `232/232` 一直是**手抄**：本例数仓库里的 `#[test]`（排除 `target/`）与它比对，
+        //   并顺带拦住"新增 `tests/*.rs` 忘了 `git add`"（`regression_2026_10_17.rs` 落地时正是未跟踪）⇒ +1，
+        //   合计 **276**。
         //   （上一版这里被我写成 274 —— `TestCountCommentTest` 当场把这句注释本身钉红了，钉子有效。）
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则两个 flavor 的单测任务
         //   （`:app:testCoreKotlinDebugUnitTest` / `:app:testCoreRustDebugUnitTest`）都直接红。
