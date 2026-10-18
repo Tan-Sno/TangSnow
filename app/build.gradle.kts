@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **276**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **277**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -382,7 +382,13 @@ android {
         //   点名的差分文件都在` —— `tangsnow-rs/README.md` 自己写着「Rust 侧计数没有被 TestCountCommentTest
         //   钉住」，那句 `232/232` 一直是**手抄**：本例数仓库里的 `#[test]`（排除 `target/`）与它比对，
         //   并顺带拦住"新增 `tests/*.rs` 忘了 `git add`"（`regression_2026_10_17.rs` 落地时正是未跟踪）⇒ +1，
-        //   合计 **276**。
+        //   2026-10-19 为 `BridgeSignatureParityTest` 再加 1 例：**随包 `.so` 的导出符号**必须与 Kotlin
+        //   的 `external fun` 声明一一对应（直接解析 `jniLibs/` 三颗 ELF 的动态符号表）—— 上面几条比的
+        //   是**两份源码**，改了 `external fun` 却忘重编 `.so` 时源码层照绿，真机则是静默降级
+        //   （`guard` 兜底、无异常无日志）；`CoreNative.kt` 自己也写着这类漂移「不能指望真机给信号」，
+        //   故补产物层红灯。边界：只查**符号名**，查不了形参个数/类型（JNI 对非重载方法按短名查找，
+        //   3 参变 4 参仍能绑定）⇒ +1，
+        //   合计 **277**。
         //   （上一版这里被我写成 274 —— `TestCountCommentTest` 当场把这句注释本身钉红了，钉子有效。）
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则两个 flavor 的单测任务
         //   （`:app:testCoreKotlinDebugUnitTest` / `:app:testCoreRustDebugUnitTest`）都直接红。

@@ -22,6 +22,8 @@ import java.io.File
  * 有没有超出白名单的新孤儿。
  * ❌ 查不了：形参**类型**（`jint` 与 `jlong` 互换、`IntArray` 与 `IntArray` 写反）—— 那是方法
  * 描述符层面的事，要产物级校验（`javap` / `nm`）才能看见，本机做不到；类型对齐仍靠人审 + 真机冒烟。
+ * （符号层的产物校验已由下方 `随包 so 的导出符号与 kotlin 声明一一对应` 补上 —— 它读的是三颗
+ * 已提交 `.so` 的动态符号表，不是源码。）
  *
  * 一律 fail-closed：解析不出期望形状就**红**，不允许「看不懂就跳过」演变成漏检。
  */
@@ -104,6 +106,117 @@ class BridgeSignatureParityTest {
             attributed,
             rustRegex().findAll(rustBridgeText).count(),
         )
+    }
+
+    /**
+     * **随包 `.so` 的导出符号必须与 Kotlin 声明一一对应**（产物层，不是源码层）。
+     *
+     * ## 为什么还需要这一条
+     * 上面几条比的是**两份源码**（`CoreNative.kt` ↔ `jni.rs`）：两侧都改对了，源码层就是绿的。
+     * 但 `jniLibs/` 里那三颗 `.so` 是**预先编译、随仓库提交**的二进制 —— 改了 `external fun`
+     * 却忘了重编（它们是三 ABI 唯一的产出入口，而且跑在另一台机器上）时，源码层全绿、真机首次
+     * 调用却是 `UnsatisfiedLinkError`，而 `CoreNative.guard` 会把它兜成**静默功能缺失**：
+     * 不崩溃、无异常、日志里也没有线索。`CoreNative.kt` 末段自己写着这类漂移「不能指望真机给
+     * 信号」⇒ 那就得有一条产物层的红灯。
+     *
+     * ## 覆盖与边界（别高估）
+     * ✅ 能查：三颗 `.so` 各自导出的 `…_CoreNative_*` 集合 == Kotlin 声明 ∪ 已知孤儿；
+     *    混进别的类（前缀不符）的 `Java_*` 导出同样会被查出。
+     * ❌ 查不了：形参**个数与类型** —— JNI 对非重载方法按**短名**查找（符号里不含描述符），
+     *    `displayForUrlImpl` 由 3 参变 4 参时符号名不变、仍能绑定成功（多余实参由各 ABI 的调用方
+     *    清理）⇒ 这类漂移只能靠上面源码层的形参比对 + 重编替换，产物层看不见。
+     * 一律 fail-closed：定位不到 `.so`、或解析不出任何符号，直接判红，不允许「读不懂就跳过」。
+     */
+    @Test
+    fun `随包 so 的导出符号与 kotlin 声明一一对应`() {
+        val kotlin = parseKotlin().keys
+        assertTrue("Kotlin 桥里一个 external fun 也没解析出来", kotlin.isNotEmpty())
+        val expected = kotlin + knownRustOnly
+        for (abi in listOf("arm64-v8a", "armeabi-v7a", "x86_64")) {
+            val so = File(repoRoot(), "app/src/coreRust/jniLibs/$abi/libtangsnow_core.so")
+            assertTrue("找不到随包产物：${so.absolutePath}", so.isFile)
+            val java = javaSymbols(so)
+            assertTrue("$abi：一个 Java_* 符号都没解析出来（ELF 形态变了就同步改本测试）", java.isNotEmpty())
+            val foreign = java.filter { !it.contains("_CoreNative_") }
+            assertTrue("$abi：`.so` 里混进了别的类的 JNI 导出 $foreign", foreign.isEmpty())
+            val exported = java.mapNotNull { it.substringAfter("_CoreNative_", "").ifEmpty { null } }.toSet()
+            val missing = (expected - exported).sorted()
+            assertTrue(
+                "$abi：声明了、随包 .so 却没导出 $missing —— 忘了重编 .so。\n" +
+                    "真机表现是静默降级（guard 兜成「功能缺失」）而不是报错，所以必须在这里红",
+                missing.isEmpty(),
+            )
+            val extra = (exported - expected).sorted()
+            assertTrue("$abi：随包 .so 导出了声明之外的符号 $extra（要么补 Kotlin 声明，要么重编产物）", extra.isEmpty())
+        }
+    }
+
+    // ------------------------------------------------------------------ 产物解析（ELF 动态符号表）
+
+    /** 读出 `.so` 动态符号表里全部 `Java_*` 名字；只认本仓三种 ABI 的形态（小端 ELF32/64）。 */
+    private fun javaSymbols(so: File): Set<String> {
+        val b = so.readBytes()
+        assertTrue(
+            "不是 ELF 文件：${so.name}",
+            b.size > 64 && b[0].toInt() == 0x7F && b[1].toInt() == 'E'.code &&
+                b[2].toInt() == 'L'.code && b[3].toInt() == 'F'.code,
+        )
+        assertTrue("${so.name} 不是小端 ELF（三种 ABI 均应为 LE）", b[5].toInt() == 1)
+        val is64 = b[4].toInt() == 2
+        val shoff = if (is64) u64le(b, 0x28) else u32le(b, 0x20)
+        val shentsize = u16le(b, if (is64) 0x3A else 0x2E)
+        val shnum = u16le(b, if (is64) 0x3C else 0x30)
+        assertTrue("${so.name} 节表头异常（shentsize=$shentsize shnum=$shnum）", shentsize > 0 && shnum > 0)
+
+        // [偏移, 大小, 表项长度]：SHT_DYNSYM(=11) 与它 sh_link 指向的字符串表
+        val dynsym = ArrayList<LongArray>()
+        var strOffset = 0L
+        var strSize = 0L
+        for (i in 0 until shnum) {
+            val o = (shoff + i * shentsize).toInt()
+            if (u32le(b, o + 4) != 11L) continue
+            dynsym += longArrayOf(
+                if (is64) u64le(b, o + 0x18) else u32le(b, o + 0x10),
+                if (is64) u64le(b, o + 0x20) else u32le(b, o + 0x14),
+                if (is64) 24L else 16L,
+            )
+            val link = u32le(b, o + if (is64) 0x28 else 0x18).toInt()
+            val s = (shoff + link * shentsize).toInt()
+            strOffset = if (is64) u64le(b, s + 0x18) else u32le(b, s + 0x10)
+            strSize = if (is64) u64le(b, s + 0x20) else u32le(b, s + 0x14)
+        }
+        assertTrue("${so.name} 没有 .dynsym（SHT_DYNSYM）—— 形态变了就同步改本测试", dynsym.isNotEmpty())
+        val strEnd = (strOffset + strSize).toInt()
+
+        val out = LinkedHashSet<String>()
+        for (d in dynsym) {
+            var j = 0L
+            while (j < d[1] / d[2]) {
+                val stName = u32le(b, (d[0] + j * d[2]).toInt()).toInt()
+                val abs = (strOffset + stName).toInt()
+                if (stName > 0 && abs in 0 until strEnd) {
+                    var end = abs
+                    while (end < strEnd && b[end].toInt() != 0) end++
+                    val name = String(b, abs, end - abs, Charsets.UTF_8)
+                    if (name.startsWith("Java_")) out += name
+                }
+                j++
+            }
+        }
+        return out
+    }
+
+    private fun u16le(b: ByteArray, o: Int): Int =
+        (b[o].toInt() and 0xFF) or ((b[o + 1].toInt() and 0xFF) shl 8)
+
+    private fun u32le(b: ByteArray, o: Int): Long =
+        (b[o].toLong() and 0xFF) or ((b[o + 1].toLong() and 0xFF) shl 8) or
+            ((b[o + 2].toLong() and 0xFF) shl 16) or ((b[o + 3].toLong() and 0xFF) shl 24)
+
+    private fun u64le(b: ByteArray, o: Int): Long {
+        var v = 0L
+        for (i in 7 downTo 0) v = (v shl 8) or (b[o + i].toLong() and 0xFF)
+        return v
     }
 
     // ------------------------------------------------------------------ 解析
