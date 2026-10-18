@@ -77,6 +77,19 @@ Note that `checkAllWarnings` is enabled (`app/build.gradle.kts`), so **warnings 
 please do not silence a whole category of checks to get rid of one warning; if a suppression is
 genuinely warranted, follow the existing style and state the reason for each one.
 
+The `coreRust` line has Rust-side commands of its own (run them inside `tangsnow-rs/`):
+
+```bash
+cargo test --offline                                     # pure logic, on the host
+cargo check --offline --features jni -p tangsnow-core    # required after touching src/jni.rs
+```
+
+The second one is not redundant: `lib.rs` hides `pub mod jni` behind `#[cfg(feature = "jni")]`, so
+**a green `cargo test` does not prove that those 34 JNI exports compile** (parameter types and the
+shape of `JClass` all live in that layer). And it still only covers the type level — JNI matches by
+**name and descriptor at runtime**, which only a rebuilt `.so` on a device can prove
+(`BridgeSignatureParityTest` compares symbol names and the *number* of parameters, not their types).
+
 ## Code conventions
 
 - Language and UI framework: Kotlin + the Android View system (no Compose)
@@ -93,6 +106,16 @@ genuinely warranted, follow the existing style and state the reason for each one
 - `docs/PRIVACY.md` and `docs/TERMS.md` are exported from `strings.xml` by `tools/export_legal_docs.py`.
   **Do not edit those two files directly**; after changing legal text, re-export them and bump
   `POLICY_VERSION` if the change is substantive
+- **Formatting is decided by tooling, not by people**: `.editorconfig` (LF, final newline, trailing
+  whitespace stripped — with `.md` exempt because there two trailing spaces mean a line break),
+  `.gitattributes` (`* text=auto eol=lf`, CRLF only for `.bat`/`.cmd`, binaries listed) and the
+  committed `.idea/codeStyles` are the single source of truth. Indentation is 4 spaces for
+  `kt`/`kts`/`py`/`yml`/`toml`/`rs` and 2 for `js`/`ts`/`json`. **Please do not reformat anything
+  beyond your actual change** — it buries the diff that matters
+- **The Rust side is not rustfmt-clean, on purpose**: please do not run `cargo fmt`. The `.rs` files
+  in this repo have never been laid out by rustfmt (measured 2026-10-18: `cargo fmt --check` reports
+  114 diffs across 19 files, most unrelated to any recent change — that number moves, so don't treat
+  it as a baseline). If a reformat is genuinely wanted, make it its own commit, never part of a fix
 
 ## Commit messages
 

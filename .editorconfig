@@ -19,7 +19,9 @@ indent_size = 4
 [*.{py,yml,yaml,gradle,kts}]
 indent_size = 4
 
-# Rust 源码与 Cargo/Toml 清单：与仓库 4 缩进族一致（.rs 属性/cmd 记 —— Cargo.lock 由工具生成不受影响）
+# Rust 源码与 Cargo/Toml 清单：与仓库 4 空格缩进族一致（Cargo.lock 由工具生成，不受本条影响）。
+# 注意：本条只管缩进，不管行宽 —— 本仓的 .rs 从不按 rustfmt 排版，请勿跑 cargo fmt
+# （理由与实测数字见 CONTRIBUTING.md 的「代码约定」）。
 [*.rs]
 indent_size = 4
 

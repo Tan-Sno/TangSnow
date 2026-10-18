@@ -68,6 +68,18 @@ debug 证书、仍不可分发或上架。正式包**一次只发一个 flavor**
 注意本项目已开启 `checkAllWarnings`（`app/build.gradle.kts`），**warning 级问题同样会被报出** ——
 请勿为了消掉一条警告而关掉整类检查，有必要的话按现成写法逐条写明豁免理由。
 
+`coreRust` 那条线另有 Rust 侧命令（在 `tangsnow-rs/` 下执行）：
+
+```bash
+cargo test --offline                                     # 纯逻辑（host 上跑）
+cargo check --offline --features jni -p tangsnow-core    # 改过 src/jni.rs 之后必须再跑这条
+```
+
+第二条不是冗余：`lib.rs` 把 `pub mod jni` 关在 `#[cfg(feature = "jni")]` 后面，所以
+**`cargo test` 全绿证明不了那 34 个 JNI 导出编得过**（形参类型、`JClass` 的形状都在那一层）。
+它也只保证类型层 —— JNI 的**名称与描述符**是运行期匹配的，那一半只有重建 `.so` + 真机能证明
+（`BridgeSignatureParityTest` 比的是符号名与形参**个数**，比不了类型）。
+
 ## 代码约定
 
 - 语言与界面框架：Kotlin + Android View System（不使用 Compose）
@@ -79,6 +91,13 @@ debug 证书、仍不可分发或上架。正式包**一次只发一个 flavor**
 - 新增网络请求须说明用途；本项目遵循「数据不出设备」原则，不接受遥测、统计或广告类依赖
 - `docs/PRIVACY.md` 与 `docs/TERMS.md` 由 `tools/export_legal_docs.py` 从 `strings.xml` 导出，
   **请勿直接编辑这两份文件**；改动法律文本后需重新导出并在必要时提升 `POLICY_VERSION`
+- **格式由工具定，不由人定**：`.editorconfig`（LF、文件末尾换行、去行尾空白（`.md` 例外——那里行尾
+  双空格是换行语义）、`.gitattributes`（`* text=auto eol=lf`，`.bat`/`.cmd` 用 CRLF，二进制列全）
+  与已入库的 `.idea/codeStyles` 是唯一的格式化真相，缩进族是 4 空格（`kt`/`kts`/`py`/`yml`/`toml`/`rs`），
+  `js`/`ts`/`json` 是 2。**别在自己的改动之外顺手重排文件** —— 那会把真正的 diff 淹掉
+- **Rust 侧不做 rustfmt 合规**：请不要跑 `cargo fmt`。本仓的 `.rs` 从来不按 rustfmt 排版
+  （2026-10-18 实测 `cargo fmt --check` 报 114 处 / 19 个文件，多数与近期改动无关；这个数字会变，
+  别把它当基准）。真要重排请单独立一笔，别混进功能修复里
 
 ## 提交信息
 
