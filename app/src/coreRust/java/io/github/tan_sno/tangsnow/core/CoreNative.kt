@@ -102,8 +102,12 @@ object CoreNative {
     fun isWebNavigationScheme(scheme: String?): Boolean =
         guard("isWebNavigationScheme", false) { isWebNavigationSchemeImpl(scheme) }
 
+    /** 降级默认值是 **true**（fail-closed）：Kotlin `UrlUtils.isNeverWebContentScheme` 对
+     *  `file:`/`moz-extension:`/`javascript:` 返回 true。核心缺失时若默认 false，同一道安全闸会
+     *  静默变成「这三个 scheme 都不算危险」⇒ `window.open` 那条最终走应用自己 `loadUri` 的链会放行
+     *  `file:`/脚本注入。判不出来就应当「当危险」（与同文件 `dlIsExecutableName` 的 fail-closed 同旨）。 */
     fun isNeverWebContentScheme(scheme: String?): Boolean =
-        guard("isNeverWebContentScheme", false) { isNeverWebContentSchemeImpl(scheme) }
+        guard("isNeverWebContentScheme", true) { isNeverWebContentSchemeImpl(scheme) }
 
     /** 可携带/可落盘判据（排除 about:/data:/blob:/file:/content:） */
     fun isPortableUrl(url: String?): Boolean =
@@ -195,8 +199,11 @@ object CoreNative {
 
     // ---------------------------------------------------------------- 历史
 
+    /** 降级默认值是 **true**（fail-closed）：Kotlin `HistoryRepo` 跳过 about:/chrome:/data:/
+     *  blob:/javascript:/moz-extension: 等前缀。核心缺失时若默认 false，等于「什么都写进历史」，
+     *  内部页与只在当前会话有效的 blob:/data: 会静默落盘（隐私面）。判不出来就应当「当要跳过」。 */
     fun shouldSkipHistoryUrl(url: String): Boolean =
-        guard("shouldSkipHistoryUrl", false) { shouldSkipHistoryUrlImpl(url) }
+        guard("shouldSkipHistoryUrl", true) { shouldSkipHistoryUrlImpl(url) }
 
     // ---------------------------------------------------------------- 崩溃日志
 
@@ -298,10 +305,14 @@ object CoreNative {
     // 全部 private —— 调用方只能走上面的防护网包装。
     //
     // ⚠️ 签名与随包 `.so` 的关系：`displayForUrlImpl` 在 2026-10-15 多了 `engineId` 形参
-    // （M5），同批还有 Rust 侧的 CESU-8 解码修正（H3）。三颗 `.so` 是在那台 Linux 环境
-    // 交叉编译的，本机没有 android target ⇒ **重建之前**这两个符号在真机上分别表现为
-    // UnsatisfiedLinkError / 旧编码行为，都由 [guard] 兜住（关键词回显降级为 null）。
-    // 与 Kotlin 声明的一致性由 `BridgeSignatureParityTest` 钉，不靠人回忆。
+    // （M5），同批还有 Rust 侧的 CESU-8 解码修正（H3）。随包这三颗是 2026-10-10 那批、在另一台机器上
+    // 交叉编译的；本机 2026-10-18 起**已装**三个 android target 并能重编三 ABI（按裁定**只产、只比对、
+    // 不替换** flavor 里那三颗）⇒ **重建之前**它们在真机上的表现**不是**报错：
+    // 导出是短名（非重载方法的 JNI 查找不带描述符），4 参声明会**成功绑定**到 3 参 callee，
+    // 多余实参由各 ABI 的调用方清理 ⇒ **静默跑旧语义**（别名表不命中、关键词不回显，
+    // 无异常无日志）；H3 那条同理是旧编码行为。只有符号整体缺失才 UnsatisfiedLinkError。
+    // ⇒ 这类漂移不能指望真机给信号：签名一致性由 `BridgeSignatureParityTest` 钉、
+    //   「本机能不能重编 / 16K 对齐 / profile 拷贝」由 `ReleaseGateConsistencyTest` 钉，都不靠人回忆。
     // ================================================================
 
     private external fun resolveInfoImpl(input: String, template: String): Array<String>?

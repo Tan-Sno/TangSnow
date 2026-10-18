@@ -32,8 +32,11 @@ fn opt_str(env: &mut JNIEnv, s: &JString) -> Option<String> {
         // 硬解，一颗 emoji 静默变成六个 U+FFFD（2026-10-15 外部审查 H3）。
         Ok(v) => Some(crate::decode_java_modified_utf8(v.to_bytes())),
         Err(e) => {
-            let p = if env.exception_occurred().is_ok() { "yes" } else { "no" };
+            let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
             jlog(&format!("opt_str: get_string failed err={e:?}, pending_ex={p}"));
+            // 失败即「降级返回 None」，必须把 pending exception 清掉：带着未决异常继续调 JNI
+            // 是未定义行为（与 resolveInfoImpl 的失败分支同口径）。2026-10-17 补。
+            let _ = env.exception_clear();
             None
         }
     }
@@ -59,8 +62,10 @@ fn ret_str(env: &mut JNIEnv, s: Option<String>) -> jstring {
         Some(v) => match env.new_string(v) {
             Ok(js) => js.into_raw(),
             Err(_) => {
-                let p = if env.exception_occurred().is_ok() { "yes" } else { "no" };
+                let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
                 jlog(&format!("ret_str: new_string failed, pending_ex={p}"));
+                // 同 opt_str：降级返回 null 前把 pending exception 清掉（2026-10-17 补）。
+                let _ = env.exception_clear();
                 std::ptr::null_mut()
             }
         },
@@ -77,7 +82,7 @@ fn ret_string(env: &mut JNIEnv, s: String) -> jstring {
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_percentEncodeImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     value: JString,
 ) -> jstring {
     match opt_str(&mut env, &value) {
@@ -89,7 +94,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_percentE
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_looksLikeUriImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     input: JString,
 ) -> jboolean {
     match opt_str(&mut env, &input) {
@@ -101,7 +106,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_looksLik
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_isLocalNetworkAddressImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     input: JString,
 ) -> jboolean {
     match opt_str(&mut env, &input) {
@@ -113,7 +118,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_isLocalN
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_schemeOfImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     input: JString,
 ) -> jstring {
     match opt_str(&mut env, &input) {
@@ -125,7 +130,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_schemeOf
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_isWebNavigationSchemeImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     scheme: JString,
 ) -> jboolean {
     url_utils::is_web_navigation_scheme(opt_str(&mut env, &scheme).as_deref()) as jboolean
@@ -134,7 +139,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_isWebNav
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_isNeverWebContentSchemeImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     scheme: JString,
 ) -> jboolean {
     url_utils::is_never_web_content_scheme(opt_str(&mut env, &scheme).as_deref()) as jboolean
@@ -143,7 +148,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_isNeverW
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_isPortableUrlImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     url: JString,
 ) -> jboolean {
     url_utils::is_portable_url(opt_str(&mut env, &url).as_deref()) as jboolean
@@ -152,7 +157,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_isPortab
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_toAsciiUrlImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     input: JString,
 ) -> jstring {
     match opt_str(&mut env, &input) {
@@ -165,12 +170,12 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_toAsciiU
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_resolveInfoImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     input: JString,
     template: JString,
 ) -> jni::sys::jobjectArray {
     let (Some(input), Some(template)) = (opt_str(&mut env, &input), opt_str(&mut env, &template)) else {
-        let p = if env.exception_occurred().is_ok() { "yes" } else { "no" };
+        let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
         jlog(&format!("resolveInfo: args failed, pending_ex={p}"));
         return std::ptr::null_mut();
     };
@@ -182,7 +187,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_resolveI
     let arr = match env.new_object_array(2, "java/lang/String", JObject::null()) {
         Ok(a) => a,
         Err(_) => {
-            let p = if env.exception_occurred().is_ok() { "yes" } else { "no" };
+            let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
             jlog(&format!("resolveInfo: new_object_array failed, pending_ex={p}"));
             return std::ptr::null_mut();
         }
@@ -196,13 +201,13 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_resolveI
         let ok0 = env.set_object_array_element(&arr, 0, u).is_ok();
         let ok1 = env.set_object_array_element(&arr, 1, f).is_ok();
         if !(ok0 && ok1) {
-            let p = if env.exception_occurred().is_ok() { "yes" } else { "no" };
+            let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
             jlog(&format!("resolveInfo: set_array failed(ok0={ok0},ok1={ok1}), pending_ex={p}"));
             let _ = env.exception_clear();
             return std::ptr::null_mut();
         }
     } else {
-        let p = if env.exception_occurred().is_ok() { "yes" } else { "no" };
+        let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
         jlog(&format!("resolveInfo: new_string failed, pending_ex={p}"));
         let _ = env.exception_clear();
         return std::ptr::null_mut();
@@ -213,7 +218,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_resolveI
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_extractUrlFromTextImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     text: JString,
 ) -> jstring {
     match opt_str(&mut env, &text) {
@@ -227,7 +232,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_extractU
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_searchUrlFromTemplateImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     template: JString,
     query: JString,
 ) -> jstring {
@@ -241,7 +246,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_searchUr
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_templateHostOfImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     template: JString,
 ) -> jstring {
     match opt_str(&mut env, &template) {
@@ -253,7 +258,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_template
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_hostMatchesImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     host: JString,
     engine_id: JString,
     template_host: JString,
@@ -271,7 +276,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_hostMatc
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_displayForUrlImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     url: JString,
     template: JString,
     query_param: JString,
@@ -335,7 +340,7 @@ impl From<JsonEntry> for Entry {
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_bookmarkParseImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     html: JString,
     now_ms: jlong,
 ) -> jstring {
@@ -358,7 +363,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_bookmark
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_bookmarkSanitizeImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     raw_json: JString,
     existing_json: JString,
 ) -> jstring {
@@ -386,7 +391,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_bookmark
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_bookmarkExportImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     bookmarks_json: JString,
 ) -> jstring {
     let Some(json) = opt_str(&mut env, &bookmarks_json) else {
@@ -418,7 +423,7 @@ struct BookmarkJson {
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_shouldSkipHistoryUrlImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     url: JString,
 ) -> jboolean {
     match opt_str(&mut env, &url) {
@@ -432,7 +437,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_shouldSk
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_crashRedactUrlsImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     text: JString,
 ) -> jstring {
     match opt_str(&mut env, &text) {
@@ -444,7 +449,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_crashRed
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_crashDisplayStampImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     file_name: JString,
 ) -> jstring {
     match opt_str(&mut env, &file_name) {
@@ -457,8 +462,8 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_crashDis
 
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_bitmapRequiredSampleSizeImpl(
-    _env: &mut JNIEnv,
-    _class: &JClass,
+    _env: JNIEnv,
+    _class: JClass,
     out_w: jint,
     out_h: jint,
     req_w: jint,
@@ -470,8 +475,8 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_bitmapRe
 
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_bitmapCenterCropRectImpl(
-    mut env: JNIEnv,
-    _class: &JClass,
+    env: JNIEnv,
+    _class: JClass,
     src_w: jint,
     src_h: jint,
     target_w: jint,
@@ -492,7 +497,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_bitmapCe
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dlParseFileNameImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     content_disposition: JString,
     url: JString,
 ) -> jstring {
@@ -504,7 +509,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dlParseF
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dlSanitizeFileNameImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     raw: JString,
 ) -> jstring {
     match opt_str(&mut env, &raw) {
@@ -516,7 +521,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dlSaniti
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dlIsExecutableNameImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     file_name: JString,
 ) -> jboolean {
     match opt_str(&mut env, &file_name) {
@@ -528,7 +533,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dlIsExec
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dlBareMimeTypeImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     raw: JString,
 ) -> jstring {
     let r = opt_str(&mut env, &raw);
@@ -543,7 +548,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dlBareMi
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_legalParseBoldRangesImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     raw: JString,
 ) -> jintArray {
     let Some(t) = opt_str(&mut env, &raw) else { return std::ptr::null_mut() };
@@ -571,7 +576,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_legalPar
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_upNormalizeVersionImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     raw: JString,
 ) -> jstring {
     match opt_str(&mut env, &raw) {
@@ -583,7 +588,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_upNormal
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_upIsNewerImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     remote: JString,
     local: JString,
 ) -> jboolean {
@@ -596,7 +601,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_upIsNewe
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_upIsTrustedTargetImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     raw: JString,
     scheme: JString,
     host: JString,
@@ -618,7 +623,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_upIsTrus
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_upPickAssetImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     assets_joined: JString,
     abis_joined: JString,
 ) -> jstring {
@@ -635,7 +640,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_upPickAs
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_prefsNormalizeUrlImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     input: JString,
 ) -> jstring {
     match opt_str(&mut env, &input) {
@@ -652,7 +657,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_prefsNor
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dtParseLooseImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     kind: JString,
     raw: JString,
 ) -> jstring {
@@ -668,7 +673,7 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dtParseL
 #[no_mangle]
 pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_dtFormatChosenImpl(
     mut env: JNIEnv,
-    _class: &JClass,
+    _class: JClass,
     kind: JString,
     with_seconds: jboolean,
     y: jint,
