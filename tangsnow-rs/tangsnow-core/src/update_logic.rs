@@ -58,15 +58,18 @@ pub fn normalize_version(raw: &str) -> String {
 }
 
 /// [`normalize_version`] 的段化形态；任一段非数字（含空串）时返回 None。
-fn segments(v: &str) -> Option<Vec<i64>> {
+fn segments(v: &str) -> Option<Vec<i32>> {
     let norm = normalize_version(v);
     if norm.is_empty() {
         return None;
     }
     let mut out = Vec::with_capacity(4);
     for p in norm.split('.') {
-        // Kotlin `toIntOrNull`：全数字（可带 +/- 前缀）才可解析；段由 \d+ 构成，只可能超界
-        match p.parse::<i64>() {
+        // Kotlin `toIntOrNull`：解析成 **Int**（i32），超界即视为「不可解析」→ `return null`。
+        // 段由 `\d+` 构成，词法上只可能是「数字太大」，所以必须用 i32 而不是更宽的 i64 ——
+        // 否则 `99999999999.0` 这种 tag 在 Rust 侧会被判成可比较、进而提示「有新版本」，
+        // 而 Kotlin 侧判不可解析（2026-10-17 修）。
+        match p.parse::<i32>() {
             Ok(n) => out.push(n),
             Err(_) => return None,
         }
@@ -133,10 +136,14 @@ pub fn pick_asset(assets_joined: &str, abis_joined: &str) -> Option<String> {
         return None;
     }
     for abi in abis_joined.split('\n') {
-        if abi.is_empty() {
+        // Kotlin 侧是 `abi.isBlank()`（UpdateChecker.kt:214）—— 空白项也要跳过；
+        // 判空白用的是 java_is_whitespace（= Java isWhitespace ∪ isSpaceChar），与主包同口径。
+        if abi.is_empty() || abi.chars().all(crate::java_is_whitespace) {
             continue;
         }
-        let needle = format!("-{}-", abi);
+        // haystack 已 lowercase，needle 也必须 lowercase —— Kotlin 是
+        // `contains("-${abi}-", ignoreCase = true)`。ABI 串含大写时旧实现恒不命中（2026-10-17 修）。
+        let needle = format!("-{}-", abi.to_ascii_lowercase());
         for a in &apks {
             if a.to_ascii_lowercase().contains(&needle) {
                 return Some((*a).to_string());
@@ -280,6 +287,9 @@ mod tests {
         assert_eq!(pick_asset("notes.txt", "arm64-v8a"), None);
         assert_eq!(pick_asset("x.apk", "x86"), None);
         assert_eq!(pick_asset("", "arm64-v8a"), None);
+        // 空白 ABI 项不参与匹配 —— Kotlin 侧是 `abi.isBlank()`（UpdateChecker.kt:214）。
+        assert_eq!(pick_asset("app- -release.apk", " "), None);
+        assert_eq!(pick_asset("app-\u{00A0}-release.apk", "\u{00A0}"), None);  // U+00A0：Java isSpaceChar ⇒ 同样算空白
     }
 
     #[test]

@@ -15,7 +15,7 @@ static HOST_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?",
         r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+",
-        r"(?::\d{1,5})?",
+        r"(?::[0-9]{1,5})?",
         r#"(?:/[^ \t\n\x0B\x0C\r]*)?$"#,
     ))
     .unwrap()
@@ -26,20 +26,30 @@ static SCHEME_RE: LazyLock<Regex> =
 
 /// 本机地址：localhost 及其子域，可带端口与路径（按 http 处理——本机服务默认不启用 TLS）。
 static LOCALHOST_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)^(?:[A-Za-z0-9-]+\.)*localhost(?::\d{1,5})?(?:/[^ \t\n\x0B\x0C\r]*)?$").unwrap()
+    // `(?i-u)`：Java 的 `IGNORE_CASE`（未开 `UNICODE_CASE`）只折叠 ASCII，而 Rust `(?i)`
+    // 默认走 Unicode 简单大小写折叠（`ſ`↔`s`、`K`↔`k`）⇒ 会把 `localhoſt` 判成地址；
+    // 关掉 `u` 后 `[0-9]` 也回到 Java 的 ASCII 口径（2026-10-17 修）。
+    // 但 `-u` 下**取反字符类**会退化成字节类、可匹配非法 UTF-8，`Regex::new` 直接报
+    // "pattern can match invalid UTF-8"（bench_smoke 抓到）——故路径那一段用 `(?u:…)`
+    // 局部把 Unicode 打开：既保留「`/` 后可含 CJK」的原语义，又不许匹配非法字节。
+    Regex::new(
+        r"(?i-u)^(?:[A-Za-z0-9-]+\.)*localhost(?::[0-9]{1,5})?(?:/(?u:[^ \t\n\x0B\x0C\r]*))?$",
+    )
+    .unwrap()
 });
 
 /// 单标签主机 + 端口（如 `nas:5000`）：不含点会被 HOST_RE 判非域名，但有明确端口，
 /// 是「地址」而非「搜索词」。
 static LAN_HOST_PORT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?:\d{1,5}(?:/[^ \t\n\x0B\x0C\r]*)?$")
+    Regex::new(r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?:[0-9]{1,5}(?:/[^ \t\n\x0B\x0C\r]*)?$")
         .unwrap()
 });
 
 /// 从分享文本里抓第一个 http(s) 链接。`\S` 按 Java 默认语义 = ASCII 空白的补集
 ///（**包含** CJK 等全部非 ASCII 字符——这是 CJK 截断必要性的前提）。
+/// 取反类同样用 `(?u:…)` 局部开 Unicode，理由见 `LOCALHOST_RE`。
 static URL_IN_TEXT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)https?://[^ \t\n\x0B\x0C\r]+").unwrap());
+    LazyLock::new(|| Regex::new(r"(?i-u)https?://(?u:[^ \t\n\x0B\x0C\r]+)").unwrap());
 
 /// CJK 标点：从这里起硬截断（真实 URL 几乎不含，是说明文字黏连的切点）。
 static CJK_URL_CUTTER_RE: LazyLock<Regex> =

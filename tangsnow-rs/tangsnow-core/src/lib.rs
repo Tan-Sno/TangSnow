@@ -36,18 +36,27 @@ pub mod url_utils;
 #[cfg(feature = "jni")]
 pub mod jni;
 
-/// Kotlin `Char.isWhitespace()`（= Java `Character.isWhitespace`）的 Rust 对齐实现。
+/// Kotlin `Char.isWhitespace()` 的 Rust 对齐实现。
 ///
-/// Rust `char::is_whitespace` 用 Unicode `White_Space` 属性，与 Java 的差异点：
-///  - U+00A0 / U+2007 / U+202F（不换行空格系）：Java 判 **false**，Rust 判 true；
+/// Kotlin stdlib（`kotlin/text/CharJVM.kt`）把它实现为
+/// `Character.isWhitespace(c) || Character.isSpaceChar(c)` —— 是**两个** Java 判定的并集，
+/// 而 `String.trim()` / `isBlank()` / `any { it.isWhitespace() }` 全走它。
+///
+/// Rust `char::is_whitespace` 用 Unicode `White_Space` 属性，与该并集的差异点：
+///  - U+00A0 / U+2007 / U+202F（不换行空格系，属 `Zs`）：`isSpaceChar` 判 **true**，
+///    而 `Character.isWhitespace` 特意排除 ⇒ 并集里**算空白**，Rust 也算 true（一致）；
+///  - U+0085（NEL）：`White_Space` 判 true，但它既非 `Zs/Zl/Zp` 也不在
+///    `Character.isWhitespace` 的显式表里 ⇒ Kotlin 判 **false**（Rust 多算了它）；
 ///  - U+001C..=U+001F（信息分隔符）：Java 判 **true**，Rust 判 false。
 ///
-/// Kotlin 源码里的 `trim()` / `isWhitespace()` 一律经此函数走到与 JVM 相同的判定。
+/// 所以「Rust 的 `White_Space` 去掉 U+0085，再补上 U+001C..=U+001F」即等于 Kotlin 的集合。
+/// 旧实现恰好**反向**：多减了 U+00A0/U+2007/U+202F（`Zs` 一族，Kotlin 是算空白的），
+/// 又漏了 U+0085 —— 两侧在 4 个码点上不等价（2026-10-17 修）。
 pub fn java_is_whitespace(c: char) -> bool {
     matches!(
         c,
         '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | '\u{1C}'..='\u{1F}'
-    ) || (c.is_whitespace() && !matches!(c, '\u{A0}' | '\u{2007}' | '\u{202F}'))
+    ) || (c.is_whitespace() && c != '\u{0085}')
 }
 
 /// Kotlin `String.trim()` 的对齐实现（两端剥掉 [`java_is_whitespace`] 命中的字符）。

@@ -206,10 +206,17 @@ pub fn display_for_url(url: &str, engines: &[SearchEngine]) -> Option<String> {
         if !host_matches(&host, &engine.id, &tpl_host) {
             continue;
         }
+        // Kotlin 用 `Uri.getQueryParameter(param)`：**只取该参数第一个出现的值**（空串也算
+        // 「取到了」），再判 `isNullOrBlank()`；空白 ⇒ 本引擎不回显（continue 下一个引擎），
+        // 而**不会**继续往后找同名参数。旧实现遍历所有键值对、取首个非空白的值 ⇒
+        // `?q=&q=hello` 这类页面（重定向链/模板拼接都会产出）两侧结论相反：Kotlin 判「不是该引擎
+        // 结果页」（地址栏显示整条 URL），Rust 却回显 `hello`（2026-10-17 修）。
         for (k, v) in parsed.query_pairs() {
-            // Kotlin `!query.isNullOrBlank()`：空串或全 Java 空白 ⇒ 不算关键词
-            if k == param && !v.is_empty() && !v.chars().all(crate::java_is_whitespace) {
-                return Some(v.into_owned());
+            if k == param {
+                if !v.is_empty() && !v.chars().all(crate::java_is_whitespace) {
+                    return Some(v.into_owned());
+                }
+                break; // 第一处即空/全空白：本引擎不回显，交给外层 for 走下一个引擎
             }
         }
     }
