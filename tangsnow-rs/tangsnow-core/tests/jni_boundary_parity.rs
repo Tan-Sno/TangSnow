@@ -61,7 +61,11 @@ fn 引擎_id_由_kotlin_传进来而不是桥层自造() {
     assert!(
         f.contains("engine_id: JString"),
         "displayForUrlImpl 的参数里没有 engine_id —— Kotlin 侧 `CoreNative.displayForUrlImpl` \
-         已带这个形参，两边少一个就是 UnsatisfiedLinkError（由 guard 兜成降级，但口径就错了）"
+         已带这个形参。⚠️ 少一个形参**不会**报 UnsatisfiedLinkError：导出是短名（非重载方法的 JNI 查找\
+         不带描述符；2026-10-18 实测随包 `.so` 的 34 个导出里没有 `___` 签名形式，Kotlin 侧该方法也只有\
+         一个声明），多余实参由各 ABI 的调用方清理 ⇒ 绑定成功、callee 直接无视它 ⇒ 真机上**静默跑旧语义**\
+         （别名表不命中、关键词不回显），既没有异常也没有日志。只有符号整体缺失才抛 UnsatisfiedLinkError\
+         —— 所以这类漂移只能靠本哨兵钉，别指望真机报错"
     );
     // 缺失/空 id 走 custom_ 前缀 = 不配别名，与 Kotlin 对自定义引擎的口径一致
     assert!(
