@@ -373,11 +373,16 @@ object DownloadRepo {
     private fun recordStalePromotion(context: Context, entry: StalePromotion) =
         synchronized(recordsLock) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            // 内容损坏时以空队列兜底（与 [sweepStalePromotions] 同口径）：丢弃坏值、追加新条目、
-            // 覆盖写回自愈，绝不因一次解析失败抛穿当前登记流程。
+            val rawQueue = prefs.getString(KEY_STALE_PROMOTIONS, "[]").orEmpty()
+            // 内容损坏时以空队列兜底（与 [sweepStalePromotions] 同口径）：追加新条目、覆盖写回自愈，
+            // 绝不因一次解析失败抛穿当前登记流程。但坏值不再无声湮灭 —— 先 [quarantineCorrupt]
+            // 留 `<key>.corrupt` 备份，与 KEY_IDS / KEY_MANAGED 的处置一致（待办 #36）。
             val arr = runCatching {
-                org.json.JSONArray(prefs.getString(KEY_STALE_PROMOTIONS, "[]"))
-            }.getOrElse { org.json.JSONArray() }
+                org.json.JSONArray(rawQueue)
+            }.getOrElse {
+                quarantineCorrupt(context, KEY_STALE_PROMOTIONS, rawQueue)
+                org.json.JSONArray()
+            }
             arr.put(
                 org.json.JSONObject()
                     .put("uri", entry.uri)
@@ -417,12 +422,15 @@ object DownloadRepo {
         // 再次拿同一把锁不会有问题。
         synchronized(recordsLock) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val arr = runCatching { org.json.JSONArray(prefs.getString(KEY_STALE_PROMOTIONS, "[]")) }
+            val rawQueue = prefs.getString(KEY_STALE_PROMOTIONS, "[]").orEmpty()
+            val arr = runCatching { org.json.JSONArray(rawQueue) }
                 .getOrElse {
-                    // 队列内容损坏 ⇒ **清掉**它。原先只 `return`：坏值会一直留在 prefs 里，
-                    // 每次扫尾都在这里失败并返回，**永远**不会被清理，队列也就永久失效。
-                    // 出队是安全的：这里存的只是「转正待重试」的候选，丢了最多是那几行不再自动
-                    // 转正，**不会删任何文件**（内容与行都还在）。
+                    // 队列内容损坏 ⇒ **先隔离留证、再清掉**。原先直接 `remove`：坏值被无声
+                    // 丢弃，与 KEY_IDS / KEY_MANAGED 走 [quarantineCorrupt] 的口径不一致
+                    // （外部审查 P4-5 / 待办 #36）。出队本身是安全的：这里存的只是「转正待重试」
+                    // 的候选，丢了最多是那几行不再自动转正，**不会删任何文件**（内容与行都还在）。
+                    // 也修正旧注释担心的「坏值留在 prefs 里每次失败」——留证键名不同，不影响本键。
+                    quarantineCorrupt(context, KEY_STALE_PROMOTIONS, rawQueue)
                     prefs.edit().remove(KEY_STALE_PROMOTIONS).apply()
                     return
                 }
