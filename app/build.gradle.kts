@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **302**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **305**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -403,6 +403,8 @@ android {
         //   `clientsecret` 等 13 种形态）不再漏网，`CrashLoggerRedactTest` 再 +4 例 ⇒ 合计 **288**；
         //   2026-10-19 同轮再堵下载「干净断流报成功」：为长度收尾校验（`expectedBodyLength` /
         //   `bodyLengthMismatch`，外部审查 P4-4 / 待办 #31）加 `DownloadBodyLengthTest` 14 例 ⇒ 合计 **302**。
+        //   2026-10-19 A1 轮（Rust 独立应用身份 `.rust`）：为更新链通道判定加 `UpdateCheckerTest.channelOf`
+        //   3 例（正式线 / 预览线 / `rusty` 同前缀仍判正式线）⇒ 合计 **305**。
         //   （上一版这里被我写成 274 —— `TestCountCommentTest` 当场把这句注释本身钉红了，钉子有效。）
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则两个 flavor 的单测任务
         //   （`:app:testCoreKotlinDebugUnitTest` / `:app:testCoreRustDebugUnitTest`）都直接红。

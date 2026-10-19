@@ -498,6 +498,15 @@ class SettingsFragment : PreferenceFragmentCompat() {
      */
     private fun checkUpdate() {
         val context = requireContext()
+
+        // A1（P3-a，2026-10-19）：Rust 预览线（`…tangsnow.rust`）不内置自检 —— `LATEST_RELEASE_API`
+        // 恒指 Kotlin 正式线，点了只会看到 Kotlin 的版本；且下载/安装全交外部应用、应用内无处核对
+        // 包名（见 A1 蓝图 §2 P3）。故直接给发布页这个不依赖 api.github.com 的出口。
+        if (UpdateChecker.channelOf(context.packageName) == UpdateChecker.Channel.RUST) {
+            openReleasesPage()
+            return
+        }
+
         val current = UpdateChecker.current(context)
 
         // 积极按钮（下载）与中性按钮（打开发布页）在 Builder 阶段就声明，结果回来后只做

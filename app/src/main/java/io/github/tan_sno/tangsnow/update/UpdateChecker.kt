@@ -125,6 +125,22 @@ object UpdateChecker {
 
     // ---------------------------------------------------------------- 纯逻辑（可单测）
 
+    /** 应用身份通道（A1，2026-10-19）：Kotlin 正式线与 Rust 预览线是两个独立 applicationId。 */
+    enum class Channel { KOTLIN, RUST }
+
+    /**
+     * 由 applicationId 判定通道。`.rust` 后缀 = Rust 预览线（见 A1 蓝图 §0）。
+     *
+     * 为什么需要它：[LATEST_RELEASE_API] 恒指仓库**最新** release（= Kotlin 正式线），
+     * 而 Rust 线若发布走的是另一条 tag 线；Rust 包**不内置自检**（P3-a 裁定）——
+     * 由界面据本函数把「检查更新」改成发布页出口，避免把 Kotlin 的版本误当自己的更新。
+     *
+     * 用 `endsWith(".rust")` 而非 `contains("rust")`：`…tangsnow.rusty` 这类同前缀身份
+     * 必须仍判 Kotlin（否则同样会串线）。
+     */
+    internal fun channelOf(applicationId: String): Channel =
+        if (applicationId.endsWith(".rust")) Channel.RUST else Channel.KOTLIN
+
     /**
      * 把 tag 名规整成可比较的版本号：去掉前缀 `v` / `V`，截掉首个非数字后缀。
      *

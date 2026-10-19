@@ -155,6 +155,27 @@ class UpdateCheckerTest {
         assertNull(UpdateChecker.pickAsset(listOf("mapping.txt", "notes.md"), listOf("arm64-v8a")))
     }
 
+    // ---------------------------------------------------------------- channelOf
+
+    @Test
+    fun `kotlin 身份判为正式线`() {
+        assertEquals(UpdateChecker.Channel.KOTLIN, UpdateChecker.channelOf("io.github.tan_sno.tangsnow"))
+    }
+
+    @Test
+    fun `rust 后缀身份判为预览线`() {
+        assertEquals(UpdateChecker.Channel.RUST, UpdateChecker.channelOf("io.github.tan_sno.tangsnow.rust"))
+    }
+
+    @Test
+    fun `同前缀但不以点 rust 结尾的身份仍判正式线`() {
+        // endsWith(".rust") 而非 contains("rust")：下面这些都不是预览线（串线会让 Rust 包
+        // 把 Kotlin 线的版本当成自己的更新）
+        assertEquals(UpdateChecker.Channel.KOTLIN, UpdateChecker.channelOf("io.github.tan_sno.tangsnow.rusty"))
+        assertEquals(UpdateChecker.Channel.KOTLIN, UpdateChecker.channelOf("io.github.tan_sno.tangsnow"))
+        assertEquals(UpdateChecker.Channel.KOTLIN, UpdateChecker.channelOf(""))
+    }
+
     // ------------------------------------------------------- isTrustedApkTarget
 
     @Test
