@@ -1,3 +1,4 @@
+# AI生成
 #!/usr/bin/env bash
 # AI生成
 # 构建 tangsnow-core 的 Android .so（三个 ABI），输出到 dist/jniLibs/。
@@ -81,11 +82,36 @@ export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$T/aarch64-linux-android26-cla
 export CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER="$T/armv7a-linux-androideabi26-clang$CLANG_EXT"
 export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$T/x86_64-linux-android26-clang$CLANG_EXT"
 
+# ── 路径重映射（2026-10-19：构建从 Linux 交叉编译机迁回本机 Windows 后新增）──
+# 旧产物嵌的是编译机 cargo 缓存路径 `/home/z/.cargo/registry/src/…` —— 用户名只有一个字符，
+# 评级低，但**类别不对**：发布物里不该带编译机路径。本机（Windows）直编会嵌**真实用户名**：
+#   `C:\Users\<user>\.cargo\registry\src\…`、`C:\Users\<user>\.rustup\toolchains\…`
+# 实测（2026-10-19，debug 产物）：真实用户名出现 2797 次、`.cargo` 484 次。
+# 这些字符串随 .so 进 APK、进已发给别人的包 ⇒ 必须重映射。前缀全部**动态取**，
+# 脚本本身不写死用户名/盘符；末尾「产物路径泄漏自检」兜底 —— 漏了就直接红，不会静默入仓。
+REMAP=""
+_add_remap() {
+  [ -n "${1:-}" ] || return 0
+  local n="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    n="$(cygpath -w "$1")" || n="$1"
+  fi
+  case "$n" in *" "*) echo "路径含空格，RUSTFLAGS 无法安全承载重映射：$n" >&2; exit 1 ;; esac
+  REMAP="$REMAP --remap-path-prefix=$n=~"
+}
+# ① 用户目录（覆盖 %USERPROFILE%\.cargo 与 %USERPROFILE%\.rustup）；② CARGO_HOME 若被改到别处；
+# ③ 仓库根 —— 本脚本已 `cd` 进 `tangsnow-rs/tangsnow-core`，故仓库根就是 `../../..`。
+_add_remap "${USERPROFILE:-$HOME}"
+_add_remap "${CARGO_HOME:-}"
+_add_remap "$(cd ../../.. && pwd)"
+
 # 16KB 页对齐（Android 15+ 新设备的硬要求）：
 # NDK r27 链接器默认 max-page-size=4096，产出的 so 在 16KB 页内核的设备上
 # 会被 PackageManager 在解析阶段直接拒绝（症状=「无法解析包」），r28 才改默认 16K。
 # 显式链接参数让 p_align=16384，4KB 老设备向后兼容不受影响。三 ABI 统一加，无害。
-export RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384"
+# （2026-10-19 本机实测：r30-beta3 产出的 debug 产物三个 LOAD 段 p_align 都是 0x4000 ✅）
+export RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384$REMAP"
+echo "RUSTFLAGS=$RUSTFLAGS"
 
 for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
   cargo build $PROFILE --target "$target" --features jni
@@ -104,11 +130,31 @@ cp "../target/x86_64-linux-android/$PROFILEDIR/libtangsnow_core.so" "$OUT/x86_64
 echo
 echo "产物（$PROFILEDIR）："
 ls -lh "$OUT"/*/libtangsnow_core.so
+
+# 产物路径泄漏自检（防回退：漏了上面的 --remap-path-prefix 就直接红，不入仓）
+echo
+echo "== 产物路径泄漏自检 =="
+LEAK=0
+for so in "$OUT"/*/libtangsnow_core.so; do
+  [ -f "$so" ] || continue
+  if grep -a -q -E '(^|[^A-Za-z0-9])(/home/|/Users/|[A-Za-z]:\\[A-Za-z0-9_])' "$so"; then
+    echo "❌ $so：仍含绝对构建路径，例如：" >&2
+    grep -a -m3 -o -E '[[:print:]]{0,50}(/home/|/Users/|[A-Za-z]:\\[A-Za-z0-9_])[[:print:]]{0,60}' "$so" >&2
+    LEAK=1
+  fi
+done
+if [ "$LEAK" = 1 ]; then
+  echo "⇒ 检查 --remap-path-prefix（见本脚本上方注释）" >&2
+  exit 1
+fi
+echo "✅ 三 ABI 产物均未发现绝对构建路径"
+
 echo
 echo "下一步：把这三颗 .so 拷进 coreRust flavor 的 jniLibs（构建读的是那里，不是 dist/）："
 echo "  for a in arm64-v8a armeabi-v7a x86_64; do"
-echo "    cp ../dist/jniLibs/\$a/libtangsnow_core.so ../../app/src/coreRust/jniLibs/\$a/; done"
+echo "    cp ../../tangsnow-rs/dist/jniLibs/\$a/libtangsnow_core.so ../../app/src/coreRust/jniLibs/\$a/; done"
 echo "Kotlin 侧的桥（CoreNative.kt / CoreBridge.kt）**已在** app/src/coreRust/java/io/github/"
 echo "tan_sno/tangsnow/core/ 里，不需要再拷 dist/ 下的任何副本。签名是否两侧仍一致由"
-echo "app/src/test 的 BridgeSignatureParityTest 钉（gradle 门禁跑它）；本机没有 android"
-echo "target，所以这一步只在**能重建 .so 的环境**里有意义。"
+echo "app/src/test 的 BridgeSignatureParityTest 钉（gradle 门禁跑它）。"
+echo "注（2026-10-19 更正）：本机**已有**三个 android target + NDK r30，上面这一整套"
+echo "在本机就能跑完 —— 旧版这里写的「本机没有 android target」已不成立。"
