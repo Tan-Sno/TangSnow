@@ -7,6 +7,7 @@ import io.github.tan_sno.tangsnow.BuildConfig
 import io.github.tan_sno.tangsnow.GeckoHolder
 import io.github.tan_sno.tangsnow.data.PreferenceStore
 import io.github.tan_sno.tangsnow.data.SessionStore
+import io.github.tan_sno.tangsnow.data.Theme
 import io.github.tan_sno.tangsnow.data.repo.HistoryRepo
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.ContentBlocking
@@ -576,9 +577,28 @@ class BrowserSessionManager private constructor(
     /** 已执行过 [shutdown]，用于保证关机路径幂等（重复调用直接返回） */
     private var shutDown = false
 
+    /**
+     * App 主题 → 内核颜色方案。
+     *
+     * `Theme` 只驱动 Android 视图层（`ThemeController.apply` → `AppCompatDelegate`），
+     * 内核不知道 App 主题：不显式告知时它按系统值渲染 ⇒ 用户选「浅色」而系统是深色时，
+     * 网页仍走深色（`prefers-color-scheme` 不跟随 App）。故在两处告知内核：首建见 [runtime]，
+     * 热改见 [applyLiveSettings]。
+     *
+     * 为什么是成员扩展而不是放进 `data.Theme`：`COLOR_SCHEME_*` 是 GeckoView 常量，
+     * 按依赖方向约束（`ARCHITECTURE.md` §3）只有浏览器层可直接引用 GeckoView 类型。
+     */
+    private fun Theme.webColorScheme(): Int = when (this) {
+        Theme.SYSTEM -> GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM
+        Theme.LIGHT -> GeckoRuntimeSettings.COLOR_SCHEME_LIGHT
+        Theme.DARK -> GeckoRuntimeSettings.COLOR_SCHEME_DARK
+    }
+
     /** 重套会话级可热改设置（onResume 调用；值未变化时跳过以省开销） */
     fun applyLiveSettings() {
-        val key = "${prefs.javaScript}|${prefs.fontSize}"
+        // 主题进变化守卫：颜色方案属运行时级**可热改**项（157 的 `setPreferredColorScheme`
+        // 是实例方法，非 Builder 专有），主题一改就要重套，不能被「其余值都没变」挡掉。
+        val key = "${prefs.javaScript}|${prefs.fontSize}|${prefs.theme.key}"
         if (key == lastLiveKey) return
         lastLiveKey = key
 
@@ -593,6 +613,9 @@ class BrowserSessionManager private constructor(
             s.setSuspendMediaWhenInactive(true)
         }
         runtime().settings.setFontSizeFactor(prefs.fontSize)
+        // 主题切换会重建 Activity（清单 configChanges 不含 uiMode），但**不重建内核**
+        // （GeckoRuntime 是应用级单例）⇒ 不在这里重套，网页会停在旧配色。
+        runtime().settings.setPreferredColorScheme(prefs.theme.webColorScheme())
     }
 
     /**
@@ -1689,6 +1712,10 @@ class BrowserSessionManager private constructor(
                     // 内核自带的「全球隐私控制(GPC)」信号：向支持的网站声明“请勿出售/分享我的数据”。
                     // 默认开启，可在 设置→隐私与安全 关闭；仅发送声明，网站可自行决定是否尊重。
                     .globalPrivacyControlEnabled(prefs.gpcEnabled)
+                    // 网页颜色方案跟随 App 主题：`Theme` 只驱动视图层，内核默认走系统值，
+                    // 不显式告知就会出现「App 浅色 / 网页深色」的割裂（`prefers-color-scheme`）。
+                    // 首建用 Builder 项；主题变更后的重套见 applyLiveSettings()。
+                    .preferredColorScheme(prefs.theme.webColorScheme())
                     .build()
                 // 运行时级「指纹保护」(javap 实测：GeckoRuntimeSettings
                 // .setFingerprintingProtection(boolean)，非 Builder 方法)。
