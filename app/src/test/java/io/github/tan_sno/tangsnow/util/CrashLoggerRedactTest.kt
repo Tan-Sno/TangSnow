@@ -134,4 +134,45 @@ class CrashLoggerRedactTest {
         assertTrue("裸路径不属于 URL，必须保留（排障价值）", once.contains("/data/user/0/app/files/x.txt"))
         assertEquals("重复脱敏必须稳定（幂等）", once, CrashLogger.redact(once))
     }
+
+    // ---- 以下 4 条钉 2026-10-19 的第三层收紧：复合/粘连的凭据名与 JSON 带引号键 ----
+    // 背景：早期 `CREDENTIAL_PAIRS` 用固定词表 + `(?<![A-Za-z0-9_])`，把前缀为 `_` 或直接粘连的
+    // 复合名整类漏掉；实测 13 种形态一字不落落盘（`client_secret` / `id_token` / `secret_key` 等）。
+
+    @Test
+    fun `复合与粘连的凭据名也被收敛`() {
+        val out = CrashLogger.redact(
+            "client_secret=SUPERSECRET id_token=eyJabc.def secret_key=SECRETVALUE clientsecret=GLUED",
+        )
+        assertFalse("脱敏后不得含 client_secret 的值", out.contains("SUPERSECRET"))
+        assertFalse("脱敏后不得含 id_token 的值", out.contains("eyJabc"))
+        assertFalse("脱敏后不得含 secret_key 的值", out.contains("SECRETVALUE"))
+        assertFalse("脱敏后不得含粘连名 clientsecret 的值", out.contains("GLUED"))
+        assertEquals("client_secret=… id_token=… secret_key=… clientsecret=…", out)
+    }
+
+    @Test
+    fun `JSON 引号包裹的凭据键也被收敛`() {
+        val out = CrashLogger.redact("""{"client_secret":"SUPERSECRET"}""")
+        assertFalse("脱敏后不得含凭据值", out.contains("SUPERSECRET"))
+        // 注意：`\S+` 会把值后面的 `}` 一并吃掉（与既有 `token=abc123` 同口径，日志里少个花括号无碍隐私）
+        assertEquals("""{"client_secret":…""", out)
+    }
+
+    @Test
+    fun `下划线 key 家族（access_key 与 private_key）也被收敛`() {
+        // `key` 单独太泛（会误伤 keyboard/keyCode），故只显式纳入常见的 `<前缀>_key` 形态。
+        val out = CrashLogger.redact("access_key=AKIAIOSFODNN7EXAMPLE private_key=IEnjf8s")
+        assertFalse("脱敏后不得含 access_key 的值", out.contains("AKIAIOSFODNN7EXAMPLE"))
+        assertFalse("脱敏后不得含 private_key 的值", out.contains("IEnjf8s"))
+    }
+
+    @Test
+    fun `含敏感词的类名与普通词不被误伤`() {
+        // 判据要求敏感词所在标识符之后紧跟 `["']?\s*[:=]`；类名/普通句子里没有这个分隔，必须原样保留。
+        val frame = "at io.github.tan_sno.tangsnow.SessionManager.foo(SessionManager.kt:1603)"
+        val prose = "java.lang.IllegalStateException: session is not open"
+        assertEquals(frame, CrashLogger.redact(frame))
+        assertEquals(prose, CrashLogger.redact(prose))
+    }
 }

@@ -150,15 +150,27 @@ object CrashLogger {
      *
      * 键名**保留**（`token=…` 而不是整段删掉）：排障时仍能看出"这里原本有个 token"，
      * 只把值收敛掉，把对排障价值的损失压到最低。
+     *
+     * ⚠️ 判据是「**含敏感词的标识符**」而不是固定词表（2026-10-19 收紧）：早期写法
+     * `(?<![A-Za-z0-9_])(token|password|…)` 会把**前缀为 `_` 或直接粘连**的复合名整类漏掉 ——
+     * `client_secret=` / `id_token=` / `session_token=` / `csrf_token=` / `secret_key=` / `clientsecret=`
+     * 都不匹配（`token` 前是 `_` ⇒ 左侧边界失败；而词表里又没有这些复合名），实测 13 种形态一字不落落盘。
+     * 现改为「标识符中含敏感词」：`[A-Za-z0-9_]*敏感词[A-Za-z0-9_]*`，左侧边界放宽到 `(?<![A-Za-z0-9])`。
+     * 分隔符另容许一层 `["']?`，以收敛 JSON（`{"client_secret":"…"}`）里带引号的键。
+     * 误伤面由**分隔符**兜住：类名/普通词之后没有 `[:=]`（如 `SessionManager.kt:1603`、`session is not open`）
+     * 故不会被碰 —— 见 `CrashLoggerRedactTest` 的「含敏感词的类名与普通词不被误伤」用例。
      */
     internal fun redactCredentials(text: String): String =
         AUTH_SCHEME.replace(CREDENTIAL_PAIRS.replace(text) { m -> "${m.groupValues[1]}${m.groupValues[2]}…" }) { m ->
             "${m.groupValues[1]}${m.groupValues[2]}…"
         }
 
-    /** `键名 :|= 值` 形态（值吃到空白为止） */
+    /**
+     * `键名 :|= 值` 形态（值吃到空白为止）—— 键名是**含敏感词的标识符**，不是固定词表。
+     * `key` 单独太泛（会误伤 `keyboard=`），故只显式纳入常见的 `<前缀>_key` 形态。
+     */
     private val CREDENTIAL_PAIRS = Regex(
-        """(?<![A-Za-z0-9_])(token|password|passwd|secret|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|cookie|set-cookie|sessionid|session)(\s*[:=]\s*)\S+""",
+        """(?<![A-Za-z0-9])([A-Za-z0-9_]*(?:token|secret|passwd|password|passphrase|apikey|api[_-]?key|access[_-]?key|private[_-]?key|cookie|session)[A-Za-z0-9_]*)(["']?\s*[:=]\s*)\S+""",
         RegexOption.IGNORE_CASE,
     )
 
