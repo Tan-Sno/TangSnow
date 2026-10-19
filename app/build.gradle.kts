@@ -426,10 +426,13 @@ android {
         //   提示而不是带着空运行时进主界面。**versionCode 41（ABI 派生 411/412/413）**。
         versionCode = 41
         versionName = "2.2.0"
-        // 说明：本项目只有 JVM 单元测试（app/src/test），没有仪器测试（app/src/androidTest），
-        // 因此**不声明** testInstrumentationRunner，也不引入 espresso / androidx.test 系列依赖 ——
-        // 依赖表里留着一堆用不到的测试件，只会让「到底测了什么」变得不可信。
-        // 将来真要加仪器测试时，再把 runner 与 espresso 加回来即可。
+        // 仪器测试（2026-10-19 加回）：`app/src/androidTestCoreRust` 下有一道 JNI 边界断言
+        // （`libtangsnow_core.so` 是否真的加载 + 7 个 W1 函数是否绑定到**当前**签名）。
+        // 它只在**设备**上跑，是「Rust 接管」在真机上唯一的硬证据 —— JVM 单测里
+        // `CoreNative.available` 恒为 false，所有桥函数在进 native 之前就返回安全默认值。
+        // 依赖只加 runner、不引 espresso：断言是普通 JUnit4，没有 UI 驱动需求。
+        // 原先「不声明 + 不加依赖」的两条理由（没有 androidTest 源码、空转依赖）随本次加源码一并失效。
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // 正式签名配置：仅在 keystore.properties 存在时创建；缺省时不创建，
@@ -626,9 +629,11 @@ dependencies {
     }
     implementation(libs.zxing.core)
     implementation(libs.geckoview)
-    // 仅 JVM 单元测试（app/src/test）。仪器测试件（espresso / androidx.test）已移除：
-    // 项目没有 androidTest 源码，留着它们属于空转依赖（见 defaultConfig 注释）。
+    // JVM 单元测试（app/src/test）
     testImplementation(libs.junit)
+    // 仪器测试（app/src/androidTestCoreRust，2026-10-19 加回，理由见 defaultConfig 注释）
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.junit)
     // android.jar 的 org.json 在 JVM 测试里是抛 Stub! 的桩；用 Maven 真实实现覆盖
     // test classpath（仅测试可见，不进产物），SessionStore 的 JSON 往返才能被单测。
     testImplementation(libs.json)

@@ -12,6 +12,10 @@ zxingCore = "3.5.4"
 zxingEmbed = "4.3.0"
 coreKtx = "1.19.1"
 junit = "4.13.2"
+# 仅仪器测试用（app/src/androidTestCoreRust）：在**设备**上断言 Rust 核心的 JNI 边界。
+# 只取 runner，不引 espresso —— 断言全是普通 JUnit4，没有 UI 驱动需求。
+# 取 1.6.2：Google Maven 上现存的 stable（撰写时已核对 pom/aar 均 200 且抄下官方 sha1）。
+androidxTestRunner = "1.6.2"
 appcompat = "1.8.0"
 material = "1.14.0"
 activityKtx = "1.13.0"
@@ -24,6 +28,7 @@ json = "20260814"
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activityKtx" }
