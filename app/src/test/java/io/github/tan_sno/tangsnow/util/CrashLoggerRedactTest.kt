@@ -3,6 +3,7 @@ package io.github.tan_sno.tangsnow.util
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -88,5 +89,49 @@ class CrashLoggerRedactTest {
         // 这一条钉的是 P1-2 的第二半：值住在进程内存里，没有出口就会跨过无痕会话与清除动作。
         CrashLogger.clearHost()
         assertNull(CrashLogger.lastHostOrNull())
+    }
+
+    // ---- 以下 5 条钉 2026-10-19 补的两层：无 `//` 的 scheme 与不构成 URL 的凭据 ----
+    // 背景：`redactUrls` 只认 `scheme://…`，而异常 message 里更常见的是不带双斜杠的形态。
+
+    @Test
+    fun `mailto 链接收敛为 scheme 与省略号`() {
+        assertEquals(
+            "boom mailto:…",
+            CrashLogger.redact("boom mailto:alice@example.com?subject=hi"),
+        )
+    }
+
+    @Test
+    fun `data URI 不把内嵌内容写进日志`() {
+        val out = CrashLogger.redact("load data:text/html;base64,PGh0bWw+dXNlcg==")
+        assertFalse("脱敏后不得含内嵌 base64 内容", out.contains("PGh0bWw"))
+        assertEquals("load data:…", out)
+    }
+
+    @Test
+    fun `键值对凭据只收敛值并保留键名`() {
+        // 键名保留是刻意的：排障时仍能看出"这里原本有个 token"，只把值收敛掉。
+        assertEquals(
+            "token=… 与 password: …",
+            CrashLogger.redact("token=abc123 与 password: hunter2"),
+        )
+    }
+
+    @Test
+    fun `Bearer 认证方案后的凭据被收敛`() {
+        // 顺序敏感：若让键值层先吃掉 `Authorization: Bearer`，后面的 JWT 就成了无主的裸 token。
+        val out = CrashLogger.redact("Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc")
+        assertFalse("脱敏后不得含 JWT 片段", out.contains("eyJhbGci"))
+    }
+
+    @Test
+    fun `整体脱敏链幂等且不误伤裸路径`() {
+        val text = "err /data/user/0/app/files/x.txt 与 https://a.com/b?token=s 与 token=t"
+        val once = CrashLogger.redact(text)
+        assertFalse("URL 查询里的 token 不得残留", once.contains("token=s"))
+        assertFalse("裸 token 的值不得残留", once.contains("token=t"))
+        assertTrue("裸路径不属于 URL，必须保留（排障价值）", once.contains("/data/user/0/app/files/x.txt"))
+        assertEquals("重复脱敏必须稳定（幂等）", once, CrashLogger.redact(once))
     }
 }

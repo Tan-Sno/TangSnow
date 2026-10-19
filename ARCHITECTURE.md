@@ -123,7 +123,11 @@
 - **明文禁令**：`res/xml/network_security_config.xml` 的 `cleartextTrafficPermitted="false"`
   ⚠️ 只约束**应用自身 OkHttp**，对 GeckoView 无效（内核自带网络栈，必须能开 http 站点）。
 - **DNS 为明文**（未配置 TRR/DoH）：DoH 会新增对外端点，与"仅三个端点"承诺冲突，故刻意不用。
-- **崩溃日志**只写本机、可查看/删除；`CrashLogger` 脱敏（当前只覆盖 `scheme://` 形态 → 其它 URL 形态为已知待补）。
+- **崩溃日志**只写本机、可查看/删除；`CrashLogger` 落盘前经**三层脱敏**：
+  无 `//` 的 scheme（`mailto:` / `data:` 等，此前会把完整邮箱或内嵌内容写盘）、
+  不构成 URL 的凭据（`token=…` / `password: …` / `Bearer …`）、
+  以及 `scheme://…` URL 收敛为 `scheme://host[:port]/…`（userinfo 剥除）；
+  **裸路径刻意保留** —— 它不是 URL，且对排障价值更高（见 `notes-tangsnow/RESEARCH-2026-10-19-crashlogger-redaction-audit.md`）。
 
 ## 9. 安全面
 

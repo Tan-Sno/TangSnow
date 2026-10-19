@@ -138,8 +138,12 @@ never touches native; callers use `nullIsResult` to distinguish "legitimately em
   network stack and must be able to open http sites).
 - **DNS is plaintext** (no TRR/DoH configured): DoH would add an outbound endpoint, conflicting with the
   "exactly three endpoints" promise, so it is deliberately unused.
-- **Crash logs** are written locally only, viewable and deletable; `CrashLogger` redacts URLs
-  (currently covers the `scheme://` form only — other URL shapes are a known gap).
+- **Crash logs** are written locally only, viewable and deletable; `CrashLogger` runs **three redaction
+  layers** before writing: schemeless forms (`mailto:` / `data:` etc., which previously wrote a full
+  e-mail address or embedded content to disk), credentials that do not form a URL
+  (`token=…` / `password: …` / `Bearer …`), and `scheme://…` URLs collapsed to `scheme://host[:port]/…`
+  (userinfo stripped); **bare paths are deliberately kept** — they are not URLs and are more valuable
+  for triage (see `notes-tangsnow/RESEARCH-2026-10-19-crashlogger-redaction-audit.md`).
 
 ## 9. Security surface
 

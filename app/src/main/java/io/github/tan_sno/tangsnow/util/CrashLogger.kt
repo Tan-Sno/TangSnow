@@ -112,6 +112,82 @@ object CrashLogger {
     /** 文本里任意 `scheme://…` 形式的 URL（`\S+` 到空白为止；userinfo 由 [redactUrls] 剥掉） */
     private val URL_IN_TEXT = Regex("""([a-z][a-z0-9+.\-]*)://(\S+)""", RegexOption.IGNORE_CASE)
 
+    /**
+     * 无 `//` 的 scheme 脱敏：`mailto:alice@example.com` → `mailto:…`。
+     *
+     * [redactUrls] 只认 `scheme://…`（要求双斜杠），而 `mailto:` / `data:` / `javascript:` 这类
+     * **冒号后直接跟内容**的形态一字不落地进了日志 —— `mailto:` 会把完整邮箱地址写盘，
+     * `data:` 甚至可能内嵌整段用户内容。二者都撞政策第 7 条的「不含…账号或其它可识别您个人的浏览信息」。
+     *
+     * 用**白名单**而非黑名单：只收敛已知的「冒号后无 `//` 且可能含个人信息」的 scheme，
+     * 避免把正文里偶然出现的 `foo:` 也一并吃掉（脱敏不得破坏排障价值）。
+     * `(?!//)` 前瞻把 `content://…` / `file://…` 排除在外 —— 那些已由 [redactUrls] 处理成 host 形态，
+     * 不能被这里二次吃掉。
+     */
+    internal fun redactSchemeless(text: String): String =
+        SCHEMELESS.replace(text) { m -> "${m.groupValues[1]}:…" }
+
+    /**
+     * 冒号后**不接** `//` 的 scheme 白名单（接 `//` 的交给 [redactUrls]）。
+     *
+     * 末尾的 `\S*` 是**必需的**：只管到冒号就只能把 `mailto:` 换成 `mailto:…`，
+     * 后面的 `alice@example.com?subject=…` 会原样留在日志里 —— 等于白脱敏。
+     * 故把冒号之后、到空白为止的整段内容一并吃掉。
+     */
+    private val SCHEMELESS = Regex(
+        """(?<![A-Za-z0-9+.\-])(mailto|data|javascript|blob|tel|sms|intent|about):(?!//)\S*""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * 凭据脱敏：既处理 `token=…` / `password: …` 这类**键值对**，也处理 `Bearer …` 这类
+     * **认证方案 + 凭据**（无 `=` / `:` 分隔）。
+     *
+     * 为什么要单独一层：[redactUrls] 只管 URL，而异常 message 里更常见的恰恰是**不构成 URL** 的凭据
+     * —— `ExtensionsActivity` 自己就记着「网络类异常的 message 常带完整下载 URL」，而同一份 message
+     * 在 debug 走 Logcat（已被 `BuildConfig.DEBUG` 拦住）、在 release 走本对象落盘（此前只过 URL 层）。
+     * 两条出口强度不一致，等于「debug 看不见的凭据，在 release 的崩溃日志里留下」，且用户还能一键分享。
+     *
+     * 键名**保留**（`token=…` 而不是整段删掉）：排障时仍能看出"这里原本有个 token"，
+     * 只把值收敛掉，把对排障价值的损失压到最低。
+     */
+    internal fun redactCredentials(text: String): String =
+        AUTH_SCHEME.replace(CREDENTIAL_PAIRS.replace(text) { m -> "${m.groupValues[1]}${m.groupValues[2]}…" }) { m ->
+            "${m.groupValues[1]}${m.groupValues[2]}…"
+        }
+
+    /** `键名 :|= 值` 形态（值吃到空白为止） */
+    private val CREDENTIAL_PAIRS = Regex(
+        """(?<![A-Za-z0-9_])(token|password|passwd|secret|api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|cookie|set-cookie|sessionid|session)(\s*[:=]\s*)\S+""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * `认证方案 空格 凭据` 形态（无分隔符）。
+     *
+     * 顺序上必须**先于** [CREDENTIAL_PAIRS] 生效：若让键值层先吃掉 `Authorization: Bearer`，
+     * 后面的 `eyJ…` 就成了无主的裸 token 留在日志里 —— 恰好是这条要治的东西。
+     * 词表里的 `basic` / `token` 是常见英文词，但正则要求其后紧跟空白与一个非空白串，
+     * 故 `BasicFileAttributes`（`basic` 后是字母）不会被误伤。
+     */
+    private val AUTH_SCHEME = Regex(
+        """(?<![A-Za-z0-9_])(bearer|basic|digest|negotiate|apikey|api-key|token)(\s+)\S+""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * 落盘前的完整脱敏链（[write] 的唯一入口）。
+     *
+     * 顺序：**无 `//` 的 scheme → 凭据 → `scheme://…` URL**。
+     *  - scheme 层最先：先把 `data:` / `mailto:` 整体收掉，避免其内容被后面几层误判；
+     *  - URL 层最后兜底：其余带 `//` 的 URL 统一收敛成 `scheme://host[:port]/…`。
+     *
+     * 具备**幂等性**（`redact(redact(x)) == redact(x)`）：各层的产物（`scheme:…` / `key=…` /
+     * `scheme://host/…`）都不会再被同层或后续层二次改写，故重复调用结果稳定。
+     */
+    internal fun redact(text: String): String =
+        redactUrls(redactCredentials(redactSchemeless(text)))
+
     fun install(context: Context) {
         if (installed) return
         synchronized(this) {
@@ -154,8 +230,8 @@ object CrashLogger {
             appendLine("---- 堆栈 ----")
             val sw = StringWriter()
             throwable.printStackTrace(PrintWriter(sw))
-            // 限制单条日志体积，防止超大堆栈撑爆；同时做 URL 脱敏（见 redactUrls 的说明）
-            val stack = redactUrls(sw.toString())
+            // 限制单条日志体积，防止超大堆栈撑爆；同时做脱敏（见 redact 的说明）
+            val stack = redact(sw.toString())
             append(if (stack.length > 40_000) stack.take(40_000) + "\n…(堆栈过长已截断)" else stack)
         }
         val out = File(dir, "crash-$stamp.txt")
