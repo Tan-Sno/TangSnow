@@ -9,8 +9,9 @@ import java.io.File
  * **百分号编码的「未保留字符集」在本仓有三份拷贝，必须一致**（2026-10-16，同类扩散扫描轮）。
  *
  * ## 三处分别在哪
- * 1. `app/src/main/java/.../util/UrlUtils.kt` 的顶层 `percentEncode` —— 当前**发布通道**（coreKotlin）
- *    真正在用的实现，语义对齐 `android.net.Uri.encode`；
+ * 1. `app/src/main/java/.../util/UrlUtils.kt` 的 `kotlinPercentEncode` —— 当前**发布通道**（coreKotlin）
+ *    真正在用的实现（顶层 `percentEncode` 自 2026-10-19 W1 接线起只做「外部内核优先」的分派：
+ *    `CoreImpl.percentEncode` 接管则用它的结果，否则回落本实现），语义对齐 `android.net.Uri.encode`；
  * 2. `tangsnow-rs/tangsnow-core/src/percent_encode.rs` —— Rust 侧移植；
  * 3. `app/src/coreRust/java/.../core/CoreNative.kt` 里的 `kotlinPercentEncode` —— **native 不可用时的
  *    功能级兜底**（它必须与 (1) 同口径，否则"降级"本身就是行为改变）。
@@ -40,7 +41,10 @@ class PercentEncodeSetParityTest {
 
     @Test
     fun 三处未保留字符集完全相同() {
-        val kt = specials(region(urlUtils, "internal fun percentEncode", "sb.append('%')"), "UrlUtils.percentEncode")
+        val kt = specials(
+            region(urlUtils, "private fun kotlinPercentEncode", "sb.append('%')"),
+            "UrlUtils.kotlinPercentEncode",
+        )
         val bridge = specials(
             region(coreNative, "private fun kotlinPercentEncode", "sb.append('%')"),
             "CoreNative.kotlinPercentEncode（native 不可用时的兜底）",

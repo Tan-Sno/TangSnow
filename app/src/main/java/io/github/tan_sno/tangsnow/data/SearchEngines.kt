@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.annotation.StringRes
 import io.github.tan_sno.tangsnow.R
+import io.github.tan_sno.tangsnow.core.CoreImpl
 import io.github.tan_sno.tangsnow.util.percentEncode
 
 /**
@@ -145,6 +146,12 @@ object SearchEngines {
      * 非搜索结果页返回 null。
      */
     fun displayForUrl(url: String, engines: List<SearchEngine>): String? {
+        // 外部内核优先（coreRust flavor 在真机上问 Rust）。不接管时全为 null ⇒ 落到下面的纯 Kotlin 路径。
+        // 这一遍不做任何解析：coreKotlin flavor 每次调用只多一轮 null 判断，Uri 解析仍只在下面做一次。
+        for (engine in engines) {
+            val param = engine.queryParam ?: continue
+            CoreImpl.displayForUrl(url, engine.template, param, engine.id)?.let { return it }
+        }
         // ⚠️ 这个 `?: return null` 在生产里确实**不可达**（`android.net.Uri.parse` 标了 @NonNull，
         // 解析失败也返回空 Uri 而不是 null）—— 外部审查 CR-014 把它报成死分支，结论对。
         // **判定保留**：删掉省不下任何东西，而它标记了"这里依赖 parse 的非空契约"；

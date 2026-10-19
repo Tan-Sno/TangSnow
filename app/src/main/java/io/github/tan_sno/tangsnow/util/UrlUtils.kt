@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.util
 
+import io.github.tan_sno.tangsnow.core.CoreImpl
 import io.github.tan_sno.tangsnow.data.SearchEngine
 
 /**
@@ -10,7 +11,11 @@ import io.github.tan_sno.tangsnow.data.SearchEngine
  * 本实现与 `Uri.encode` 保持逐字符一致（保留 `A-Za-z0-9` 与 `_-!.~'()*`，其余按 UTF-8 编码），
  * 因此替换后生成的搜索 URL 与改造前**逐字节相同**，不会改变任何线上行为。
  */
-internal fun percentEncode(value: String): String {
+internal fun percentEncode(value: String): String =
+    CoreImpl.percentEncode(value) ?: kotlinPercentEncode(value)
+
+/** 纯 Kotlin 实现（外部内核不接管时的回落；coreKotlin flavor 恒走这条）。 */
+private fun kotlinPercentEncode(value: String): String {
     val sb = StringBuilder(value.length * 3)
     for (b in value.toByteArray(Charsets.UTF_8)) {
         val c = b.toInt() and 0xFF
@@ -95,7 +100,10 @@ object UrlUtils {
     private val WHITESPACE = Regex("""\s""")
 
     /** 输入本身是否像一个网址（带协议，或裸域名形态，或本机/内网地址） */
-    fun looksLikeUri(input: String): Boolean {
+    fun looksLikeUri(input: String): Boolean =
+        CoreImpl.looksLikeUri(input) ?: kotlinLooksLikeUri(input)
+
+    private fun kotlinLooksLikeUri(input: String): Boolean {
         val trimmed = input.trim()
         if (trimmed.isEmpty() || trimmed.contains(WHITESPACE)) return false
         return trimmed.startsWith("http://", true) ||
@@ -256,7 +264,10 @@ object UrlUtils {
      * 而这段判定正是最该被单测钉住的（见 [isWebNavigationScheme]）。
      * 合法 scheme 的字符集按 RFC 3986 §3.1：ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )。
      */
-    internal fun schemeOf(input: String): String {
+    internal fun schemeOf(input: String): String =
+        CoreImpl.schemeOf(input) ?: kotlinSchemeOf(input)
+
+    private fun kotlinSchemeOf(input: String): String {
         val colon = input.indexOf(':')
         if (colon <= 0) return ""
         val raw = input.substring(0, colon)
@@ -318,12 +329,21 @@ object UrlUtils {
      * 见 `SessionManager.saveState`。标签本身与标题保留，恢复后是空白标签而不是错误页。
      */
     internal fun isPortableUrl(url: String?): Boolean =
-        !url.isNullOrBlank() && schemeOf(url) !in NON_PORTABLE_SCHEMES
+        CoreImpl.isPortableUrl(url)
+            ?: (!url.isNullOrBlank() && schemeOf(url) !in NON_PORTABLE_SCHEMES)
 
     /** 内部页与"超长 / 临时 / 不可恢复"URL */
     private val NON_PORTABLE_SCHEMES = setOf("about", "data", "blob", "file", "content")
 
     fun resolveInfo(input: String, engine: SearchEngine): Resolved? {
+        // 外部内核优先（coreRust flavor 在真机上调 Rust）；不接管 ⇒ 落到下面的共享实现。
+        CoreImpl.resolveInfo(input, engine.template)
+            ?.takeIf { it.size >= 2 }
+            ?.let { return Resolved(it[0], it[1] == "1") }
+        return kotlinResolveInfo(input, engine)
+    }
+
+    private fun kotlinResolveInfo(input: String, engine: SearchEngine): Resolved? {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return null
         return when {
