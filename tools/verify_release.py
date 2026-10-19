@@ -1,3 +1,4 @@
+# AI生成
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # AI生成（标记必须在 shebang 之下；coding 声明占第 2 行是 PEP 263 认的窗口）
@@ -79,7 +80,15 @@ def _use_utf8_output():
 # 换过密钥意味着老用户无法覆盖安装，必须是有意识的决定，故写死在这里。
 EXPECTED_CERT_SHA256 = "af9542c452c164036d9dce01d6ce2a6d6b1bd20c7f2900e9f0bcfec777e18041"
 
-EXPECTED_PACKAGE = "io.github.tan_sno.tangsnow"
+# 应用身份：A1（2026-10-19）起两 flavor 是**两个独立 applicationId** ——
+#  · coreKotlin → io.github.tan_sno.tangsnow（既有的已发布身份）
+#  · coreRust   → io.github.tan_sno.tangsnow.rust（新增身份，可与 Kotlin 包同机并存）
+# ⚠️ namespace 两 flavor 相同 ⇒ 组件全名（EXPECTED_EXPORTED）**不分叉**，只有 applicationId
+#    及其派生的动态接收器权限（见 expected_permissions）不同。校验时按 --flavor 取值。
+EXPECTED_PACKAGE_BY_FLAVOR = {
+    "coreKotlin": "io.github.tan_sno.tangsnow",
+    "coreRust": "io.github.tan_sno.tangsnow.rust",
+}
 
 # ABI 分包：ABI → versionCode 的 ABI 序号。versionCode = 基准 * 10 + 序号
 # （见 app/build.gradle.kts 的 splits 配置）。
@@ -100,7 +109,8 @@ def abi_splits(flavor: str) -> dict:
     }
 
 # 权限基准：与 README「隐私」一节、隐私政策第 2 条披露的一致。
-# 最后一项由 AndroidX 自动生成（应用自签、不涉及数据访问），README 亦有说明。
+# ⚠️ 这里**不含**随 applicationId 派生的动态接收器权限（AndroidX 生成、前缀 = 包名）——
+#    它在 expected_permissions() 里按 flavor 的包名拼接，故两 flavor 各自正确。
 EXPECTED_PERMISSIONS = {
     "android.permission.INTERNET",
     "android.permission.CAMERA",
@@ -109,8 +119,18 @@ EXPECTED_PERMISSIONS = {
     "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.WAKE_LOCK",
     "android.permission.MODIFY_AUDIO_SETTINGS",
-    "io.github.tan_sno.tangsnow.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
 }
+
+
+def expected_permissions(package: str) -> set:
+    """按 applicationId 拼接期望权限集。
+
+    动态接收器权限 `"<applicationId>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"` 由 AndroidX
+    依包名生成 —— A1 之后 coreKotlin / coreRust 包名不同，该条必须随 flavor 变化。
+    """
+    return set(EXPECTED_PERMISSIONS) | {
+        package + ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+    }
 
 # 导出组件基准（`exported=true` 的组件全清单）。为什么必须写死：依赖升级会**悄悄**带进新的导出组件，
 # 而「权限基准」（第 4 项）看不见它。2026-10-03 实证：GeckoView 155→157 带进了
@@ -1210,8 +1230,9 @@ def main():
             want_code = exp["versionCode"] * 10 + order
 
             info = apk_info(aapt2, env, apk)
-            if info["package"] != EXPECTED_PACKAGE:
-                problems.append("%s：包名是 %s，期望 %s" % (name, info["package"], EXPECTED_PACKAGE))
+            if info["package"] != EXPECTED_PACKAGE_BY_FLAVOR[args.flavor]:
+                problems.append("%s：包名是 %s，期望 %s"
+                                % (name, info["package"], EXPECTED_PACKAGE_BY_FLAVOR[args.flavor]))
             if info["versionName"] != exp["versionName"]:
                 problems.append("%s：versionName 是 %s，构建脚本声明 %s"
                                 % (name, info["versionName"], exp["versionName"]))
@@ -1228,7 +1249,8 @@ def main():
                                 % (name, info["targetSdk"], EXPECTED_TARGET_SDK))
 
             perms = apk_permissions(aapt2, env, apk)
-            extra, lack = perms - EXPECTED_PERMISSIONS, EXPECTED_PERMISSIONS - perms
+            want_perms = expected_permissions(info["package"])
+            extra, lack = perms - want_perms, want_perms - perms
             if extra:
                 problems.append("%s：多出未披露的权限 %s —— 需同步更新本文件与 README/政策"
                                 % (name, sorted(extra)))
