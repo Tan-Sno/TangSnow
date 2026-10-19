@@ -1716,6 +1716,10 @@ class BrowserSessionManager private constructor(
                     // 不显式告知就会出现「App 浅色 / 网页深色」的割裂（`prefers-color-scheme`）。
                     // 首建用 Builder 项；主题变更后的重套见 applyLiveSettings()。
                     .preferredColorScheme(prefs.theme.webColorScheme())
+                    // 内核「远程设置崩溃拉取」提示：设 true = 触发时不再向用户询问「是否拉取崩溃信息」。
+                    // 与「崩溃日志只写本机、可查看/删除、不上传」的口径一致（另见 `crashHandler` 未设
+                    // ⇒ 内核崩溃不进应用 `CrashLogger`）。无用户开关、属一次性策略声明，故只在首建注入。
+                    .crashPullNeverShowAgain(true)
                     .build()
                 // 运行时级「指纹保护」(javap 实测：GeckoRuntimeSettings
                 // .setFingerprintingProtection(boolean)，非 Builder 方法)。

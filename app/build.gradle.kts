@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **278**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **279**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -391,7 +391,9 @@ android {
         //   合计 **277**；2026-10-19 主题↔内核颜色方案轮再加 1 例：`ColorSchemeWiringTest`（1 例：`Theme`
         //   三档与 `COLOR_SCHEME_*` 逐一对应、`runtime()` 的 Builder 链与 `applyLiveSettings()` 两处重套
         //   调用在位、热改 key 含主题 —— 修的是「App 主题只驱动视图层、内核不知道」的割裂）⇒ +1，
-        //   合计 **278**。
+        //   2026-10-19 崩溃提示策略轮再加 1 例：`GeckoRuntimePolicyWiringTest`（1 例：内核
+        //   `crashPullNeverShowAgain(true)` 策略在 `runtime()` 的 Builder 链里在位；并在类文档里留痕
+        //   「翻译入口 G2 为何**不做**」的 AAR 取证，防日后反复）⇒ +1，合计 **279**。
         //   （上一版这里被我写成 274 —— `TestCountCommentTest` 当场把这句注释本身钉红了，钉子有效。）
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则两个 flavor 的单测任务
         //   （`:app:testCoreKotlinDebugUnitTest` / `:app:testCoreRustDebugUnitTest`）都直接红。

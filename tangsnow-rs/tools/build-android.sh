@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# AI生成
 # 构建 tangsnow-core 的 Android .so（三个 ABI），输出到 dist/jniLibs/。
 # （2026-10-15：dist/jniLibs 已 gitignore，这里只是**重编落点**；唯一进仓、进构建的副本
 #   在 app/src/coreRust/jniLibs/ —— 末尾会把拷过去的命令打出来。）
