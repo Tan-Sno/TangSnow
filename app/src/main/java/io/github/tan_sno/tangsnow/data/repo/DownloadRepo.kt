@@ -761,6 +761,45 @@ object DownloadRepo {
         raw?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() }
 
     /**
+     * 取响应头里第一个 `name`（**大小写不敏感**）的值；没有则 null。
+     *
+     * HTTP 头名本就不区分大小写，而 GeckoView 的 `Headers` 按原始大小写存放 ⇒ 必须逐项
+     * `equals(ignoreCase = true)` 查找，不能依赖键相等。抽成纯函数以便单测（`android.net` / 内核
+     * 类型在 JVM 测试里是桩，留在 `saveFromStream` 体内就永远测不到）。
+     */
+    internal fun headerValue(headers: List<Pair<String, String>>, name: String): String? =
+        headers.firstOrNull { it.first.equals(name, ignoreCase = true) }?.second
+
+    /**
+     * 从响应头推导「本次响应体**应当**有多少字节」；无法可信判定时返回 `null`（表示不做长度校验）。
+     *
+     * 为什么需要它：内核流式下载的复制循环读到 EOF 就收工、**不比对长度** —— 服务端在传输中途
+     * 干净断流时 `read` 返回 `-1`，半截文件于是被登记成「下载成功」，违背本仓「禁假反馈」口径
+     * （外部审查 P4-4 / 待办 #31）。收尾拿 `Content-Length` 比对一次即可堵上。
+     *
+     * ⚠️ 三条**必须跳过**（返回 null）的情形，否则会把正常下载误判成失败（新增可见失败模式）：
+     *  1. 有 `Content-Encoding` 且非 `identity`：若内核已解码，`Content-Length` 记的是**压缩后**
+     *     字节数，与实际拿到的解码后字节数天然不等 ⇒ 不可比，跳过（待办 #31 明示的前提：
+     *     `WebResponse.body` 是否已解码未证实，故宁可少校验也不误伤）；
+     *  2. 有 `Transfer-Encoding`（如 `chunked`）：此时按定义没有可信的 `Content-Length`；
+     *  3. 头缺失 / 非数字 / 为负：拿不到可信期望值，不猜。
+     */
+    internal fun expectedBodyLength(headers: List<Pair<String, String>>): Long? {
+        if (headerValue(headers, "transfer-encoding") != null) return null
+        val encoding = headerValue(headers, "content-encoding")?.trim()
+        if (!encoding.isNullOrEmpty() && !encoding.equals("identity", ignoreCase = true)) return null
+        val raw = headerValue(headers, "content-length")?.trim() ?: return null
+        val len = raw.toLongOrNull() ?: return null
+        return len.takeIf { it >= 0 }
+    }
+
+    /**
+     * 实收字节数是否与期望不符（期望为 `null` = 不做校验 ⇒ 恒 `false`）。纯函数，便于单测。
+     */
+    internal fun bodyLengthMismatch(expected: Long?, received: Long): Boolean =
+        expected != null && received != expected
+
+    /**
      * 直接消费 GeckoView 的内核响应流存盘：
      * Cookie/Referer/登录态都已包含在这次响应里，是登录态附件的唯一可靠路径。
      *
@@ -802,8 +841,14 @@ object DownloadRepo {
                 // 这里按块检查协程 Job 的活性：取消时抛 CE，交给 [writeToDownloads] 的 CE 分支清掉占位
                 // （不留半截文件）。缓冲区 64 KB：与别处复制同量级，够大以摊薄系统调用。
                 val copyJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
+                // 写前记下「应当有多少字节」，写完比对（三条跳过理由见 [expectedBodyLength]）。
+                // 取不到可信期望值时 expected = null ⇒ 不校验，行为与改动前逐字一致。
+                val expected = expectedBodyLength(
+                    response.headers.entries.map { it.key to it.value },
+                )
                 val saved = saveAndRegister(context, safeName, mime) { out ->
                     val buf = ByteArray(64 * 1024)
+                    var received = 0L
                     while (true) {
                         if (copyJob?.isActive == false) {
                             throw kotlinx.coroutines.CancellationException("download cancelled during copy")
@@ -811,6 +856,15 @@ object DownloadRepo {
                         val n = body.read(buf)
                         if (n < 0) break
                         out.write(buf, 0, n)
+                        received += n
+                    }
+                    // 读到 EOF **不等于**收全：服务端干净断流时 read 返回 -1，半截内容会在
+                    // 写盘后（甚至转正后）被当成成功。与 Content-Length 不符即判失败 —— 抛出的
+                    // 异常由 [writeToDownloads] 的写流阶段 catch 接住，删掉占位、不留半截文件。
+                    if (bodyLengthMismatch(expected, received)) {
+                        throw java.io.IOException(
+                            "响应体字节数不符：期望 $expected，实收 $received"
+                        )
                     }
                 }
                 if (!saved) return@withContext SaveOutcome.FAILED
