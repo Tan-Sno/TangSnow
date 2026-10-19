@@ -59,9 +59,27 @@ T="$NDK_HOST_BIN"
 [[ -d "$T" ]] || { echo "链接器目录不存在：$T" >&2; exit 1; }
 echo "NDK 宿主 bin 目录：$T"
 
-export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$T/aarch64-linux-android26-clang"
-export CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER="$T/armv7a-linux-androideabi26-clang"
-export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$T/x86_64-linux-android26-clang"
+# 链接器：Linux/macOS 用 NDK 的 `*-clang`；**Windows 必须换成 `*.cmd`** ——
+# Windows 包里这三组入口各有两份：无扩展名的那份是 **POSIX shell 脚本**，
+# cargo 直接 exec 会得到 `os error 193`（"不是有效的 Win32 应用程序"），
+# 且症状落在 cargo 的 linker 阶段、指不回这一行（2026-10-15 外部审查已记录，
+# 2026-10-19 在此修）。`.cmd` 才是 NDK 给 Windows 的入口。
+#
+# 弯路记录（2026-10-19 实测，别再走）：
+#   ① 直接选无扩展名脚本 → `os error 193`；
+#   ② 改用 llvm 的 `clang.exe` + `CARGO_TARGET_<TRIPLE>_RUSTFLAGS="-C link-arg=--target=…"`
+#      → **该变量未被 cargo 采用**（实测命令行里根本没出现 `--target=`，只剩全局
+#      `RUSTFLAGS`），clang 于是按 host target 调 `lld`，报一串
+#      `lld: error: unknown argument: -z / --version-script=…`；
+#   ③ `.cmd` 包装器 → 一次通过（arm64 实测 17.35s Finished）。
+# 教训：cross 链接的 target 信息应由**包装器**注入，不要指望 target 级 RUSTFLAGS。
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) CLANG_EXT=".cmd" ;;
+  *) CLANG_EXT="" ;;
+esac
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$T/aarch64-linux-android26-clang$CLANG_EXT"
+export CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER="$T/armv7a-linux-androideabi26-clang$CLANG_EXT"
+export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$T/x86_64-linux-android26-clang$CLANG_EXT"
 
 # 16KB 页对齐（Android 15+ 新设备的硬要求）：
 # NDK r27 链接器默认 max-page-size=4096，产出的 so 在 16KB 页内核的设备上
