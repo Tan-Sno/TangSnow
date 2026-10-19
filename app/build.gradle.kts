@@ -498,12 +498,13 @@ android {
     //  · coreRust   —— 同一批纯逻辑改由 `libtangsnow_core.so`（Rust）承担，源码在仓库根的
     //                  `tangsnow-rs/`，`.so` 与本 flavor 的桥接代码放 `app/src/coreRust/`
     //                  （flavor 的 java/ 与 jniLibs/ 按约定目录自动接管，无需 sourceSets 声明）。
-    // ⚠️ 两个 flavor **共用同一 applicationId 与同一套 versionCode 派生**（基准×10+ABI 序号），
-    //    所以**一次只能发布其中一个**：同号换 flavor 安装会被系统按同版本重装处理，
-    //    混发会让用户在自己都没选过的两份实现之间来回升降。发布目录也只允许出现选定
-    //    flavor 的三颗包 —— `tools/verify_release.py --flavor` 就是按这个规则拦的。
-    //    现在 coreRust 只是「能编译、能打包、`.so` 进得了包」的骨架，具体逐函数接线见
-    //    git 提交历史（2026-10-15 起）。
+    // ⚠️ 两 flavor 现为**两个独立应用身份**（2026-10-19 A1）：
+    //    · `coreKotlin` 沿用 defaultConfig 的 `io.github.tan_sno.tangsnow`（已发布身份，不可动）；
+    //    · `coreRust` 带 `.rust` 后缀 ⇒ 同一台设备上**可同时安装、数据互不干扰、各自升级**。
+    //    namespace 两 flavor **相同**（类名与组件全名不变），只有 applicationId 分叉；因此
+    //    `tools/verify_release.py` 的 EXPECTED_PACKAGE 与「动态接收器权限」这两处必须**按 flavor
+    //    分设**（已同步）。发布纪律：两身份各自独立发布，Rust 用 `v<ver>-rust-preview` tag。
+    //    现在 coreRust 仍只是「能编译、能打包、`.so` 进得了包」的骨架，逐函数接线见 git 提交历史。
     flavorDimensions += "core"
     productFlavors {
         create("coreKotlin") {
@@ -511,6 +512,8 @@ android {
         }
         create("coreRust") {
             dimension = "core"
+            // A1：Rust 独立应用身份 —— 与 Kotlin 包同机共存、数据隔离（namespace 不变）
+            applicationIdSuffix = ".rust"
         }
     }
 
