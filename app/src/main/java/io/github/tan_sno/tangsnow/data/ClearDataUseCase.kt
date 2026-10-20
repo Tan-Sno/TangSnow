@@ -140,12 +140,21 @@ object ClearDataUseCase {
             CrashLogger.clearHost()
         }
         if (options.sessionSnapshot) locally {
+            // ⚠️ 必须**先置位、再删除**（与 MainActivity.performExit 的退出路径同序，见其 :2944-2948
+            // 注释与 2026-10-02 外部审查 P3-8）：置位期间 saveState 一律跳过 ⇒ 删除完成后不会有任何
+            // 写把快照写回来。
+            //
+            // 顺序反了会怎样（2026-10-20 审查 A-1）：删除完成到置位生效之间存在窗口，而
+            // ① 主线程在 withContext(Dispatchers.IO) 期间**并未阻塞**（SessionStore.clearAwait），
+            //    onPause / onHistoryStateChange 的去抖保存可在窗口内发起；
+            // ② 写（io.execute）与删（io.submit）**共用同一条串行队列**（SessionStore.kt:107），
+            //    故那次写必然排在删之后 ⇒ 刚清掉的标签与历史栈被整表写回磁盘 ⇒
+            //    「清除浏览数据」的承诺当场失效（与 SessionStore 类注释自述的隐私承诺直接冲突）。
+            SessionStore.markPurged()
             // 用可等待版本：删除失败要计入 localFailedCount，不能假报「已清除」（D2）
             if (!SessionStore.clearAwait(context)) {
                 throw java.io.IOException("session snapshot could not be deleted")
             }
-            // 置位后，下一次 saveState 会跳过——否则"清掉快照"紧接着 onPause 又写回
-            SessionStore.markPurged()
         }
         if (options.downloadRecords) locally { DownloadRepo.clearRecords(context) }
 

@@ -16,6 +16,10 @@ jni = ["dep:jni", "dep:serde", "dep:serde_json"]
 
 [dev-dependencies]
 proptest = "1"
+# 差分测试读**两侧共享的 JSON 夹具**（tests/fixtures/*.json）—— 期望值只存一份，
+# 两侧都读它 ⇒ 改夹具必然两侧一起红（2026-10-20 审查报告 C-14）。
+# serde_json 本来就是本 crate 的可选依赖（jni feature 用），这里复用同一版本。
+serde_json = "1"
 
 [dependencies]
 regex = "1"

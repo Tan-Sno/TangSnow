@@ -11,6 +11,7 @@ import io.github.tan_sno.tangsnow.data.SearchEngines
 import io.github.tan_sno.tangsnow.util.dp
 import io.github.tan_sno.tangsnow.util.selectableRipple
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -27,6 +28,7 @@ class SuggestionsController(private val activity: MainActivity) {
     private var seq = 0L
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingTask: Runnable? = null
+    private var queryJob: Job? = null
 
     fun resolve() {
         panel = activity.binding.root.findViewById(R.id.suggestionPanel)
@@ -76,7 +78,14 @@ class SuggestionsController(private val activity: MainActivity) {
         // 在 Dispatchers.IO 里读可能拿到过期值。一旦因此把无痕标签误判成普通标签，
         // 就会把本地历史 / 书签联想渲染到无痕会话上 —— 与「无痕不留痕迹」的承诺直接冲突。
         val isPrivate = activity.sessionManager.activeTab?.isPrivate == true
-        activity.lifecycleScope.launch {
+        // ⚠️ 撤掉**上一次**查询：`seq` 比对只决定「渲不渲染」，不决定「还跑不跑」——
+        // 旧实现里前一次查询照样把库查完（大表下就是一次全表扫描白跑），
+        // 连续输入时几次查询会**叠加**（2026-10-20 审查报告 A-3）。
+        // 取消后旧协程在下一个挂起点即抛出 CancellationException，后续查询不再发起。
+        // 诚实说明：SQLite 查询本身**不可中断**（没有中途取消的 API），正在跑的那一条会跑完；
+        // 能保证的是「不会在它之后再发起新的查询」。
+        queryJob?.cancel()
+        queryJob = activity.lifecycleScope.launch {
             val matches = withContext(Dispatchers.IO) { load(text, isPrivate) }
             if (current != seq) return@launch
             // 展示条件要在**结果落地的这一刻**复查一遍（不只是发起时）：查询跑在 IO 上，
@@ -114,7 +123,8 @@ class SuggestionsController(private val activity: MainActivity) {
         }
         try {
             // ⚠️ 走**带上限的查询**而不是 `list()` 全表读（2026-10-02 外部审查报告 6 的 P4）：
-            // 书签可导入（单次 1000 条、可多次），而联想最终只取 4 条 ⇒ 下推到 SQL 里过滤+限条。
+            // 书签可导入（单次 1000 条、可多次），而联想最终只取 4 条 ⇒ 过滤尽量下推到 SQL，
+            // 条数在攒够上限时即停（2026-10-20 审查报告 A-3：非 ASCII 关键词也不再整表读进内存）。
             // 上限取 [BOOKMARK_QUERY_LIMIT]（略大于最终 take(4)，给"与历史去重"留余量）。
             BookmarkRepo.search(kw, BOOKMARK_QUERY_LIMIT).forEach { consider(it.title, it.url) }
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -196,6 +206,10 @@ class SuggestionsController(private val activity: MainActivity) {
     fun cancelPending() {
         pendingTask?.let { handler.removeCallbacks(it) }
         pendingTask = null
+        // 在途查询也要撤：面板已隐藏（或 Activity 即将销毁），跑完的结果没人要，
+        // 留着只会白占一次数据库查询（2026-10-20 审查报告 A-3）。
+        queryJob?.cancel()
+        queryJob = null
     }
 
     private companion object {

@@ -121,7 +121,8 @@ pub fn find<'a>(all: &'a [SearchEngine], id: Option<&str>) -> &'a SearchEngine {
 const HOST_ALIASES: &[(&str, &[&str])] = &[
     ("bing_cn", &["bing.com"]),
     // 国际版模板主机是 global.bing.com；结果页常落在无区域前缀的 bing.com 上，
-    // 而 "bing.com" 比模板主机短 ⇒ `host_matches` 的子域那一支覆盖不到，必须单独登记。
+    // 而 "bing.com" 与模板主机**不是同一个主机** ⇒ 只能靠这里单独登记
+    // （2026-10-20 起 `host_matches` 不再做子域通配，见该函数的说明）。
     ("bing", &["bing.com"]),
     ("baidu", &["m.baidu.com"]),
     ("sogou", &["m.sogou.com"]),
@@ -165,17 +166,20 @@ pub fn template_host_of(template: &str) -> Option<String> {
     }
 }
 
-/// 该主机是否属于这个引擎（模板主机或其子域，或该引擎的官方别名主机）。
+/// 该主机是否属于这个引擎（**模板主机**或该引擎**显式登记**的别名主机）。
+///
+/// ⚠️ **不做子域通配**（2026-10-20 审查报告 C-3）：原先还有一支「子域后缀匹配」
+/// ⇒ 任何 `*.bing.com` / `*.baidu.com` / `*.sm.cn` … 的子域都算同一引擎。
+/// 而这条判据的**唯一用途**是「结果页回显关键词」：命中后地址栏只显示 `q=`/`wd=`
+/// 的值、**不显示真实 URL** ⇒ 那些域的子域只要带同名查询参数，就能让地址栏
+/// **只显示自己挑的那个值**（地址栏伪装面；能否真被利用取决于这些域的子域委派实况，
+/// 静态不可判定）。现在只认模板主机与显式登记的别名主机；
+/// 确有需要的官方主机**登记进 `HOST_ALIASES`**。
 pub fn host_matches(host: &str, engine_id: &str, template_host: &str) -> bool {
     fn one_matches(host: &str, candidate: &str) -> bool {
         let bare = host.strip_prefix("www.").unwrap_or(host);
         let bare_candidate = candidate.strip_prefix("www.").unwrap_or(candidate);
         bare == bare_candidate
-            // 子域判断：`bare.ends_with(".{candidate}")` 的零分配写法——
-            // 结尾匹配 candidate 且其前一个字符恰为 `.`（原先每次循环 format! 分配）。
-            || bare.len() > bare_candidate.len()
-                && bare.ends_with(bare_candidate)
-                && bare.as_bytes()[bare.len() - bare_candidate.len() - 1] == b'.'
     }
     // 先查模板主机、再查别名表：避免每次调用 Vec 分配 + extend。
     if one_matches(host, template_host) {

@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.util
 
+import io.github.tan_sno.tangsnow.data.SharedFixtures
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -14,74 +15,85 @@ import org.junit.Test
  */
 class CrashLoggerRedactTest {
 
+    /** 两侧共享的夹具（Rust 侧读同一个文件） */
+    private fun case(id: String) = SharedFixtures.pick(FIXTURE, id)
+
+    private companion object {
+        const val FIXTURE = "crash_logger_cases.json"
+    }
+
+    /**
+     * **与 Rust 侧同口径的脱敏用例**（期望值来自两侧共享的 JSON 夹具）。
+     *
+     * 2026-10-20 审查报告 C-14：原先这里与 Rust 侧 `crash_logger_parity.rs` **各写一份期望值**
+     * —— 那是**镜像**：改实现 + 同步改本侧的镜像期望值 ⇒ 两侧照样全绿，而脱敏口径已经漂了。
+     * 现在两边读**同一份**夹具（`tangsnow-rs/tangsnow-core/tests/fixtures/crash_logger_cases.json`）
+     * ⇒ 改夹具必然两侧一起红；只想改一侧的期望值，必须显式改夹具 —— 那一刻两侧就一起变了。
+     */
     @Test
     fun `完整 URL 被收敛成 scheme 与 host`() {
         assertEquals(
-            "java.io.FileNotFoundException: https://example.com/…",
-            CrashLogger.redactUrls("java.io.FileNotFoundException: https://example.com/a/b?q=1#f"),
+            case("完整 URL 被收敛成 scheme 与 host").expected,
+            CrashLogger.redactUrls(case("完整 URL 被收敛成 scheme 与 host").input),
         )
     }
 
     @Test
     fun `端口保留而路径查询片段丢弃`() {
         assertEquals(
-            "java.net.ConnectException: http://10.0.0.2:8080/…",
-            CrashLogger.redactUrls("java.net.ConnectException: http://10.0.0.2:8080/download?token=secret"),
+            case("端口保留而路径查询片段丢弃").expected,
+            CrashLogger.redactUrls(case("端口保留而路径查询片段丢弃").input),
         )
     }
 
     @Test
     fun `userinfo 里的凭据不得残留`() {
-        val out = CrashLogger.redactUrls("boom https://user:pa55@example.com/private/x.pdf")
+        val c = case("userinfo 里的凭据不得残留")
+        val out = CrashLogger.redactUrls(c.input)
         assertFalse("脱敏后不得含凭据", out.contains("pa55"))
         assertFalse("脱敏后不得含用户名", out.contains("user:"))
-        assertEquals("boom https://example.com/…", out)
+        assertEquals(c.expected, out)
     }
 
     @Test
     fun `路径里含 at 符号时 host 不得被误剥`() {
         // userinfo 的 `@` 只在 authority 段合法；先截 authority 再剥 `@`，
         // 否则 /docs/@user 里的 `@` 会把 host 连同路径前缀整个吃掉
-        assertEquals(
-            "fail https://example.com/…",
-            CrashLogger.redactUrls("fail https://example.com/docs/@user?page=2"),
-        )
+        val c = case("路径里含 at 符号时 host 不得被误剥")
+        assertEquals(c.expected, CrashLogger.redactUrls(c.input))
     }
 
     @Test
     fun `userinfo 与路径含 at 符号同时存在时各归其位`() {
-        val out = CrashLogger.redactUrls("fetch https://alice@s3.example.com/blobs/@me/x")
+        val c = case("userinfo 与路径含 at 符号同时存在时各归其位")
+        val out = CrashLogger.redactUrls(c.input)
         assertFalse(out.contains("alice"))
-        assertEquals("fetch https://s3.example.com/…", out)
+        assertEquals(c.expected, out)
     }
 
     @Test
     fun `大小写 scheme 同样处理`() {
-        assertEquals("HTTPS://example.com/…", CrashLogger.redactUrls("HTTPS://example.com/x"))
+        val c = case("大小写 scheme 同样处理")
+        assertEquals(c.expected, CrashLogger.redactUrls(c.input))
     }
 
     @Test
     fun `同一行的多个 URL 都被处理`() {
-        assertEquals(
-            "a https://a.com/… b http://b.com/…",
-            CrashLogger.redactUrls("a https://a.com/1 b http://b.com/2"),
-        )
+        val c = case("同一行的多个 URL 都被处理")
+        assertEquals(c.expected, CrashLogger.redactUrls(c.input))
     }
 
     @Test
     fun `非 URL 文本一字不动（脱敏不得破坏排障价值）`() {
-        val stack = """
-            java.lang.IllegalStateException: session is not open
-            	at io.github.tan_sno.tangsnow.MainActivity.onDestroy(MainActivity.kt:666)
-            	at android.app.Activity.performDestroy(Activity.java:8305)
-        """.trimIndent()
-        assertEquals(stack, CrashLogger.redactUrls(stack))
+        val c = case("非 URL 文本一字不动（脱敏不得破坏排障价值）")
+        assertEquals(c.expected, CrashLogger.redactUrls(c.input))
     }
 
     @Test
     fun `只有 scheme 没有域名时不会被误改成半截`() {
         // `https://` 后面直接是空白：`\S+` 一个字符都没吃到 ⇒ 不匹配，原样保留
-        assertEquals("no url here: https://", CrashLogger.redactUrls("no url here: https://"))
+        val c = case("只有 scheme 没有域名时不会被误改成半截")
+        assertEquals(c.expected, CrashLogger.redactUrls(c.input))
     }
 
     @Test

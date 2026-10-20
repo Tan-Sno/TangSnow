@@ -31,7 +31,7 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
 | `bookmark_html` | `data/BookmarkHtml.kt` | 295 | `BookmarkHtmlTest`(23) |
 | `history` | `data/repo/HistoryRepo.kt` 纯函数 | 96 | — |
 
-**验证结果**：`cargo test` **232/232 通过**（2026-10-17 实测，15 个测试二进制合计；旧口径写的 70/70、210/210、213/213、223/223、224/224、231/231 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
+**验证结果**：`cargo test` **207/207 通过**（2026-10-20 实测，15 个测试二进制合计；旧口径写的 70/70、210/210、213/213、223/223、224/224、231/231、233/233、235/235、236/236 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
 - 30 + 15 个差分用例与 JVM 单测同源（同输入 ⇒ 同输出，含防钓鱼 `@` 检查、
   IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对）；
 - **IDNA 差分 3 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
@@ -141,7 +141,7 @@ bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core
 |---|---|---|---|
 | IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | **8 类实测分歧 + 1 类已修**，逐条见下表 |
 | 字母判定 | `isLetterOrDigit`（L*+Nl+Nd） | `is_alphabetic/is_numeric`（含 No） | 仅影响 scheme 合法性判定中的罕见 Unicode 数字 |
-| 标题截断 | `take(200)` 按 UTF-16 单元 | 按 char（码点） | BMP 文本一致；含星形面字符时**最多差一倍**（每个星形面字符在 Kotlin 侧占 2 个 UTF-16 单元，200 单元只能装 100 个），且 Kotlin 可能在代理对中间切断留下孤立代理 |
+| 标题截断 | `take(200)` 按**码点**（2026-10-20 修正，原按 UTF-16 单元） | 按 char（码点） | **已抹平**：两侧同为 200 个码点；原先「Kotlin 侧切断代理对留下孤立代理、且两侧最多差一倍」的差异随修正消失 |
 | nbsp 处理 | `Character.isWhitespace(nbsp)=false` | 已用 `java_is_whitespace` 对齐 | 已抹平；正则 `\S` 类已按 Java ASCII 口径改写 |
 
 ### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」）

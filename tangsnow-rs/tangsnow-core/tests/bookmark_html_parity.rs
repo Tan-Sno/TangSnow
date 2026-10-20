@@ -192,6 +192,25 @@ fn sanitize_标题截断到上限() {
     assert_eq!(out[0].title.chars().count(), MAX_TITLE_LENGTH);
 }
 
+/// 标题截断必须按**码点**、不得劈开代理对。
+///
+/// 回归的是什么：Kotlin 侧 `String.take(n)` 取的是前 n 个 **UTF-16 码元**，n 落在代理对
+/// 中间时会把一个 emoji 劈成两半 ⇒ 落库一个**孤立代理**（渲染成 `�`）；而本侧
+/// `chars().take(n)` 按码点 ⇒ 两侧原本对同一条含 emoji 的标题给出不同结果。
+/// 现两侧统一按码点（Kotlin 见 `util/CodePoints.takeCodePoints`）。
+#[test]
+fn sanitize_标题含星平面字符时按码点截断不留半个代理() {
+    // 199 个 BMP 字符 + emoji + 尾：截断点正好落在代理对中间
+    let long_title = format!("{}🎈尾", "标".repeat(MAX_TITLE_LENGTH - 1));
+    let html = format!("<DT><A HREF=\"https://t.example/\">{long_title}</A>");
+    let (raw, _) = parse(&html, 1_700_000_100_000);
+    let (out, skipped) = sanitize(&raw, &HashSet::new());
+    assert_eq!(skipped, 0);
+    assert_eq!(out[0].title.chars().count(), MAX_TITLE_LENGTH);
+    // 末尾必须是完整的 emoji（不是它的半个代理）
+    assert!(out[0].title.ends_with('🎈'));
+}
+
 // ------------------------------------------------------------- isHttpUrl
 
 #[test]

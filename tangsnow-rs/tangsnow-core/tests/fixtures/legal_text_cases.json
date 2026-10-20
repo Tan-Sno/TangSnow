@@ -1,0 +1,13 @@
+{
+  "_说明": "法律文本 `**…**` 加粗标记的**共享期望值**（两侧同源）。Rust 侧读它（tests/legal_text_parity.rs），Kotlin 侧也读它（app/src/test/.../util/LegalTextTest.kt）。刻意**不各写一份**：各写一份就是镜像 —— 改实现 + 同步改镜像期望值，两侧照样全绿，而行为已经漂了（2026-10-20 审查报告 C-14）。",
+  "_区间口径": "闭区间 [first, last]，按 **UTF-16 码元**计（与 Kotlin `String.length` / `Spannable` 下标同口径；Rust 侧用 `encode_utf16().count()` 累计）。",
+  "cases": [
+    { "raw": "a**bc**d", "plain": "abcd", "boldRanges": [[1, 2]] },
+    { "raw": "**甲**在中间**乙**尾", "plain": "甲在中间乙尾", "boldRanges": [[0, 0], [4, 4]] },
+    { "raw": "没有任何标记", "plain": "没有任何标记", "boldRanges": [] },
+    { "raw": "前面**后面没有配对", "plain": "前面**后面没有配对", "boldRanges": [] },
+    { "raw": "a****b", "plain": "ab", "boldRanges": [] },
+    { "raw": "结尾**加粗**", "plain": "结尾加粗", "boldRanges": [[2, 3]] },
+    { "raw": "a😀**bc**d", "plain": "a😀bcd", "boldRanges": [[3, 4]] }
+  ]
+}

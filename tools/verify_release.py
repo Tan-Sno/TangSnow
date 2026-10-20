@@ -1160,6 +1160,18 @@ def main():
     if args.selftest:
         return selftest()
 
+    # `--flavor` 白名单（2026-10-20 审查报告 C-5）。
+    #
+    # 此前 flavor 完全没校验，两个后果：
+    #  ① 未知取值会在查 EXPECTED_PACKAGE_BY_FLAVOR 时抛**未捕获的 KeyError**
+    #     —— 给使用者看的是一段栈回溯，不是「你把 flavor 拼错了」；
+    #  ② flavor 会**拼进 APK 文件名**（`app-<flavor>-<abi>-release.apk`），
+    #     形如 `../../x` 的取值能让拼出的路径**越出 --apk-dir**
+    #     （只读、CLI 本地可控，影响有限，但没必要留着这个口子）。
+    if args.flavor not in EXPECTED_PACKAGE_BY_FLAVOR:
+        ap.error("未知的 --flavor：%r；可选值：%s"
+                 % (args.flavor, "、".join(sorted(EXPECTED_PACKAGE_BY_FLAVOR))))
+
     root = repo_root(args.root)
     apk_dir = args.apk_dir or os.path.join(root, "app", "release")
     say = (lambda *a: None) if args.quiet else print

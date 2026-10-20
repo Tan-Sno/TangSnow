@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.util
 
+import io.github.tan_sno.tangsnow.data.SharedFixtures
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,25 +16,28 @@ class BitmapsSampleSizeTest {
 
     private val fourMp = 4_000_000L
 
+    /**
+     * **采样倍数与 Rust 侧同口径**（期望值来自两侧共享的 JSON 夹具）。
+     *
+     * 2026-10-20 审查报告 C-14：原先这里与 Rust 侧 `bitmaps_parity.rs` **各写一份期望值**
+     * —— 那是**镜像**：改实现 + 同步改本侧的镜像期望值 ⇒ 两侧照样全绿，而两边的采样口径已漂
+     * （采样不足 → 解码出上百 MB 位图直接崩；采样过头 → 背景图糊）。
+     * 现在两边读**同一份**夹具（`tangsnow-rs/tangsnow-core/tests/fixtures/bitmaps_sample_size_cases.json`）。
+     */
     @Test
-    fun `尺寸远大于目标时按 2 的幂降采样`() {
-        // 4000x3000（12MP）→ 目标 1000x1500：可降到 2000x1500（仍不小于目标）
-        // 再降一级 1000x750 会小于 1500 高度，故停在 2
-        assertEquals(2, Bitmaps.requiredSampleSize(4000, 3000, 1000, 1500, fourMp))
-    }
-
-    @Test
-    fun `小图不采样`() {
-        assertEquals(1, Bitmaps.requiredSampleSize(800, 600, 1080, 1920, fourMp))
-    }
-
-    @Test
-    fun `内存闸门优先于清晰度`() {
-        // 12000x8000 = 96MP。按尺寸只需 sample=2（高度 4000 已不小于 2400），
-        // 但 6000x4000 = 24MP 远超上限，必须继续提到 8（1500x1000 = 1.5MP）
-        val sample = Bitmaps.requiredSampleSize(12000, 8000, 1080, 2400, fourMp)
-        assertEquals(8, sample)
-        assertTrue((12000 / sample).toLong() * (8000 / sample) <= fourMp)
+    fun `采样倍数与Rust侧同口径`() {
+        val cases = SharedFixtures.cases(FIXTURE)
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val id = c.getString("id")
+            val a = c.getJSONArray("args")
+            val w = a.getInt(0)
+            val h = a.getInt(1)
+            val sample = Bitmaps.requiredSampleSize(w, h, a.getInt(2), a.getInt(3), a.getLong(4))
+            assertEquals("夹具用例「$id」", c.getInt("expected"), sample)
+            // ⚠️ 这里**不**断言「像素上限」：退化输入（目标尺寸非正 ⇒ 直接返回 1）本来就不满足它，
+            // 像素上限是**性质**（见下一条用例），不是逐点的期望值。
+        }
     }
 
     @Test
@@ -54,24 +58,9 @@ class BitmapsSampleSizeTest {
         }
     }
 
-    @Test
-    fun `非法尺寸返回 1 而不是死循环`() {
-        assertEquals(1, Bitmaps.requiredSampleSize(0, 0, 100, 100, fourMp))
-        assertEquals(1, Bitmaps.requiredSampleSize(-5, 100, 100, 100, fourMp))
-    }
-
-    @Test
-    fun `目标尺寸非正时返回 1 而不是除零崩溃`() {
-        // reqW / reqH <= 0 会让第一层 while 恒真：采样翻倍到 Int 溢出后 sample * 2 == 0，
-        // 下一轮 outWidth / 0 抛 ArithmeticException。三个调用点当前都传正值，
-        // 本用例防的是将来新增调用点时踩到。
-        assertEquals(1, Bitmaps.requiredSampleSize(4000, 3000, 0, 0, fourMp))
-        assertEquals(1, Bitmaps.requiredSampleSize(4000, 3000, -1, 100, fourMp))
-        assertEquals(1, Bitmaps.requiredSampleSize(4000, 3000, 100, -1, fourMp))
-    }
-
-    @Test
-    fun `上限极大时退化为纯按尺寸采样`() {
-        assertEquals(4, Bitmaps.requiredSampleSize(4096, 4096, 1024, 1024, Long.MAX_VALUE))
+    private companion object {
+        /** 两侧共享的夹具（Rust 侧读同一个文件） */
+        const val FIXTURE = "bitmaps_sample_size_cases.json"
     }
 }
+

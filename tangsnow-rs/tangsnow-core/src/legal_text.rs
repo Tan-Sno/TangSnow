@@ -4,13 +4,23 @@
 //! Rust 侧返回正文与字符区间，渲染由调用方处理）。
 //!
 //! 规则：只认**成对**的 `**`；落单的标记连同其后的正文**原样保留**；
-//! 空标记（`****`）被丢弃且不产生区间。区间为**字符索引**的闭区间
-//! （Kotlin `IntRange` 按 UTF-16 code unit 计数——对 BMP 内中英文与 Rust 的
-//! char 索引一致； astral 平面字符（如 emoji）会差一，法律文本不含此类字符）。
+//! 空标记（`****`）被丢弃且不产生区间。区间为 **UTF-16 码元索引**的闭区间
+//! —— 与 Kotlin 的 `String.length`、`IntRange` 以及 `Spannable` 的下标**同一口径**
+//! （2026-10-20 修正，见下）。
+//!
+//! ## 为什么是 UTF-16 而不是码点
+//!
+//! 这些区间唯一的消费者是 Kotlin 的 `Spannable.setSpan(...)`，而它的下标按
+//! **UTF-16 码元**计（emoji 这类字符是代理对 = 2 个码元）。
+//! 本实现原先按 Rust `char`（**码点**）计，遇到代理对就会整段左移 ——
+//! Kotlin 侧于是把加粗套到「代理对后半截 + 下一个字」上，且**不报错**。
+//! 当时靠一句注释兜着：「法律文本不含此类字符」—— 而那只是**当时**的事实，
+//! 没有任何断言护着（2026-10-20 审查报告 B-1）。现在改成与 Kotlin 同口径，
+//! 这个前提就不再需要成立了。
 
 pub struct Marked {
     pub plain: String,
-    /// 应加粗的区间（闭区间 first..=last，按字符计）
+    /// 应加粗的区间（闭区间 first..=last，按 **UTF-16 码元**计）
     pub bold_ranges: Vec<(usize, usize)>,
 }
 
@@ -19,7 +29,7 @@ pub fn parse(raw: &str) -> Marked {
     let marker = "**";
     let mut plain = String::with_capacity(raw.len());
     let mut bold_ranges = Vec::new();
-    let mut chars_consumed = 0usize; // plain 侧已写入的字符数
+    let mut utf16_len = 0usize; // plain 侧已写入的 **UTF-16 码元**数
     let mut cursor = 0usize; // raw 侧的字节游标
     while cursor < raw.len() {
         let Some(open) = raw[cursor..].find(marker).map(|o| cursor + o) else {
@@ -32,15 +42,17 @@ pub fn parse(raw: &str) -> Marked {
             break; // 落单：连同后面的正文一起按原样收尾
         };
         plain.push_str(&raw[cursor..open]);
-        // 对齐 Kotlin `plain.length`：前缀写入后立即累计字符数
-        chars_consumed += raw[cursor..open].chars().count();
-        let start = chars_consumed;
+        // 对齐 Kotlin `plain.length`：前缀写入后立即累计长度。
+        // ⚠️ 必须按 **UTF-16 码元**计（`encode_utf16().count()`），不能按 `chars().count()`：
+        //    后者是**码点**，代理对字符（emoji）会让区间整段左移 ⇒ Kotlin 侧加粗落到错字上。
+        utf16_len += raw[cursor..open].encode_utf16().count();
+        let start = utf16_len;
         let body = &raw[open + marker.len()..close];
         plain.push_str(body);
-        chars_consumed += body.chars().count();
+        utf16_len += body.encode_utf16().count();
         // Kotlin `if (plain.length > start)`：非空区间才记录（空标记被丢弃）
-        if chars_consumed > start {
-            bold_ranges.push((start, chars_consumed - 1));
+        if utf16_len > start {
+            bold_ranges.push((start, utf16_len - 1));
         }
         cursor = close + marker.len();
     }
@@ -96,5 +108,15 @@ mod tests {
         let m = parse("结尾**加粗**");
         assert_eq!("结尾加粗", m.plain);
         assert_eq!(vec![(2, 3)], m.bold_ranges);
+    }
+
+    #[test]
+    fn astral_char_keeps_utf16_indices() {
+        // 「a😀**bc**d」：emoji 是代理对（1 个码点、**2 个 UTF-16 码元**）。
+        // Kotlin 的 `String.length` 与 `Spannable` 下标都是 UTF-16 码元 ⇒ 加粗区间是 3..4。
+        // 若按码点计会得到 2..3 ⇒ Kotlin 侧会把加粗套到「代理对后半 + b」上（且不报错）。
+        let m = parse("a😀**bc**d");
+        assert_eq!("a😀bcd", m.plain);
+        assert_eq!(vec![(3, 4)], m.bold_ranges);
     }
 }

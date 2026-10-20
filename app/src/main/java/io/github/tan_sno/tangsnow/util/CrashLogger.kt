@@ -225,37 +225,81 @@ object CrashLogger {
         }
     }
 
-    private fun write(context: Context, thread: Thread, throwable: Throwable) {
-        val dir = File(context.filesDir, DIR_NAME)
-        dir.mkdirs()
-        val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
-        // 文件名精确到**毫秒**：原先只到秒，同一秒内的第二次崩溃会覆盖掉第一条（崩溃日志恰恰是
-        // 连崩时最需要的那条）。列表按修改时间（lastModified）倒序；毫秒后缀保证同秒两条也有稳定先后。
-        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())
-        val sb = StringBuilder().apply {
-            appendLine("棠雪 / TangSnow")
-            appendLine("时间: $time")
-            appendLine("进程: ${context.packageName} (pid=${android.os.Process.myPid()})")
-            appendLine("线程: ${thread.name}")
-            val pm = context.packageManager
-            runCatching {
-                val pkg = pm.getPackageInfo(context.packageName, 0)
-                appendLine("版本: ${pkg.versionName} (${if (android.os.Build.VERSION.SDK_INT >= 28) pkg.longVersionCode else @Suppress("DEPRECATION") pkg.versionCode})")
-            }
-            appendLine("设备: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-            appendLine("系统: Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
-            lastHost?.let { appendLine("最近访问站点（仅域名）: $it") }
-            appendLine("---- 堆栈 ----")
-            val sw = StringWriter()
-            throwable.printStackTrace(PrintWriter(sw))
-            // 限制单条日志体积，防止超大堆栈撑爆；同时做脱敏（见 redact 的说明）
-            val stack = redact(sw.toString())
-            append(if (stack.length > 40_000) stack.take(40_000) + "\n…(堆栈过长已截断)" else stack)
+    /**
+     * 落盘文件的公共头部：应用名称与版本、时间、进程、线程、设备与系统信息。
+     *
+     * 为什么抽出来：[write]（进程崩溃）与 [recordFault]（内核桥接故障）必须落**同一种形状**的文件。
+     * 政策第 7 条给崩溃日志的是一份**封闭的字段清单**（应用名称与版本、崩溃时间、设备型号与
+     * 系统版本、进程与线程标识、错误堆栈）—— 两种来源的文件若字段各不相同，「关于」页里那份
+     * 清单就与实际内容对不上，披露随之失真；而 [PolicyConsistencyTest] 的「崩溃日志写入的字段
+     * 集合与预期一致」正是按这一份清单把关的。
+     *
+     * @param lastHost 最近访问站点（仅域名）；null = 本条不记（桥接故障与网页内容无关，
+     *   少记一个字段就少一份可识别信息，且政策第 7 条给的是「**可能**记录」）。
+     */
+    private fun buildHeader(
+        context: Context,
+        time: String,
+        threadName: String,
+        lastHost: String?,
+    ): String = buildString {
+        appendLine("棠雪 / TangSnow")
+        appendLine("时间: $time")
+        appendLine("进程: ${context.packageName} (pid=${android.os.Process.myPid()})")
+        appendLine("线程: $threadName")
+        val pm = context.packageManager
+        runCatching {
+            val pkg = pm.getPackageInfo(context.packageName, 0)
+            appendLine("版本: ${pkg.versionName} (${if (android.os.Build.VERSION.SDK_INT >= 28) pkg.longVersionCode else @Suppress("DEPRECATION") pkg.versionCode})")
         }
-        val out = File(dir, "crash-$stamp.txt")
-        runCatching { out.writeText(sb.toString()) }
-        // 写入之后再裁剪：保证磁盘上恰好保留最近 MAX_KEEP 条。
-        // （旧实现"先判断再写"，实际会多留 1 条，与注释声明的保留条数不一致。）
+        appendLine("设备: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        appendLine("系统: Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+        lastHost?.let { appendLine("最近访问站点（仅域名）: $it") }
+    }
+
+    /**
+     * 记录一条**内核桥接故障**（不是进程崩溃：进程还活着，只是某个 JNI 调用失败了）。
+     *
+     * 为什么不另开一个 `diag/` 目录：那会多出一类「政策未枚举、用户在「关于」页既看不到
+     * 也删不掉」的本地文件 —— 与隐私承诺的方向**相反**（政策第 7 条只披露了崩溃日志这一类，
+     * 且那一条的措辞是「程序异常时，若应用进程发生**可被捕获的错误**，会留存在设备本地的崩溃
+     * 日志」—— 桥接故障正是「可被捕获的错误」）。写进同一个 crash 目录、同一套命名 ⇒ 复用既有的
+     * 披露、既有的可见性（「关于」页可列出、可查看、可删除、可分享）与既有的条数上限（[MAX_KEEP]）。
+     *
+     * ⚠️ 只在**崩溃日志已安装**（= 用户已通过同意门禁）时才落盘：与 [install] 同一口径 ——
+     * 同意页承诺「在您点击同意之前不处理任何数据」。
+     *
+     * @param threadName **出错时**所在线程的名字。必须由调用方在异常发生的那个线程上取 ——
+     *   本方法可能已在后台线程执行（写盘不阻塞调用方），那时取到的是 IO 线程，不是案发现场。
+     */
+    internal fun recordFault(context: Context, op: String, t: Throwable, threadName: String) {
+        if (!installed) return
+        val app = context.applicationContext
+        val dir = File(app.filesDir, DIR_NAME)
+        runCatching {
+            dir.mkdirs()
+            val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+            // 命名与崩溃日志完全一致（毫秒段）⇒ 被同一套「列出 / 展示 / 删除 / 裁剪」逻辑接住
+            val stamp = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())
+            val sb = StringBuilder()
+            sb.append(buildHeader(app, time, threadName, lastHost = null))
+            sb.appendLine("---- 堆栈 ----")
+            // 这一行是「错误堆栈」这一项的**说明文字**，刻意**不**写成「标签: 值」形式的独立字段：
+            // 政策第 7 条给的是封闭的字段清单，多一个字段就得改政策 + 改 PolicyConsistencyTest 的
+            // 预期集合；而本行不含任何可识别用户的信息，落在「错误堆栈」项内不构成新的数据类别。
+            sb.appendLine("【内核桥接故障】未导致进程退出；出错操作：$op")
+            val sw = StringWriter()
+            t.printStackTrace(PrintWriter(sw))
+            // 与崩溃日志同口径脱敏：堆栈里理论上不带 URL，但同一把尺子没有额外成本
+            val stack = redact(sw.toString())
+            sb.append(if (stack.length > 40_000) stack.take(40_000) + "\n…(堆栈过长已截断)" else stack)
+            File(dir, "crash-$stamp.txt").writeText(sb.toString())
+        }
+        trimOld(dir)
+    }
+
+    /** 裁剪：保证磁盘上恰好保留最近 [MAX_KEEP] 条（写入之后再裁，避免多留 1 条）。 */
+    private fun trimOld(dir: File) {
         runCatching {
             val files = dir.listFiles { f -> f.isFile && f.name.startsWith("crash-") && f.name.endsWith(".txt") }
                 ?.toList().orEmpty()
@@ -265,6 +309,28 @@ object CrashLogger {
                     .forEach { it.delete() }
             }
         }
+    }
+
+    private fun write(context: Context, thread: Thread, throwable: Throwable) {
+        val dir = File(context.filesDir, DIR_NAME)
+        dir.mkdirs()
+        val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+        // 文件名精确到**毫秒**：原先只到秒，同一秒内的第二次崩溃会覆盖掉第一条（崩溃日志恰恰是
+        // 连崩时最需要的那条）。列表按修改时间（lastModified）倒序；毫秒后缀保证同秒两条也有稳定先后。
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())
+        val sb = StringBuilder()
+        sb.append(buildHeader(context, time, thread.name, lastHost))
+        sb.appendLine("---- 堆栈 ----")
+        val sw = StringWriter()
+        throwable.printStackTrace(PrintWriter(sw))
+        // 限制单条日志体积，防止超大堆栈撑爆；同时做脱敏（见 redact 的说明）
+        val stack = redact(sw.toString())
+        sb.append(if (stack.length > 40_000) stack.take(40_000) + "\n…(堆栈过长已截断)" else stack)
+        val out = File(dir, "crash-$stamp.txt")
+        runCatching { out.writeText(sb.toString()) }
+        // 写入之后再裁剪：保证磁盘上恰好保留最近 MAX_KEEP 条。
+        // （旧实现"先判断再写"，实际会多留 1 条，与注释声明的保留条数不一致。）
+        trimOld(dir)
     }
 
     /** 崩溃日志文件（按时间从新到旧排序） */

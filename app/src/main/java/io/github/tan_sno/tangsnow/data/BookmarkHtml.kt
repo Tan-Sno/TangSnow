@@ -1,5 +1,7 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.util.CodePoints
+
 /**
  * Netscape 书签 HTML 的解析与导入清洗（纯字符串逻辑，可被 JVM 单测覆盖）。
  *
@@ -54,7 +56,15 @@ object BookmarkHtml {
     /** 收尾标签前缀。刻意不用正则：查找游标单调推进即可线性，见 [parseImport] 的复杂度说明 */
     private const val CLOSE_PREFIX = "</a"
 
-    /** 导入清洗时单条标题的上限（超出截断，不拒收） */
+    /**
+     * 导入清洗时单条标题的上限（超出截断，不拒收）。
+     *
+     * ⚠️ 量纲是**码点**（不是 UTF-16 码元）：Kotlin 的 `String.take(n)` 取的是前 n 个码元，
+     * n 落在代理对中间时会把星平面字符（emoji）**劈成两半**、落库一个孤立代理（渲染成 `�`）。
+     * Rust 侧 `chars().take(n)` 按码点 ⇒ 两侧原本对同一条含 emoji 的标题会给出不同结果。
+     * 现两侧统一按码点（Kotlin 见 [CodePoints.takeCodePoints]）⇒ 一致，且不再产生孤立代理。
+     * 代价：一条全是 emoji 的标题现在最多 200 个码点（= 400 个 UTF-16 码元），比原先长一倍。
+     */
     internal const val MAX_TITLE_LENGTH = 200
 
     /** 单次导入的条目上限：防御超大/恶意文件，>1000 条的书签属于异常体量 */
@@ -229,7 +239,9 @@ object BookmarkHtml {
                 skipped++
                 continue
             }
-            out += Entry(url, e.title.take(MAX_TITLE_LENGTH), e.createdAtMs)
+            // 标题按**码点**截断（与 Rust 侧 `chars().take(MAX_TITLE_LENGTH)` 逐字对齐）：
+            // 用 `take()` 会按 UTF-16 码元切，落在代理对中间时留下**孤立代理**（渲染成 `�`）。
+            out += Entry(url, CodePoints.takeCodePoints(e.title, MAX_TITLE_LENGTH), e.createdAtMs)
         }
         return out to skipped
     }

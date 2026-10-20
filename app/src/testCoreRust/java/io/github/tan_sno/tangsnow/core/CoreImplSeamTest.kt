@@ -56,4 +56,35 @@ class CoreImplSeamTest {
         assertNull(CoreImpl.shouldSkipHistoryUrl("about:home"))
         assertNull(CoreImpl.legalParseBoldRanges("a**b**c"))
     }
+
+    /**
+     * **W1 的七道闸门也要钉**（2026-10-20 审查报告 C-13）。
+     *
+     * 此前这里只钉了 W2 的九桥，W1 的七个**全漏** —— 而这七个里有**四个**的
+     * [CoreNative] 层 guard 默认值是**非 null** 的：
+     * `looksLikeUri` → false、`schemeOf` → ""、`isPortableUrl` → false、
+     * `searchUrlFromTemplate` → Kotlin 兜底算出的 URL、`percentEncode` → Kotlin 兜底编码。
+     *
+     * 后果：[CoreImpl] 若哪天不先问 `available`，JVM 上这些默认值会被当成"接管结果"返回
+     * （表现为「地址栏不回显」「编码结果与 coreKotlin 不同」…），而**没有任何测试会红** ——
+     * 因为默认值大多"看起来合理"。
+     */
+    @Test
+    fun jvm上W1七桥全部不接管() {
+        // 单值进出的纯字符串函数（无 JNI 结构 ⇒ 签名漂移的后果可预期）
+        assertNull(CoreImpl.resolveInfo("棠雪", "https://www.bing.com/search?q={q}"))
+        assertNull(CoreImpl.looksLikeUri("https://example.com"))
+        assertNull(CoreImpl.schemeOf("https://example.com"))
+        assertNull(CoreImpl.isPortableUrl("https://example.com"))
+        assertNull(CoreImpl.percentEncode("a b"))
+        assertNull(CoreImpl.searchUrl("https://www.bing.com/search?q={q}", "棠雪"))
+        assertNull(
+            CoreImpl.displayForUrl(
+                "https://www.bing.com/search?q=1",
+                "https://www.bing.com/search?q={q}",
+                "q",
+                "bing_cn",
+            )
+        )
+    }
 }

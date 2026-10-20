@@ -27,6 +27,17 @@ class ReleaseGateConsistencyTest {
     private val buildText: String by lazy { File(repoRoot(), "app/build.gradle.kts").readText() }
     private val gateText: String by lazy { File(repoRoot(), "tools/verify_release.py").readText() }
 
+    /**
+     * 「这个用例真的会判定」的粗判标记（Rust 侧）。
+     *
+     * `prop_assert!` / `prop_assert_eq!` 是 proptest 宏，**同样是断言**（属性测试用）——
+     * 漏掉它们会把 `properties_fuzz.rs` 整份误判成零断言。
+     */
+    private val ASSERT_MARKERS = listOf(
+        "assert!", "assert_eq!", "assert_ne!", "panic!",
+        "prop_assert!", "prop_assert_eq!", "prop_assert_ne!",
+    )
+
     @Test
     fun `ABI 集合与 versionCode 序号在构建脚本与门禁脚本里完全一致`() {
         // 构建侧：abiCodes = mapOf("arm64-v8a" to 1, "armeabi-v7a" to 2, "x86_64" to 3)
@@ -343,6 +354,90 @@ class ReleaseGateConsistencyTest {
             "README 指着不存在的差分文件：$missing —— 补文件、把文件纳入版本库，或改文档，别留假指路",
             missing.isEmpty(),
         )
+    }
+
+    /**
+     * **每个 `#[test]` 用例都必须真的有断言**（2026-10-20 审查报告 C-12）。
+     *
+     * `bench_smoke.rs` 曾经只有 `println!`、**零断言** —— 它**永远不会失败**，
+     * 却照样计入 README 声明的「N/N 通过」，而上一条测试正是拿这个数当门禁依据
+     * ⇒ 一个空转的用例稀释了门禁的分量（读起来像"N 个检查都过了"，实际少了一个）。
+     *
+     * 判据：函数体里出现 `assert!` / `assert_eq!` / `assert_ne!` / `panic!` 之一
+     * （proptest 的 `prop_assert!` 同样是断言 ✔）。
+     * 刻意只做「有没有断言」的**粗判**，不解析断言的强度 —— 粗判已经能挡住
+     * 「只打印不判定」这一类；断言写得好不好是另一回事，由 review 把关。
+     *
+     * ⚠️ **已知盲区**：用例体靠「剥注释与字符串字面量后按花括号配平」抽出来，
+     * 抽不出来的用例**不会被检查**（2026-10-20 实测：`download_filename.rs` 里有几个
+     * 用例抽不出来）。故本条是**兜底**而非完备证明；真要完备得写个 Rust 词法分析器 ✔。
+     */
+    @Test
+    fun `每个用例都真的有断言`() {
+        val rsRoot = File(repoRoot(), "tangsnow-rs")
+        val offenders = mutableListOf<String>()
+        var total = 0
+        rsRoot.walkTopDown()
+            .onEnter { dir -> dir.name != "target" }
+            .filter { it.isFile && it.extension == "rs" }
+            .forEach { f ->
+                val bodies = testBodies(f.readText())
+                total += bodies.size
+                bodies.forEachIndexed { i, body ->
+                    if (ASSERT_MARKERS.none { body.contains(it) }) {
+                        offenders += "${f.relativeTo(repoRoot()).path}：第 ${i + 1} 个 #[test] 只有打印、没有断言"
+                    }
+                }
+            }
+        assertTrue(
+            "扫到的 $total 个 #[test] 用例里，有 ${offenders.size} 个**没有任何断言** —— " +
+                "这类用例永远不会失败，却照样计入 README 声明的测试数，稀释门禁分量：\n  " +
+                offenders.joinToString("\n  "),
+            offenders.isEmpty(),
+        )
+    }
+
+    /**
+     * 取出每个 `#[test]` 对应的函数体（按花括号配平）。
+     *
+     * 三处必须先处理，否则会误判：
+     *  ① **字符串字面量** —— proptest 的形如 `ext in "[a-zA-Z]{1,6}"` 里带着花括号，
+     *     当成代码块会让配平跑偏、把函数体截成半截（`properties_fuzz.rs` 就踩过这个）；
+     *  ② **注释** —— 注释里出现的 `#[test]`（例如「与 JVM 侧逐条对齐的 `#[test]`」）
+     *     不是用例，被当成零断言就会误报；
+     *  ③ **顺序** —— 必须**先剥字符串、再剥注释**：反过来的话，字符串里的 `//`
+     *     （如 `https://x`）会先被当注释吃掉 ⇒ 引号变奇数 ⇒ 随后的字符串匹配跨行配对
+     *     ⇒ 把大段代码（含 `#[test]`）当成字符串抹掉。
+     */
+    private fun testBodies(text: String): List<String> {
+        val code = text
+            // DOT_MATCHES_ALL：Rust 字符串可用 `\` + 换行续行，"\\." 得能跨行才匹配得上
+            .replace(Regex("\"(\\\\.|[^\"\\\\])*\"", RegexOption.DOT_MATCHES_ALL), "\"\"")
+            .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), " ")
+            .replace(Regex("""//[^\n]*"""), " ")
+        val out = ArrayList<String>()
+        var i = 0
+        while (true) {
+            val at = code.indexOf("#[test]", i)
+            if (at < 0) break
+            i = at + 1
+            val open = code.indexOf('{', at)
+            if (open < 0) continue
+            var depth = 0
+            var j = open
+            while (j < code.length) {
+                when (code[j]) {
+                    '{' -> depth++
+                    '}' -> {
+                        depth--
+                        if (depth == 0) break
+                    }
+                }
+                j++
+            }
+            out += code.substring(open + 1, minOf(j, code.length))
+        }
+        return out
     }
 
     /** 只为比较"是不是同一颗产物"，手算 SHA-256，不额外引依赖。 */

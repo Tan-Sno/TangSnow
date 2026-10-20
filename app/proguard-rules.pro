@@ -33,8 +33,8 @@
 #    结算、本次应答丢弃」的留痕）与 Log.i ×1（SessionManager 的权限拒绝留痕，它另在
 #    BuildConfig.DEBUG 门内）：d / i / v 三级一律靠下面的剥离规则移除，release 不存在。
 #    Log.v 全仓 0 处。
-#  · 全仓 Log.w 调用点共 9 处 —— 上面会进 release 的 5 处之外，ExtensionCatalog、
-#    ExtensionsActivity 与 DownloadRepo 的 4 处都在 BuildConfig.DEBUG 门内，release 不存在。
+#  · 全仓 Log.w 调用点共 10 处 —— 上面会进 release 的 5 处之外，ExtensionCatalog、
+#    ExtensionsActivity 与 DownloadRepo 的 5 处都在 BuildConfig.DEBUG 门内，release 不存在。
 #  · 另计（coreRust flavor 专有源集）：w ×0、e ×3 —— 上面那 ×5 / ×4 只扫 `app/src/main/java`，
 #    而 `2026-10-15` 起 `app` 有了 `core` flavor：coreRust 源集另带三处 Log.e
 #    （CoreNative 的「JNI 返回 null 已兜底」+「JNI 抛 Throwable」、CoreBridge 的「Rust 边界

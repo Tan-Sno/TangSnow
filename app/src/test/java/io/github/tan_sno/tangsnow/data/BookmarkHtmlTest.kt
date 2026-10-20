@@ -270,6 +270,42 @@ class BookmarkHtmlTest {
         assertEquals(BookmarkHtml.MAX_TITLE_LENGTH, entries[0].title.length)
     }
 
+    /**
+     * 标题截断必须按**码点**、不得劈开代理对。
+     *
+     * 回归的是什么：`String.take(n)` 取的是前 n 个 **UTF-16 码元**，n 落在代理对中间时
+     * 会把一个 emoji 劈成两半 ⇒ 落库一个**孤立代理**（渲染成 `�`）。而 Rust 侧
+     * `chars().take(n)` 按码点 ⇒ 两侧原本对同一条含 emoji 的标题给出不同结果。
+     * 现两侧统一按码点（Kotlin 见 `util/CodePoints.takeCodePoints`）。
+     */
+    @Test
+    fun `标题截断按码点_不劈开代理对且与Rust侧同口径`() {
+        val emoji = "🎈" // U+1F388，星平面：Kotlin 里占 2 个 UTF-16 码元
+        // 199 个 BMP 字符 + 一串 emoji：截断点正好落在代理对中间
+        val longTitle = "标".repeat(BookmarkHtml.MAX_TITLE_LENGTH - 1) + emoji + "尾"
+        val (entries, _) = BookmarkHtml.sanitize(
+            listOf(BookmarkHtml.Entry("https://t.cn/", longTitle)), emptySet()
+        )
+        val title = entries[0].title
+        // 1) 不得出现孤立代理：任何代理项都必须是完整的「高+低」配对
+        var i = 0
+        while (i < title.length) {
+            val cp = title.codePointAt(i)
+            if (Character.isHighSurrogate(title[i])) {
+                assertTrue("代理对必须完整，低代理缺失于 $i", i + 1 < title.length)
+                assertTrue("代理对必须完整，低代理不是代理于 $i", Character.isLowSurrogate(title[i + 1]))
+                i += 2
+            } else {
+                assertFalse("此处不应出现孤立低代理于 $i", Character.isLowSurrogate(title[i]))
+                i++
+            }
+        }
+        // 2) 量纲是码点（与 Rust `chars().count()` 一致），不是 UTF-16 码元
+        assertEquals(BookmarkHtml.MAX_TITLE_LENGTH, title.codePointCount(0, title.length))
+        // 3) 截断后的末尾必须是完整的 emoji（而不是它的半个代理）
+        assertTrue(title.endsWith(emoji))
+    }
+
     // ------------------------------------------------------------- export
 
     @Test

@@ -114,7 +114,11 @@ export RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384$REMAP"
 echo "RUSTFLAGS=$RUSTFLAGS"
 
 for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
-  cargo build $PROFILE --target "$target" --features jni
+  # `--locked`：锁文件已入库 ⇒ 依赖解析必须冻结。
+  # 不加它时 cargo 可以**静默改动 Cargo.lock**（例如某个传递依赖放开了版本区间），
+  # 于是「本地编出来的 .so」与「仓库里那份锁文件」对不上，而发布链照常走完
+  # （2026-10-20 审查报告 C-6）。锁文件与依赖不一致时这里直接失败，比出包后再猜强。
+  cargo build $PROFILE --locked --target "$target" --features jni
 done
 
 OUT=../dist/jniLibs

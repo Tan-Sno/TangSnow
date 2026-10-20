@@ -1,22 +1,69 @@
-//! `SearchEngines` 差分测试：用例与 JVM 侧 `SearchEnginesTest.kt` / `PercentEncodeTest.kt` 同源。
+//! `SearchEngines` 差分测试。
+//!
+//! ## 引擎查找 / 主机判定 / 取主机三组的期望值来自**两侧共享的 JSON 夹具**
+//! （2026-10-20 审查报告 C-14）
+//!
+//! 此前这里与 JVM 侧 `SearchEnginesTest.kt` **各写一份期望值** —— 那是**镜像**：
+//! 改实现 + 同步改本侧的镜像期望值 ⇒ 两侧照样全绿，而两边的口径已经漂了
+//! （2026-10-16 的别名表漏行"bing"就是这么漏掉的）。
+//! 现在两边读**同一份**夹具（`tests/fixtures/search_engines_cases.json`）⇒ 改夹具必然两侧一起红。
+//!
+//! 内置引擎**模板表**不在夹具内 —— 它是一张表，由 `SearchEngineTableParityTest` 并排比对两侧源码。
+
+mod common;
 
 use tangsnow_core::search_engines::*;
 
-// ------------------------------------------------------------- find
+/// 共享夹具（编译期读入；路径相对本文件）。
+const CASES: &str = include_str!("fixtures/search_engines_cases.json");
+
+// ------------------------------------------------------------- find / hostMatches / templateHostOf
 
 #[test]
-fn 按_id_命中内置引擎() {
-    let all = builtins();
-    assert_eq!(find(all, Some("baidu")).id, "baidu");
-    assert_eq!(find(all, Some("bing_cn")).id, "bing_cn");
-}
-
-#[test]
-fn 未知_id_回退默认引擎而不是抛异常() {
-    let all = builtins();
-    assert_eq!(find(all, Some("nope")).id, DEFAULT_ID);
-    assert_eq!(find(all, None).id, DEFAULT_ID);
-    assert_eq!(find(&[], Some("baidu")).id, DEFAULT_ID);
+fn 夹具里的每条用例两侧同口径() {
+    let v = common::load(CASES);
+    for c in v["cases"].as_array().unwrap() {
+        let id = c["id"].as_str().expect("id 必须是字符串");
+        let kind = c["kind"].as_str().expect("kind 必须是字符串");
+        let a = c["args"].as_array().expect("args 必须是数组");
+        match kind {
+            "find" => {
+                // args[0] = 引擎 id（null = 空 id）；args[0] == "__empty_list__" 时
+                // 用**空列表**找（args[1] 才是要找的 id）
+                let empty = a[0].as_str() == Some("__empty_list__");
+                let list: &[SearchEngine] = if empty { &[] } else { builtins() };
+                let want: Option<&str> = if empty {
+                    Some(a[1].as_str().expect("args[1] 必须是字符串"))
+                } else {
+                    a[0].as_str()
+                };
+                assert_eq!(
+                    find(list, want).id,
+                    c["expected"].as_str().expect("expected 必须是字符串"),
+                    "夹具用例「{id}」"
+                );
+            }
+            "hostMatches" => {
+                let host = a[0].as_str().expect("args[0] 必须是字符串");
+                let engine = a[1].as_str().expect("args[1] 必须是字符串");
+                let tpl = a[2].as_str().expect("args[2] 必须是字符串");
+                assert_eq!(
+                    host_matches(host, engine, tpl),
+                    c["expected"].as_bool().expect("expected 必须是布尔"),
+                    "夹具用例「{id}」"
+                );
+            }
+            "templateHostOf" => {
+                let tpl = a[0].as_str().expect("args[0] 必须是字符串");
+                assert_eq!(
+                    template_host_of(tpl).as_deref(),
+                    c["expected"].as_str(),
+                    "夹具用例「{id}」"
+                );
+            }
+            other => panic!("夹具里的 kind「{other}」本文件不认（改夹具要同步两侧的派发）"),
+        }
+    }
 }
 
 #[test]
@@ -78,48 +125,6 @@ fn 空模板回退到内置兜底地址() {
 fn 关键词前后空白被裁剪() {
     let e = SearchEngine::new("x", "https://s.test/?q={q}", None);
     assert_eq!(e.search_url("  abc  "), "https://s.test/?q=abc");
-}
-
-// ------------------------------------------------------------- templateHostOf
-
-#[test]
-fn 从模板取出主机() {
-    assert_eq!(template_host_of("https://a.com").as_deref(), Some("a.com"));
-    assert_eq!(template_host_of("https://a.com/").as_deref(), Some("a.com"));
-    assert_eq!(template_host_of("https://a.com#x").as_deref(), Some("a.com"));
-    assert_eq!(template_host_of("https://a.com:8443/search?q={q}").as_deref(), Some("a.com"));
-    // 省略协议（自定义引擎可能这么写）
-    assert_eq!(template_host_of("a.com/search?q={q}").as_deref(), Some("a.com"));
-    // userinfo 要被去掉，只留主机
-    assert_eq!(template_host_of("https://u:p@a.com/x").as_deref(), Some("a.com"));
-    // 大小写归一
-    assert_eq!(template_host_of("HTTPS://CN.Bing.COM/search?q={q}").as_deref(), Some("cn.bing.com"));
-}
-
-#[test]
-fn 取不到主机时返回_none() {
-    assert_eq!(template_host_of(""), None);
-    assert_eq!(template_host_of("https:///search?q={q}"), None);
-    assert_eq!(template_host_of("https://:8080/x"), None);
-}
-
-// ------------------------------------------------------------- hostMatches
-
-#[test]
-fn 模板主机及其子域命中() {
-    assert!(host_matches("cn.bing.com", "bing_cn", "cn.bing.com"));
-    assert!(host_matches("x.cn.bing.com", "bing_cn", "cn.bing.com"));
-    assert!(host_matches("www.baidu.com", "baidu", "www.baidu.com"));
-    assert!(host_matches("evil.com", "bing_cn", "cn.bing.com") == false);
-    assert!(host_matches("bing_cnevil.com", "bing_cn", "cn.bing.com") == false);
-}
-
-#[test]
-fn 主机别名命中_www_bing() {
-    // 模板写 cn.bing.com，用户实际在 www.bing.com 上搜索 —— 地址栏要显示关键词
-    assert!(host_matches("www.bing.com", "bing_cn", "cn.bing.com"));
-    assert!(host_matches("m.baidu.com", "baidu", "www.baidu.com"));
-    assert!(host_matches("html.duckduckgo.com", "ddg", "duckduckgo.com"));
 }
 
 // ------------------------------------------------------------- displayForUrl

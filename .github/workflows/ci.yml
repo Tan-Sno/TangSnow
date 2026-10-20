@@ -38,6 +38,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 对外法律文档（docs/PRIVACY.md / docs/TERMS.md）是应用内法律文本的**导出物**
+      # （tools/export_legal_docs.py 从 app/src/main/res/values*/strings.xml 生成）。
+      # 应用内那份永远是对的（用户看到的是它）⇒ 改了 strings.xml 却忘了重导出时，
+      # **只有对外那份静默过期**，而 README / 商店页都链到它 ⇒ 对外说的与应用内做的不是一回事。
+      # 门禁直接用导出脚本自己的 `--check`（同一份口径，不另写一份比对逻辑 ——
+      # 两份实现必然漂移，而漂移的方向恰好是「门禁自己变瞎」）。
+      - name: Legal docs sync check
+        run: python3 tools/export_legal_docs.py --check
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

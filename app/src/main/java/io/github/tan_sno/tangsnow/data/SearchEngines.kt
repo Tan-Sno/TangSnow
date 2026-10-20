@@ -192,22 +192,27 @@ object SearchEngines {
     /**
      * 该主机是否属于这个搜索引擎。
      *
-     * 除模板主机与其子域外，还要认"同一引擎的其它官方主机"：用户实际在
+     * 认的是**模板主机**与 [HOST_ALIASES] 里**显式登记**的官方主机
+     * （两者都比对 `www.` 归一后的**完全相等**）。
+     *
+     * 除模板主机外，还要认"同一引擎的其它官方主机"：用户实际在
      * `www.bing.com` 上搜索，而模板写的是 `cn.bing.com`——只比对模板的话，
      * 地址栏会显示整条 URL 而不是关键词，与"搜完只显示关键词"的目标不符。
+     *
+     * ⚠️ **不做子域通配**（2026-10-20 审查报告 C-3）：原先还有一支
+     * `bare.endsWith(".$bareCandidate")` ⇒ 任何 `*.bing.com` / `*.baidu.com` / `*.sm.cn` …
+     * 的子域都算同一引擎。而这条判据的**唯一用途**是「结果页回显关键词」：
+     * 命中后地址栏只显示 `q=`/`wd=` 的值、**不显示真实 URL** ⇒
+     * 那些域的子域只要带同名查询参数，就能让地址栏**只显示自己挑的那个值**
+     * —— 这是**地址栏伪装面**（能否真被利用取决于这些域的子域委派实况，静态不可判定）。
+     * 现在只认模板主机与显式登记的别名主机；确有需要的官方主机**登记进 [HOST_ALIASES]**。
      *
      * 纯字符串运算（不碰 android.net.Uri），故声明为 internal 以便单元测试直接覆盖。
      */
     internal fun hostMatches(host: String, engineId: String, templateHost: String): Boolean {
         val bare = host.removePrefix("www.")
-        val candidates = buildList {
-            add(templateHost)
-            addAll(HOST_ALIASES[engineId].orEmpty())
-        }
-        return candidates.any { candidate ->
-            val bareCandidate = candidate.removePrefix("www.")
-            bare == bareCandidate || bare.endsWith(".$bareCandidate")
-        }
+        fun matches(candidate: String): Boolean = bare == candidate.removePrefix("www.")
+        return matches(templateHost) || HOST_ALIASES[engineId].orEmpty().any { matches(it) }
     }
 
     /**
@@ -217,7 +222,8 @@ object SearchEngines {
     private val HOST_ALIASES: Map<String, List<String>> = mapOf(
         // 模板主机 cn.bing.com；bing.com 是同一品牌在无区域前缀时的主机
         "bing_cn" to listOf("bing.com"),
-        // 国际版模板主机是 global.bing.com；`bing.com` 经「子域后缀」匹配同时覆盖 cn./global./www.
+        // 国际版模板主机是 global.bing.com；`bing.com` 与它**不是同一个主机**
+        // ⇒ 只能在这里登记（2026-10-20 起 `hostMatches` 不再做子域通配，见其说明）。
         "bing" to listOf("bing.com"),
         "baidu" to listOf("m.baidu.com"),
         "sogou" to listOf("m.sogou.com"),

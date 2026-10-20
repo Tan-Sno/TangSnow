@@ -215,6 +215,67 @@ class BrowserDb private constructor(context: Context) :
         }
     }
 
+    /**
+     * 含非 ASCII 关键词的书签检索：**SQL 侧预筛 + 应用侧精确过滤**
+     * （2026-10-20 审查报告 A-3）。
+     *
+     * 为什么不再「全表读进内存再过滤」：书签表**没有总量上限**
+     * （`MAX_IMPORT_COUNT` 只是*单次*导入上限，多次导入会累积），
+     * 旧路径每敲一个字就把整表读成对象、再逐行做两次 `lowercase()` ⇒ 代价随表大小线性增长。
+     *
+     * 为什么不能直接下推给 SQL：SQLite 无 ICU，`lower()` 对非 ASCII **不折叠**
+     * （实测 `lower('CAFÉ')='CAFÉ'`）⇒ 直接下推会把「CAFÉ Store」整个丢掉。
+     *
+     * 现在：预筛模式在原生侧粗筛（无大小写概念的 CJK 是**字面量精确**），
+     * 只对**候选行**做应用侧精确判定（与旧内存过滤逐字一致），
+     * 攒够 [limit] 条即**提前结束游标扫描**，不再遍历整表。
+     */
+    fun searchBookmarksPrefiltered(keyword: String, limit: Int): List<Bookmark> {
+        val n = positiveLimit(limit, "limit")
+        // 预筛模式为 null ⇒ 该关键词无法安全预筛（见 [BookmarkSearch.prefilterPattern]）
+        // ⇒ 不过滤、全表扫描，仍由应用侧精确判定保证语义
+        return scanBookmarks(BookmarkSearch.prefilterPattern(keyword), keyword, n)
+    }
+
+    /**
+     * 按 `created_at DESC` 扫描书签：命中 [pattern]（null = 不过滤）的行交给
+     * [BookmarkSearch.matches] 精确判定，攒够 [limit] 条就**提前关闭游标**。
+     *
+     * ⚠️ 提前结束是有意的：联想最终只取几条，继续扫后面的行纯属白做
+     * （旧实现是「整表读进内存」筛完才停）。
+     */
+    private fun scanBookmarks(
+        pattern: String?,
+        keyword: String,
+        limit: Int,
+    ): List<Bookmark> {
+        val selection: String?
+        val args: Array<String>?
+        if (pattern == null) {
+            selection = null
+            args = null
+        } else {
+            selection = "url LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\'"
+            args = arrayOf(pattern, pattern)
+        }
+        val out = ArrayList<Bookmark>()
+        db().query(
+            "bookmarks", BOOKMARK_PROJECTION, selection, args, null, null, "created_at DESC"
+        ).use { c ->
+            // 与 allBookmarks() 同一读法（显式投影 ⇒ 列序固定：0=_id, 1=url, 2=title, 3=created_at）
+            while (out.size < limit && c.moveToNext()) {
+                val url = c.getString(1)
+                val title = c.getString(2)
+                if (!BookmarkSearch.matches(url, title, keyword)) continue
+                out += Bookmark(
+                    id = c.getLong(0), url = url,
+                    title = title, createdAt = c.getLong(3),
+                )
+            }
+        }
+        return out
+    }
+
     fun allBookmarks(): List<Bookmark> {
         db().query("bookmarks", null, null, null, null, null, "created_at DESC").use { c ->
             val out = ArrayList<Bookmark>(c.count)
@@ -343,6 +404,12 @@ class BrowserDb private constructor(context: Context) :
         private const val DB_VERSION = 3
         /** 专门历史页可见范围：超出后按最近访问自动裁剪 */
         const val HISTORY_KEEP = 200
+
+        /**
+         * 书签列投影：**显式列序** ⇒ 游标下标稳定（0=_id, 1=url, 2=title, 3=created_at），
+         * 不受将来给表加列影响（`allBookmarks()` 用的是「全部列」投影，靠列序隐式约定）。
+         */
+        private val BOOKMARK_PROJECTION = arrayOf("_id", "url", "title", "created_at")
 
         /**
          * 「LIMIT」入参的守卫（纯函数，便于 JVM 单测钉住边界）。

@@ -1,28 +1,45 @@
-//! `Bitmaps`（位图采样/裁剪数学）差分测试：用例与 JVM 侧 `BitmapsSampleSizeTest.kt`
-//! / `BitmapsCoverRectTest.kt` 同源（同输入 ⇒ 同输出）。这段逻辑是 OOM 的
-//! 第一道闸门，两侧口径漂移会让一侧省内存另一侧崩内存。
+//! `Bitmaps`（位图采样/裁剪数学）差分测试。
+//!
+//! ## 采样那一半的期望值来自**两侧共享的 JSON 夹具**（2026-10-20 审查报告 C-14）
+//!
+//! 此前这里与 JVM 侧 `BitmapsSampleSizeTest.kt` **各写一份期望值** —— 那是**镜像**：
+//! 改实现 + 同步改本侧的镜像期望值 ⇒ 两侧照样全绿，而两边的采样口径已经漂了
+//! （采样不足 → 解码出上百 MB 位图直接崩；采样过头 → 背景图糊）。
+//! 现在两边读**同一份**夹具（`tests/fixtures/bitmaps_sample_size_cases.json`）。
+//!
+//! 居中裁剪（`center_crop_rect`）两侧函数名与语义各写各的，留在本文件里。
+
+mod common;
 
 use tangsnow_core::bitmaps::{center_crop_rect, required_sample_size};
 
 const FOUR_MP: i64 = 4_000_000;
 
+/// 共享夹具（编译期读入；路径相对本文件）。
+const CASES: &str = include_str!("fixtures/bitmaps_sample_size_cases.json");
+
 // ------------------------------------------------------------- 采样
 
 #[test]
-fn 尺寸远大于目标时按_2_的幂降采样() {
-    assert_eq!(required_sample_size(4000, 3000, 1000, 1500, FOUR_MP), 2);
-}
-
-#[test]
-fn 小图不采样() {
-    assert_eq!(required_sample_size(800, 600, 1080, 1920, FOUR_MP), 1);
-}
-
-#[test]
-fn 内存闸门优先于清晰度() {
-    let sample = required_sample_size(12000, 8000, 1080, 2400, FOUR_MP);
-    assert_eq!(sample, 8);
-    assert!((12000 / sample) as i64 * (8000 / sample) as i64 <= FOUR_MP);
+fn 采样倍数与Kotlin侧同口径() {
+    let v = common::load(CASES);
+    for c in v["cases"].as_array().unwrap() {
+        let id = c["id"].as_str().expect("id 必须是字符串");
+        let a = c["args"].as_array().expect("args 必须是数组");
+        let w = a[0].as_i64().expect("args[0] 必须是整数") as i32;
+        let h = a[1].as_i64().expect("args[1] 必须是整数") as i32;
+        let rw = a[2].as_i64().expect("args[2] 必须是整数") as i32;
+        let rh = a[3].as_i64().expect("args[3] 必须是整数") as i32;
+        let max = a[4].as_i64().expect("args[4] 必须是整数");
+        let sample = required_sample_size(w, h, rw, rh, max);
+        assert_eq!(
+            sample as i64,
+            c["expected"].as_i64().expect("expected 必须是整数"),
+            "夹具用例「{id}」"
+        );
+        // ⚠️ 这里**不**断言「像素上限」：退化输入（目标尺寸非正 ⇒ 直接返回 1）本来就不满足它，
+        // 像素上限是**性质**（见下一条用例），不是逐点的期望值。
+    }
 }
 
 #[test]

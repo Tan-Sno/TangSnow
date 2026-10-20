@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **305**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **287**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -380,7 +380,7 @@ android {
         //   再加「夹具不少于 5 档」⇒ +1，合计 **275**；
         //   同日再加 1 例：`ReleaseGateConsistencyTest.tangsnow-rs 的测试数与 README 声明一致，且 README
         //   点名的差分文件都在` —— `tangsnow-rs/README.md` 自己写着「Rust 侧计数没有被 TestCountCommentTest
-        //   钉住」，那句 `232/232` 一直是**手抄**：本例数仓库里的 `#[test]`（排除 `target/`）与它比对，
+        //   钉住」，那句「N/N」一直是**手抄**：本例数仓库里的 `#[test]`（排除 `target/`）与它比对，
         //   并顺带拦住"新增 `tests/*.rs` 忘了 `git add`"（`regression_2026_10_17.rs` 落地时正是未跟踪）⇒ +1，
         //   2026-10-19 为 `BridgeSignatureParityTest` 再加 1 例：**随包 `.so` 的导出符号**必须与 Kotlin
         //   的 `external fun` 声明一一对应（直接解析 `jniLibs/` 三颗 ELF 的动态符号表）—— 上面几条比的
@@ -405,6 +405,32 @@ android {
         //   `bodyLengthMismatch`，外部审查 P4-4 / 待办 #31）加 `DownloadBodyLengthTest` 14 例 ⇒ 合计 **302**。
         //   2026-10-19 A1 轮（Rust 独立应用身份 `.rust`）：为更新链通道判定加 `UpdateCheckerTest.channelOf`
         //   3 例（正式线 / 预览线 / `rusty` 同前缀仍判正式线）⇒ 合计 **305**。
+        //   2026-10-20 审查修复轮：为书签标题跨语言截断（B-2）加 `BookmarkHtmlTest`（新类，1 例：
+        //   JVM 侧按**码点**截断，与 Rust `chars().take(200)` 同口径）⇒ +1；
+        //   同轮为书签非 ASCII 搜索（A-3）加 `BookmarkSearchTest`（新类，10 例：ASCII/非 ASCII 分流、
+        //   CJK 字面量精确匹配、有大小写变体的字符用通配兜底、`i`/`k` 的 exotic 折叠兜底、
+        //   LIKE 元字符转义、组合上点放弃预筛、模式宽度恒等于关键词长度、应用侧精确判定与旧内存过滤一致、
+        //   **预筛是精确匹配集合的超集**（不变式，配一份最小 LIKE 实现当判据）、以及反向抽查预筛不过度放行）⇒ +10，
+        //   同轮为对外法律文档同步（A-4）加 `LegalDocsSyncTest`（新类，3 例：导出文档含应用内中英文原文、
+        //   文档标注的政策版本与应用内一致、文档标注的更新日期与文案首行一致 —— 对外那两份是
+        //   `tools/export_legal_docs.py` 的导出物，忘了重导出就只剩对外那份静默过期）⇒ +3，
+        //   同轮为法律粗体跨语言索引口径（B-1）加 1 例：emoji 前置时区间仍按 **UTF-16 码元**计
+        //   （Rust 侧已由「按码点计」改成 `encode_utf16().count()`，两侧同口径；设备侧另补
+        //   `W2SeamDeviceTest` 一条，让 `LegalText.parse` 的 native 合并分支真正被执行到）⇒ +1，
+        //   同轮为触摸代理命中区（C-8）加 1 例：`TouchTargetSentinelTest` 钉住「TouchDelegate 的命中矩形
+        //   必须在**布局后**算」（原先用 `post {}`，在 attach 阶段执行时坐标还是 0 ⇒ 命中区退化成
+        //   卡片左上角的隐形破坏性热区）⇒ +1，
+        //   同轮为地址栏伪装面（C-3）加 1 例：`SearchEnginesTest` 钉住「子域不再被通配命中」
+        //   （Rust 侧同步改成只认模板主机 + 显式登记的别名主机，并补「官方结果页主机仍全部命中」）⇒ +1，
+        //   同轮为零断言用例（C-12）加 1 例：`ReleaseGateConsistencyTest` 钉住「每个 `#[test]` 都必须有断言」
+        //   （`bench_smoke.rs` 曾经只打印不判定、却照样计入 README 声明的测试数）⇒ +1，
+        //   同轮把 5 对跨语言差分用例改为**两侧共享 JSON 夹具**（C-14：原先两侧各写一份期望值、
+        //   改实现 + 同步改镜像期望值 ⇒ 两侧皆绿而行为已漂）：`legal_text` / `crash_logger` /
+        //   `bitmaps` 采样 / `search_engines` / `download_filename` 五对改完后，
+        //   `LegalTextTest`（7→2）、`CrashLoggerRedactTest`（9→9，改为按 id 查夹具）、
+        //   `BitmapsSampleSizeTest`（7→2）、`SearchEnginesTest`（10→2）、
+        //   `DownloadFileNameTest`（26→17）⇒ 合计 −31，
+        //   合计 **287**。
         //   （上一版这里被我写成 274 —— `TestCountCommentTest` 当场把这句注释本身钉红了，钉子有效。）
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则两个 flavor 的单测任务
         //   （`:app:testCoreKotlinDebugUnitTest` / `:app:testCoreRustDebugUnitTest`）都直接红。

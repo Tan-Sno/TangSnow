@@ -1,7 +1,10 @@
 package io.github.tan_sno.tangsnow.core
 
+import android.text.Spannable
+import android.text.style.StyleSpan
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.tan_sno.tangsnow.data.Bookmark
+import io.github.tan_sno.tangsnow.util.LegalText
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -17,11 +20,12 @@ import java.io.File
  * 「两边都绿」只证明**降级路径没崩**。要在设备上证明 Rust 真接管，必须挑**非 null 的业务路径**
  * 输入，断言 `CoreImpl.xxx(...) != null` —— 桥没绑上或库没加载时这一档会落回 null，断言立刻红。
  *
- * ## 三组断言
+ * ## 四组断言
  *  1. 下载文件名 4 桥：非空业务输入 → 非 null，且值符合共享实现口径；
  *  2. 崩溃日志 2 桥：非空输入 → 非 null；
  *  3. 书签 3 桥 + **真写 filesDir 往返**：export → 落盘 → 读回 → parse → sanitize，条目逐项保真
- *     （含 emoji —— CESU-8 往返正是只有设备才看得见的那一档，见 H3）。
+ *     （含 emoji —— CESU-8 往返正是只有设备才看得见的那一档，见 H3）；
+ *  4. 法律粗体桥：**区间与 Kotlin 的 UTF-16 码元下标同口径**（见下）。
  *
  * 不起 Activity、不碰 GeckoView（理由同 [JniBoundaryTest]：本机 16KB AVD 上主界面会让模拟器段错误）。
  */
@@ -44,6 +48,34 @@ class W2SeamDeviceTest {
         assertNotNull("legalParseBoldRanges 应为 non-null", ranges)
         assertArrayEquals(intArrayOf(1, 2), ranges)
         assertArrayEquals(intArrayOf(), CoreImpl.legalParseBoldRanges("无标记"))
+    }
+
+    /**
+     * **法律粗体：native 接管时的区间与 Kotlin 同口径**（2026-10-20 审查报告 B-1）。
+     *
+     * 这条断言打的是 `LegalText.parse` 里**此前从未被执行过**的那条分支：
+     * coreRust flavor + 设备上 `.so` 已加载 ⇒ 区间来自 Rust，
+     * 而 `Spannable` 的下标按 **UTF-16 码元**计 ⇒ 两侧必须同口径，
+     * 否则 emoji 之后的加粗会整段左移（套到代理对后半截上，**且不报错**）。
+     *
+     * 用 `emphasize`（公开 API）而不是 `parse`（internal）：断言的是**最终落到 Span 上的位置**
+     * —— 那才是用户看到的东西。
+     */
+    @Test
+    fun 法律粗体桥与Kotlin同口径且emoji不左移() {
+        // ① 桥真接管（native 可用 ⇒ 非 null）
+        val native = CoreImpl.legalParseBoldRanges("a😀**bc**d")
+        assertNotNull("legalParseBoldRanges 应为 non-null", native)
+        assertArrayEquals(intArrayOf(3, 4), native)
+
+        // ② 端到端：区间最终套到 Span 上，必须落在 "bc" 上
+        val spanned = LegalText.emphasize("a😀**bc**d")
+        assertTrue("emphasize 应返回 Spannable", spanned is Spannable)
+        val sp = spanned as Spannable
+        val bold = sp.getSpans(0, sp.length, StyleSpan::class.java)
+        assertEquals("应恰好一处加粗", 1, bold.size)
+        assertEquals("加粗应从第 3 个 UTF-16 码元开始", 3, sp.getSpanStart(bold[0]))
+        assertEquals("加粗应覆盖 'bc' 两个码元", 5, sp.getSpanEnd(bold[0]))
     }
 
     @Test

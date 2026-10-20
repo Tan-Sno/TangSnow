@@ -149,6 +149,52 @@ class TouchTargetSentinelTest {
         assertTrue("豁免表里有 ${noReason.size} 条违规没写理由：${noReason.joinToString()}", noReason.isEmpty())
     }
 
+    /**
+     * **TouchDelegate 的命中矩形必须在布局完成后计算**（2026-10-20 审查报告 C-8）。
+     *
+     * 曾经的写法是 `view.post { …setTouchDelegate… }`：视图尚未 attach 时，`post` 会把任务排进
+     * **attach 阶段**的队列 —— 那时**还没测量**，`close.left/top/right/bottom` 全是 0
+     * ⇒ 命中矩形退化成卡片左上角 (-8,-8)-(8,8) 的**隐形热区**（点中即触发破坏性操作），
+     * 而真正想要的「外扩到 48dp」根本没发生。
+     *
+     * 这类缺陷**不崩、不打日志**，只能靠真机肉眼发现；真机在本项目里不是每次都有 ⇒ 用静态哨兵守住。
+     * 判据：`setTouchDelegate` 之前若只有 `post {`（没有布局回调）⇒ 红。
+     */
+    @Test
+    fun `触摸代理的命中矩形必须在布局后计算`() {
+        val offenders = mutableListOf<String>()
+        sourceDir().walkTopDown()
+            .filter { it.isFile && it.name.endsWith(".kt") }
+            .sortedBy { it.path }
+            .forEach { f ->
+                // 注释里可能写着「原先是 post { …}」这类**说明**，不能让哨兵被注释带偏
+                val code = stripComments(f.readText())
+                var idx = code.indexOf("setTouchDelegate")
+                while (idx >= 0) {
+                    val window = code.substring(maxOf(0, idx - 400), idx)
+                    val usesPost = window.contains("post {")
+                    val usesLayoutCallback =
+                        window.contains("doOnLayout") || window.contains("addOnLayoutChangeListener")
+                    if (usesPost && !usesLayoutCallback) {
+                        offenders += "${f.relativeTo(repoRoot()).path}（setTouchDelegate 之前只有 post {）"
+                    }
+                    idx = code.indexOf("setTouchDelegate", idx + 1)
+                }
+            }
+        assertTrue(
+            "TouchDelegate 的命中矩形必须在**布局后**算：视图未 attach 时 `post {}` 在 attach 阶段执行，" +
+                "那时坐标还是 0 ⇒ 命中区退化成角落里的隐形热区（外扩也没生效）。" +
+                "请改用 `doOnLayout { … }`（或 `addOnLayoutChangeListener`）：\n  " +
+                offenders.joinToString("\n  "),
+            offenders.isEmpty(),
+        )
+    }
+
+    /** 去掉行注释与块注释（哨兵只看**代码**）。 */
+    private fun stripComments(text: String): String = text
+        .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), " ")
+        .replace(Regex("""//[^\n]*"""), " ")
+
     // ---------------------------------------------------------------- 扫描
 
     private fun scan(): List<Hit> {

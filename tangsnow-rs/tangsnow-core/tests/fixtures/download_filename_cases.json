@@ -1,0 +1,376 @@
+{
+  "_说明": "下载文件名解析/清洗的**共享期望值**：Kotlin 侧 `app/src/test/.../data/DownloadFileNameTest.kt` 与 Rust 侧 `tests/download_filename_parity.rs` 读同一份（2026-10-20 审查报告 C-14）。kind ∈ parseFileName / sanitizeFileName / percentDecode / lastPathSegmentOf；args 按 kind 顺序（null = 该入参为空）。「超长名」那几条是**性质**（字节上限 / 扩展名保留 / emoji 计数），两侧各留一条性质用例，不进夹具。",
+  "cases": [
+    {
+      "id": "parse: Content-Disposition 优先于 URL",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; filename=\"report.pdf\"",
+        "https://a.com/other.zip"
+      ],
+      "expected": "report.pdf"
+    },
+    {
+      "id": "parse: Content-Disposition 无引号形式",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; filename=a.pdf",
+        null
+      ],
+      "expected": "a.pdf"
+    },
+    {
+      "id": "parse: RFC5987 中文文件名被正确解码",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; filename*=UTF-8''%E6%8A%A5%E5%91%8A.pdf",
+        null
+      ],
+      "expected": "报告.pdf"
+    },
+    {
+      "id": "parse: RFC5987 的 charset 大小写不敏感",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; filename*=Utf-8''%E6%8A%A5%E5%91%8A.pdf",
+        null
+      ],
+      "expected": "报告.pdf"
+    },
+    {
+      "id": "parse: 参数名全大写",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; FILENAME=\"a.pdf\"",
+        null
+      ],
+      "expected": "a.pdf"
+    },
+    {
+      "id": "parse: 参数名首字母大写",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; Filename=a.pdf",
+        null
+      ],
+      "expected": "a.pdf"
+    },
+    {
+      "id": "parse: RFC5987 的参数名大小写不敏感",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; Filename*=utf-8''%E6%8A%A5%E5%91%8A.pdf",
+        null
+      ],
+      "expected": "报告.pdf"
+    },
+    {
+      "id": "parse: 无头部时取 URL 末段",
+      "kind": "parseFileName",
+      "args": [
+        null,
+        "https://a.com/dir/file.zip"
+      ],
+      "expected": "file.zip"
+    },
+    {
+      "id": "parse: URL 末段的查询串被剥离",
+      "kind": "parseFileName",
+      "args": [
+        null,
+        "https://a.com/report.pdf?token=secret&x=1"
+      ],
+      "expected": "report.pdf"
+    },
+    {
+      "id": "parse: URL 末段里的百分号编码被解码",
+      "kind": "parseFileName",
+      "args": [
+        null,
+        "https://a.com/%E6%8A%A5%E5%91%8A.pdf"
+      ],
+      "expected": "报告.pdf"
+    },
+    {
+      "id": "parse: 片段标识符被剥离",
+      "kind": "parseFileName",
+      "args": [
+        null,
+        "https://a.com/a.pdf#page=2"
+      ],
+      "expected": "a.pdf"
+    },
+    {
+      "id": "parse: 完全拿不到名字时用兜底名",
+      "kind": "parseFileName",
+      "args": [
+        null,
+        null
+      ],
+      "expected": "download"
+    },
+    {
+      "id": "parse: 空 URL 时用兜底名",
+      "kind": "parseFileName",
+      "args": [
+        null,
+        ""
+      ],
+      "expected": "download"
+    },
+    {
+      "id": "parse: 无文件名的头部 + 无末段",
+      "kind": "parseFileName",
+      "args": [
+        "attachment",
+        "https://a.com"
+      ],
+      "expected": "download"
+    },
+    {
+      "id": "parse: 无文件名的头部 + 只有斜杠",
+      "kind": "parseFileName",
+      "args": [
+        "attachment",
+        "https://a.com/"
+      ],
+      "expected": "download"
+    },
+    {
+      "id": "parse: 结尾的点与空格被去掉",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; filename=\"a... \"",
+        null
+      ],
+      "expected": "a"
+    },
+    {
+      "id": "parse: 短名一字不动",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; filename=\"报告.pdf\"",
+        null
+      ],
+      "expected": "报告.pdf"
+    },
+    {
+      "id": "parse: 清洗后为空则回到兜底名",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; filename=\"...\"",
+        null
+      ],
+      "expected": "download"
+    },
+    {
+      "id": "sanitize: 双向文本控制符 U+202E 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "setup.apk‮txt.pdf"
+      ],
+      "expected": "setup.apktxt.pdf"
+    },
+    {
+      "id": "sanitize: DEL(U+007F) 被清掉",
+      "kind": "sanitizeFileName",
+      "args": [
+        "ab.txt"
+      ],
+      "expected": "ab.txt"
+    },
+    {
+      "id": "sanitize: 零宽字符 U+200B 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "evil.apk"
+      ],
+      "expected": "evil.apk"
+    },
+    {
+      "id": "sanitize: 零宽不换行 U+200C 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "evil.apk‌"
+      ],
+      "expected": "evil.apk"
+    },
+    {
+      "id": "sanitize: 零宽连接子 U+200D 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "evil.apk‍"
+      ],
+      "expected": "evil.apk"
+    },
+    {
+      "id": "sanitize: 零宽非连接子 U+200E 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "evil.apk‎"
+      ],
+      "expected": "evil.apk"
+    },
+    {
+      "id": "sanitize: 零宽左到右标记 U+200F 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "evil.apk‏"
+      ],
+      "expected": "evil.apk"
+    },
+    {
+      "id": "sanitize: BOM U+FEFF 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "evil.apk﻿"
+      ],
+      "expected": "evil.apk"
+    },
+    {
+      "id": "sanitize: 阿拉伯字母标记 U+061C 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "evil.apk؜"
+      ],
+      "expected": "evil.apk"
+    },
+    {
+      "id": "sanitize: 双向嵌入 U+202A 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "a‪b.pdf"
+      ],
+      "expected": "ab.pdf"
+    },
+    {
+      "id": "sanitize: 双向覆盖 U+202D 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "a‭b.pdf"
+      ],
+      "expected": "ab.pdf"
+    },
+    {
+      "id": "sanitize: 单词连接子 U+2060 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "evil.apk⁠"
+      ],
+      "expected": "evil.apk"
+    },
+    {
+      "id": "sanitize: 软连字符 U+00AD 被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "evil.apk­"
+      ],
+      "expected": "evil.apk"
+    },
+    {
+      "id": "sanitize: 普通空格不被删除",
+      "kind": "sanitizeFileName",
+      "args": [
+        "季度 报告.pdf"
+      ],
+      "expected": "季度 报告.pdf"
+    },
+    {
+      "id": "sanitize: 结尾空白被去掉",
+      "kind": "sanitizeFileName",
+      "args": [
+        "a.pdf  "
+      ],
+      "expected": "a.pdf"
+    },
+    {
+      "id": "percentDecode: %20 解成空格",
+      "kind": "percentDecode",
+      "args": [
+        "a%20b"
+      ],
+      "expected": "a b"
+    },
+    {
+      "id": "percentDecode: 加号不当空格",
+      "kind": "percentDecode",
+      "args": [
+        "a+b"
+      ],
+      "expected": "a+b"
+    },
+    {
+      "id": "percentDecode: 中文 UTF-8 序列",
+      "kind": "percentDecode",
+      "args": [
+        "%E4%B8%AD"
+      ],
+      "expected": "中"
+    },
+    {
+      "id": "percentDecode: 非法序列原样保留",
+      "kind": "percentDecode",
+      "args": [
+        "100%zz"
+      ],
+      "expected": "100%zz"
+    },
+    {
+      "id": "percentDecode: 结尾单个百分号原样保留",
+      "kind": "percentDecode",
+      "args": [
+        "50%"
+      ],
+      "expected": "50%"
+    },
+    {
+      "id": "lastPathSegmentOf: 普通路径",
+      "kind": "lastPathSegmentOf",
+      "args": [
+        "https://a.com/b/c.pdf"
+      ],
+      "expected": "c.pdf"
+    },
+    {
+      "id": "lastPathSegmentOf: 带查询串与片段",
+      "kind": "lastPathSegmentOf",
+      "args": [
+        "https://a.com/b/c.pdf?q=1#f"
+      ],
+      "expected": "c.pdf"
+    },
+    {
+      "id": "lastPathSegmentOf: 结尾斜杠得到空串",
+      "kind": "lastPathSegmentOf",
+      "args": [
+        "https://a.com/"
+      ],
+      "expected": ""
+    },
+    {
+      "id": "lastPathSegmentOf: 无路径得 null",
+      "kind": "lastPathSegmentOf",
+      "args": [
+        "https://a.com"
+      ],
+      "expected": null
+    },
+    {
+      "id": "lastPathSegmentOf: 空串得 null",
+      "kind": "lastPathSegmentOf",
+      "args": [
+        ""
+      ],
+      "expected": null
+    },
+    {
+      "id": "parse: 恰好 200 字节的边界名不被截",
+      "kind": "parseFileName",
+      "args": [
+        "attachment; filename=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf\"",
+        null
+      ],
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf"
+    }
+  ]
+}

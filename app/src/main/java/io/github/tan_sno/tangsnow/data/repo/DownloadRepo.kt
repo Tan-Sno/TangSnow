@@ -634,9 +634,28 @@ object DownloadRepo {
             if (kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]?.isActive == false) {
                 throw kotlinx.coroutines.CancellationException("download cancelled before write")
             }
-            val uri = resolver.insert(
-                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
-            ) ?: return@withContext null
+            // ⚠️ insert 必须在 try 内（2026-10-20 审查 A-2）：MediaProvider 可能抛异常
+            // （进程死亡 / 存储满 / OEM 定制 / provider 自身崩溃）。此前它在任何 try 之外 ⇒
+            // 异常一路逃到调用方的 `lifecycleScope.launch`（无 catch）⇒ **进程崩溃**，
+            // 而不是本函数 KDoc 承诺的「失败返回 null」⇒ 导出书签 / 存 PDF 两条路
+            // （LibraryActivity.exportBookmarks / MainActivity 的存 PDF）会因一次 provider
+            // 异常直接闪退，用户连「导出失败」都看不到。
+            // 取消仍**原样传播**（协作式取消语义，与本函数其余 catch 分支同口径）：
+            // 取消不是失败，不该被折叠成「导出失败」。
+            val uri = try {
+                resolver.insert(
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+                ) ?: return@withContext null
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 行**没建成** ⇒ 没有占位需要清理 ⇒ 直接按「本次落盘失败」返回。
+                // 日志只记异常类名（不记文件名/路径/URL）：release 的日志口径见本仓隐私约定。
+                if (io.github.tan_sno.tangsnow.BuildConfig.DEBUG) {
+                    android.util.Log.w("DownloadRepo", "MediaStore insert failed: ${e.javaClass.simpleName}")
+                }
+                return@withContext null
+            }
             // 两段分开处置（本函数的核心约定，见上方 KDoc）：
             //  · 写流阶段失败 ⇒ 内容不完整 ⇒ 清占位（**唯一**会删内容的路径）
             //  · 转正阶段失败 ⇒ 内容已完整落盘、只是对外不可见 ⇒ **保留**，如实报失败

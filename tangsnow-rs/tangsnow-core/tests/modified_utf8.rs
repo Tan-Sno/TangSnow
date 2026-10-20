@@ -72,5 +72,11 @@ fn 坏输入只换替换字符绝不panic() {
     ] {
         let out = decode_java_modified_utf8(&bad); // 不 panic 就是本用例的断言主体
         let _ = out.chars().count();
+        // 「只换替换字符」这句也得有断言兜着：坏字节**不得**解出任何有效字符，
+        // 只允许剩下替换字符（U+FFFD）与本来就合法的 ASCII（上面那条里的 'a'）。
+        assert!(
+            out.chars().all(|c| c == '\u{FFFD}' || c.is_ascii()),
+            "坏输入解出了不该有的字符：{bad:?} → {out:?}"
+        );
     }
 }

@@ -11,6 +11,13 @@
     docs/PRIVACY.md   隐私政策（中文 + English）
     docs/TERMS.md     用户协议（中文 + English）
 
+只查不改（CI 门禁用它）：
+
+    python tools/export_legal_docs.py --check
+
+`--check` 用**本脚本自己的口径**重算一遍并与磁盘上的文件比对，不同步就非零退出。
+刻意不给它另写一份比对逻辑：两份实现必然漂移，而漂移的方向恰好是「门禁自己变瞎」。
+
 依赖：Python 3 标准库，无第三方依赖。
 """
 
@@ -88,23 +95,70 @@ def first_line_date(text: str) -> str:
     return "（见正文）"
 
 
-def main() -> int:
+def build_content(key: str, zh_title: str, en_title: str) -> str:
+    """按导出格式拼出完整内容（写盘与 `--check` 共用 ⇒ 两者口径必然一致）。"""
     ver = policy_version()
+    zh_body = extract(ZH, key)
+    en_body = extract(EN, key)
+    # 英文首行形如 "Last updated: 2026-09-16"，中文首行形如 "更新日期：…"
+    date_line = first_line_date(zh_body) or first_line_date(en_body)
+    content = banner(zh_title, en_title, ver, date_line)
+    # 英文段在前：仓库对外文档以英文为默认语言（README 等亦然），法律文本是同一批
+    # 对外文本，若中文段在前，英文读者要滚过整段中文才看到自己的语言。
+    # 两段仍**同页对照**（这是刻意保留的：任何语言的读者都不会漏看另一种）。
+    content += "## English\n\n%s\n\n---\n\n## %s\n\n%s\n" % (en_body, zh_title, zh_body)
+    return content
+
+
+def normalize(text: str) -> str:
+    """统一换行符后再比对。
+
+    为什么必须：仓库用 `.gitattributes` 存 LF，但 **Windows 上跑导出脚本时
+    `write_text` 会把 `\\n` 翻译成 `\\r\\n`** ⇒ 同一份内容在不同机器上落盘字节不同。
+    不归一化的话，这道门禁会变成「在我机器上是红的」。
+    """
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def main(argv: list) -> int:
+    args = set(argv[1:])
+    unknown = args - {"--check"}
+    if unknown:
+        print("未知参数：%s（只支持 --check）" % " ".join(sorted(unknown)), file=sys.stderr)
+        return 2
+    check = "--check" in args
+
+    ver = policy_version()
+    drift = []
     for key, (rel, zh_title, en_title) in DOCS.items():
-        zh_body = extract(ZH, key)
-        en_body = extract(EN, key)
-        # 英文首行形如 "Last updated: 2026-09-16"，中文首行形如 "更新日期：…"
-        date_line = first_line_date(zh_body) or first_line_date(en_body)
-        content = banner(zh_title, en_title, ver, date_line)
-        # 英文段在前：仓库对外文档以英文为默认语言（README 等亦然），法律文本是同一批
-        # 对外文本，若中文段在前，英文读者要滚过整段中文才看到自己的语言。
-        # 两段仍**同页对照**（这是刻意保留的：任何语言的读者都不会漏看另一种）。
-        content += "## English\n\n%s\n\n---\n\n## %s\n\n%s\n" % (en_body, zh_title, zh_body)
+        content = build_content(key, zh_title, en_title)
         out = ROOT / rel
-        out.write_text(content, encoding="utf-8")
-        print("✓ %s  (%d 字符, POLICY_VERSION=%s)" % (rel, len(content), ver))
+        if not check:
+            out.write_text(content, encoding="utf-8")
+            print("✓ %s  (%d 字符, POLICY_VERSION=%s)" % (rel, len(content), ver))
+            continue
+        # ---- 只查不改 ----
+        if not out.is_file():
+            drift.append("%s：文件不存在（跑 `python tools/export_legal_docs.py` 生成）" % rel)
+            continue
+        disk = io.open(out, encoding="utf-8", newline="").read()
+        if normalize(disk) != normalize(content):
+            drift.append("%s：与 app/src/main/res/values*/strings.xml 不同步" % rel)
+
+    if not check:
+        return 0
+    if drift:
+        for d in drift:
+            print("✗ " + d, file=sys.stderr)
+        print(
+            "⇒ 对外文档与应用内文案不一致：改了 strings.xml 却忘了重跑 "
+            "`python tools/export_legal_docs.py`（应用内那份永远是对的 ⇒ 对外文档静默过期）",
+            file=sys.stderr,
+        )
+        return 1
+    print("✓ 对外法律文档与 strings.xml 同步（%s）" % "、".join(rel for rel, _, _ in DOCS.values()))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv))

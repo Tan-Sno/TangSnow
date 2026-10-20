@@ -5,6 +5,7 @@ import android.graphics.Rect
 import android.view.LayoutInflater
 import android.view.TouchDelegate
 import android.view.ViewGroup
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import io.github.tan_sno.tangsnow.browser.Tab
@@ -93,7 +94,14 @@ class TabsAdapter(
         // ⚠️ 命中区向卡片外扩的部分会被父容器裁掉（tabClose 距卡片边只有 6dp），
         // 所以内侧扩到 48dp、外侧约 40dp；布局节点本身仍是 32dp，
         // 因此 `TouchTargetSentinelTest` 的豁免表里保留这一条并注明原因。
-        binding.root.post {
+        //
+        // ⚠️⚠️ 命中矩形必须在**布局完成之后**算（2026-10-20 审查报告 C-8）：
+        // 此前用的是 `binding.root.post { … }` —— 视图尚未 attach 时 `post` 会把任务排进
+        // **attach 阶段**的队列，那时**还没测量**，`close.left/top/right/bottom` 全是 0
+        // ⇒ 命中矩形退化成卡片左上角 (-8,-8)-(8,8) 的**隐形热区**（点中即关闭标签 = 破坏性操作），
+        // 而真正想要的「外扩到 48dp」压根没发生。
+        // `doOnLayout` 在**下一次布局**之后回调（已布局则立即执行）⇒ 拿到的是真实坐标。
+        binding.tabClose.doOnLayout {
             val close = binding.tabClose
             val pad = (8 * close.resources.displayMetrics.density).toInt()
             val rect = Rect(

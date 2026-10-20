@@ -1,6 +1,9 @@
 package io.github.tan_sno.tangsnow.core
 
-import java.io.File
+import io.github.tan_sno.tangsnow.data.repo.ApplicationScope
+import io.github.tan_sno.tangsnow.util.CrashLogger
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Rust 核心逻辑库（tangsnow-core）的 JNI 桥 —— **防护网形态**（2026-10-08 深度重构批 D）。
@@ -20,9 +23,19 @@ import java.io.File
  *  3. **调用时兜底**：native 侧任何 Throwable（UnsatisfiedLinkError/符号缺失/未来回归）
  *     被捕获 → 记录到诊断日志（Log + filesDir 落盘）→ 返回安全默认值。
  *
- * 这样「.so 环境异常」的后果从**闪退**降级为**功能降级**，且真因栈完整落盘可取。
- * 诊断日志经 [initDiagDir] 注入应用 filesDir；未注入时只走 Log（JVM 单测无 Log 桩，
- * 故 Log 调用本身也被 runCatching 包裹）。
+ * 这样「.so 环境异常」的后果从**闪退**降级为**功能降级**。
+ *
+ * ## 诊断落盘通道（2026-10-20 修正）
+ *
+ * 此前这里有个从未接上的洞：本文件有 `initDiagDir` 与 `diagDir` 字段，但**全仓零调用** ——
+ * 于是 `recordDiag` 每次都在第一行 `diagDir ?: return` 处返回，防护网第 3 步承诺的
+ * 「真因栈完整落盘可取」从未成立（类注释当时写的那句是**假话**）。
+ *
+ * 现在的通道：**复用崩溃日志目录**（`filesDir/crash/`，同一套 `crash-<stamp>.txt` 命名）
+ * ⇒ 沿用政策第 7 条已有的披露（「程序异常时，若应用进程发生**可被捕获的错误**，会留存在设备
+ * 本地的崩溃日志」—— JNI 桥接故障正是可被捕获的错误）、「关于」页已有的列出/查看/删除、
+ * 以及既有的条数上限。刻意**不**新开 `filesDir/diag/`：那会多出一类「政策未枚举、用户在
+ * 「关于」页既看不到也删不掉」的本地数据，与隐私承诺的方向相反。
  */
 object CoreNative {
 
@@ -32,13 +45,6 @@ object CoreNative {
         true
     } catch (_: Throwable) {
         false
-    }
-
-    @Volatile private var diagDir: File? = null
-
-    /** 注入诊断落盘目录（应用 filesDir/diag）。应在 Application/首 Activity 尽早调用。 */
-    fun initDiagDir(dir: File) {
-        diagDir = dir
     }
 
     /** 统一防护网：异常 → Log + 落盘 → 安全默认值。
@@ -68,16 +74,37 @@ object CoreNative {
         }
     }
 
-    /** 诊断落盘：追加「时间戳 | 操作 | 异常全栈」到 diag/corenative.log（最多 256KB 截断）。 */
+    /**
+     * 已经落过盘的故障操作名（进程内去重）。
+     *
+     * 为什么必须去重：`.so` 坏掉时**每一次** JNI 调用都会落进 [guard] 的 catch ⇒
+     * 不去重就是「每调一次写一个文件 + 扫一次目录做裁剪」，把崩溃日志目录刷爆、
+     * 把主线程拖住。而同一个 op 的失败根因是同一个（符号缺失 / 签名漂移 / 加载失败），
+     * 第一条记录就足够定位。
+     */
+    private val recordedFaultOps: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * 诊断落盘：把「内核桥接故障」写进**崩溃日志目录**（`filesDir/crash/`），与崩溃日志同一套命名。
+     *
+     * ⚠️ 为什么不自己开 `filesDir/diag/`：那会多出一类「政策未枚举、用户在「关于」页既看不到
+     * 也删不掉」的本地文件 —— 与隐私承诺的方向相反。复用崩溃日志目录 ⇒ 沿用政策第 7 条已有的
+     * 披露、「关于」页已有的列出/查看/删除、以及既有的条数上限。
+     *
+     * ⚠️ 写盘放在后台线程：故障往往发生在主线程的调用栈上（地址栏、搜索、书签都在主线程），
+     * 在那里同步写文件会把 UI 卡住。进程级 [ApplicationScope.scope] 走 IO 调度器，
+     * 且不随任何界面销毁而取消。
+     */
     private fun recordDiag(op: String, t: Throwable) {
-        val dir = diagDir ?: return
-        runCatching {
-            val f = File(dir.apply { mkdirs() }, "corenative.log")
-            if (f.length() > 256 * 1024) f.writeText("")
-            f.appendText(
-                "${System.currentTimeMillis()} | $op | ${t.javaClass.name}: ${t.message}\n" +
-                    t.stackTraceToString().prependIndent("  ") + "\n",
-            )
+        // ApplicationScope 未初始化时（早于 Application.onCreate 的极早期）取不到 context：
+        // 那时还没有任何用户数据被处理过，不落盘正合政策；取不到就静默跳过。
+        val ctx = runCatching { ApplicationScope.context }.getOrNull() ?: return
+        if (!recordedFaultOps.add(op)) return
+        // 线程名在**这里**取（= 异常发生的那个线程），不能等写盘时再取：
+        // 写盘在后台线程，那时取到的是 IO 线程，不是案发现场。
+        val threadName = Thread.currentThread().name
+        ApplicationScope.scope.launch {
+            runCatching { CrashLogger.recordFault(ctx, op, t, threadName) }
         }
     }
 

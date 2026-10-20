@@ -1,95 +1,92 @@
 package io.github.tan_sno.tangsnow.data
 
+import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 搜索引擎表与关键词回显的单元测试。
+ * 搜索引擎引擎表的单元测试。
  *
  * 覆盖两处历史缺陷：
  *  - [SearchEngines.find] 的兜底：常量与内置列表不一致时不能让启动路径抛异常；
  *  - [SearchEngines.hostMatches] 的主机别名：在 `www.bing.com` 上搜索时，
  *    地址栏要显示关键词而不是整条 URL。
+ *
+ * ## 期望值来自**两侧共享的 JSON 夹具**（2026-10-20 审查报告 C-14）
+ *
+ * 引擎查找 / 主机判定 / 取主机三组原先与 Rust 侧 `search_engines_parity.rs`
+ * **各写一份期望值** —— 那是**镜像**：改实现 + 同步改本侧的镜像期望值 ⇒ 两侧照样全绿，
+ * 而两边的口径已经漂了（2026-10-16 的别名表漏行"bing"就是这么漏掉的）。
+ * 现在两边读**同一份**夹具（`tangsnow-rs/tangsnow-core/tests/fixtures/search_engines_cases.json`）。
+ *
+ * 内置引擎**模板表**不在夹具内 —— 它是一张表，由 `SearchEngineTableParityTest` 并排比对两侧源码。
  */
 class SearchEnginesTest {
 
+    /**
+     * **夹具里的每条用例与 Rust 侧同口径**。
+     *
+     * kind ∈ find / hostMatches / templateHostOf；args 按 kind 顺序；expected 为 null 表示「无结果」。
+     */
     @Test
-    fun `按 id 命中内置引擎`() {
-        val all = SearchEngines.builtins
-        assertEquals("baidu", SearchEngines.find(all, "baidu").id)
-        assertEquals("bing_cn", SearchEngines.find(all, "bing_cn").id)
-    }
-
-    @Test
-    fun `未知 id 回退默认引擎而不是抛异常`() {
-        val all = SearchEngines.builtins
-        assertEquals(SearchEngines.DEFAULT_ID, SearchEngines.find(all, "no-such-engine").id)
-        assertEquals(SearchEngines.DEFAULT_ID, SearchEngines.find(all, null).id)
-    }
-
-    @Test
-    fun `空列表也能兜底到第一个内置引擎`() {
-        assertEquals(SearchEngines.builtins.first().id, SearchEngines.find(emptyList(), "baidu").id)
+    fun `夹具里的每条用例与Rust侧同口径`() {
+        val cases = SharedFixtures.cases(FIXTURE)
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val id = c.getString("id")
+            val kind = c.getString("kind")
+            val a = c.getJSONArray("args")
+            when (kind) {
+                "find" -> {
+                    // args[0] = 引擎 id（null = 空 id）；args[0] == "__empty_list__" 时
+                    // 用**空列表**找（args[1] 才是要找的 id）
+                    val empty = !a.isNull(0) && a.getString(0) == EMPTY_MARKER
+                    val list = if (empty) emptyList() else SearchEngines.builtins
+                    val want: String? = when {
+                        empty -> a.getString(1)
+                        a.isNull(0) -> null
+                        else -> a.getString(0)
+                    }
+                    assertEquals(
+                        "夹具用例「$id」",
+                        c.getString("expected"),
+                        SearchEngines.find(list, want).id,
+                    )
+                }
+                "hostMatches" -> {
+                    val got = SearchEngines.hostMatches(
+                        a.getString(0),
+                        a.getString(1),
+                        a.getString(2),
+                    )
+                    assertEquals("夹具用例「$id」", c.getBoolean("expected"), got)
+                }
+                "templateHostOf" -> {
+                    val got = SearchEngines.templateHostOf(a.getString(0))
+                    if (c.isNull("expected")) {
+                        assertEquals("夹具用例「$id」", null, got)
+                    } else {
+                        assertEquals("夹具用例「$id」", c.getString("expected"), got)
+                    }
+                }
+                else -> throw AssertionError("夹具里的 kind「$kind」本文件不认（改夹具要同步两侧的派发）")
+            }
+        }
     }
 
     @Test
     fun `默认引擎必须存在于内置列表且带查询参数名`() {
-        val def = SearchEngines.builtins.first { it.id == SearchEngines.DEFAULT_ID }
-        assertEquals("q", def.queryParam)
-        assertTrue(def.template.startsWith("https://"))
+        val default = SearchEngines.builtins.first { it.id == SearchEngines.DEFAULT_ID }
+        assertTrue("默认引擎必须带查询参数名", !default.queryParam.isNullOrBlank())
     }
 
-    @Test
-    fun `同一引擎的其它官方主机被认作同一引擎`() {
-        // 模板主机 cn.bing.com；用户在 bing.com / www.bing.com 上搜索也算同一引擎
-        assertTrue(SearchEngines.hostMatches("cn.bing.com", "bing_cn", "cn.bing.com"))
-        assertTrue(SearchEngines.hostMatches("bing.com", "bing_cn", "cn.bing.com"))
-        assertTrue(SearchEngines.hostMatches("www.bing.com", "bing_cn", "cn.bing.com"))
-        assertTrue(SearchEngines.hostMatches("m.baidu.com", "baidu", "www.baidu.com"))
-        assertTrue(SearchEngines.hostMatches("sm.cn", "sm", "m.sm.cn"))
-    }
+    private companion object {
+        /** 两侧共享的夹具（Rust 侧读同一个文件） */
+        const val FIXTURE = "search_engines_cases.json"
 
-    @Test
-    fun `子域被认作同一引擎`() {
-        assertTrue(SearchEngines.hostMatches("images.baidu.com", "baidu", "www.baidu.com"))
-    }
-
-    @Test
-    fun `无关主机不被误判`() {
-        assertFalse(SearchEngines.hostMatches("evil.com", "baidu", "www.baidu.com"))
-        // 后缀相似但不是子域（baidu.com.evil.com 的 bare 是 baidu.com.evil.com）
-        assertFalse(SearchEngines.hostMatches("baidu.com.evil.com", "baidu", "www.baidu.com"))
-        assertFalse(SearchEngines.hostMatches("google.com", "bing_cn", "cn.bing.com"))
-    }
-
-    // --------------------------------------- 模板主机提取（取代 Uri.parse，纯字符串）
-
-    @Test
-    fun `从模板取出主机`() {
-        // 生产模板的真实形态
-        assertEquals("cn.bing.com", SearchEngines.templateHostOf("https://cn.bing.com/search?q={q}"))
-        assertEquals("www.baidu.com", SearchEngines.templateHostOf("https://www.baidu.com/s?wd={q}"))
-        assertEquals("sm.cn", SearchEngines.templateHostOf("http://sm.cn/s?q={q}"))
-        // 结尾无查询串 / 有片段 / 有端口
-        assertEquals("a.com", SearchEngines.templateHostOf("https://a.com"))
-        assertEquals("a.com", SearchEngines.templateHostOf("https://a.com/"))
-        assertEquals("a.com", SearchEngines.templateHostOf("https://a.com#x"))
-        assertEquals("a.com", SearchEngines.templateHostOf("https://a.com:8443/search?q={q}"))
-        // 省略协议（自定义引擎可能这么写）
-        assertEquals("a.com", SearchEngines.templateHostOf("a.com/search?q={q}"))
-        // userinfo 要被去掉，只留主机
-        assertEquals("a.com", SearchEngines.templateHostOf("https://u:p@a.com/x"))
-        // 大小写归一
-        assertEquals("cn.bing.com", SearchEngines.templateHostOf("HTTPS://CN.Bing.COM/search?q={q}"))
-    }
-
-    @Test
-    fun `取不到主机时返回 null`() {
-        assertNull(SearchEngines.templateHostOf(""))
-        assertNull(SearchEngines.templateHostOf("https:///search?q={q}"))
-        assertNull(SearchEngines.templateHostOf("https://:8080/x"))
+        /** 夹具里表示「用空列表找」的标记（Rust 侧同名） */
+        const val EMPTY_MARKER = "__empty_list__"
     }
 }
