@@ -50,5 +50,10 @@ class CoreImplSeamTest {
         // 崩溃日志 2
         assertNull(CoreImpl.crashRedactUrls("x https://a.com/1"))
         assertNull(CoreImpl.crashDisplayStamp("crash-20261001-121500-123.txt"))
+
+        // W2 收尾 2（2026-10-20 第二批）—— guard 默认值分别是 true（fail-closed）与 null，
+        // 不先问 available 的话前者会把 JVM 上的 coreRust 测试带偏，这里一并钉死。
+        assertNull(CoreImpl.shouldSkipHistoryUrl("about:home"))
+        assertNull(CoreImpl.legalParseBoldRanges("a**b**c"))
     }
 }

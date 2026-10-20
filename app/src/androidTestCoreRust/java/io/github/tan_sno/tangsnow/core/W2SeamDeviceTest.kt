@@ -2,6 +2,7 @@ package io.github.tan_sno.tangsnow.core
 
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.tan_sno.tangsnow.data.Bookmark
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -29,6 +30,20 @@ class W2SeamDeviceTest {
     @Test
     fun 核心库已加载() {
         assertTrue("W2 断言的前提：.so 必须随包并加载成功", CoreNative.available)
+    }
+
+    @Test
+    fun 历史过滤与法律粗体两桥真接管() {
+        // shouldSkipHistoryUrl：Boolean，无 null 业务态（guard 默认 true 是 fail-closed）
+        assertEquals(true, CoreImpl.shouldSkipHistoryUrl("about:home"))
+        assertEquals(true, CoreImpl.shouldSkipHistoryUrl("DATA:text/html,x"))
+        assertEquals(false, CoreImpl.shouldSkipHistoryUrl("https://example.com/"))
+
+        // legalParseBoldRanges：扁平 [start,end,...] 闭区间；空数组 = 无成对标记（合法结果）
+        val ranges = CoreImpl.legalParseBoldRanges("a**bc**d")
+        assertNotNull("legalParseBoldRanges 应为 non-null", ranges)
+        assertArrayEquals(intArrayOf(1, 2), ranges)
+        assertArrayEquals(intArrayOf(), CoreImpl.legalParseBoldRanges("无标记"))
     }
 
     @Test

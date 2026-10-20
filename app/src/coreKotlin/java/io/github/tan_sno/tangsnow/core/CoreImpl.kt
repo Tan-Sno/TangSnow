@@ -71,4 +71,14 @@ internal object CoreImpl {
     fun crashRedactUrls(text: String): String? = null
 
     fun crashDisplayStamp(fileName: String): String? = null
+
+    // ================================================================
+    // W2 收尾（2026-10-20 第二批）—— PLAN 官方 W2 清单的最后两桥。
+    // ================================================================
+
+    /** 历史入库过滤（about:/data: 等前缀不进历史）；null = 不接管 */
+    fun shouldSkipHistoryUrl(url: String): Boolean? = null
+
+    /** 法律文本 `**…**` 加粗区间（扁平 [start,end,...]，字符索引闭区间）；null = 不接管 */
+    fun legalParseBoldRanges(raw: String): IntArray? = null
 }

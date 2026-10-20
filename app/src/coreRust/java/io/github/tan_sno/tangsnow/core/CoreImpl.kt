@@ -20,11 +20,12 @@ import io.github.tan_sno.tangsnow.data.BookmarkHtml
  *
  * ## 分批情况
  *  - **W1（2026-10-19）**：7 个单值进出的纯字符串函数，无 JNI 结构 ⇒ 签名漂移的后果可预期。
- *  - **W2（2026-10-20）**：带落盘 / 隐私 / 数据往返语义的 9 个桥 —— 下载文件名 4、崩溃日志 2、
- *    书签 JSON 三件（`bookmarkParse/Sanitize/Export`）。书签那三个在原计划里归 W3（JSON 桥），
- *    并入本批的理由：它们的边界缺陷（CESU-8 / 别名回显 / 描述符 / 数组写回）已在 `.so` 侧重编修复，
- *    并有设备侧仪器测试（甲2）钉住前置。见 `notes-tangsnow/PLAN-2026-10-15-flavor-wiring.md` §二。
- *  - **W3（未接）**：数组 / 管道协议族（`bitmap*`、`dt*`、`up*`、`legalParseBoldRanges`…）。
+ *  - **W2（2026-10-20）**：带落盘 / 隐私 / 数据往返语义的 11 个桥 —— 下载文件名 4、崩溃日志 2、
+ *    书签 JSON 三件（`bookmarkParse/Sanitize/Export`）、历史入库过滤 1、法律粗体区间 1。
+ *    书签那三个在原计划里归 W3（JSON 桥），并入的理由：它们的边界缺陷（CESU-8 / 别名回显 /
+ *    描述符 / 数组写回）已在 `.so` 侧重编修复，并有设备侧仪器测试（甲2）钉住前置。
+ *    见 `notes-tangsnow/PLAN-2026-10-15-flavor-wiring.md` §二。
+ *  - **W3（未接）**：数组 / 管道协议族（`bitmap*`、`dt*`、`up*`…）。
  */
 internal object CoreImpl {
 
@@ -84,4 +85,14 @@ internal object CoreImpl {
     fun crashRedactUrls(text: String): String? = native { CoreNative.crashRedactUrls(text) }
 
     fun crashDisplayStamp(fileName: String): String? = native { CoreNative.crashDisplayStamp(fileName) }
+
+    // ================================================================
+    // W2 收尾（2026-10-20 第二批）—— PLAN 官方 W2 清单的最后两桥。
+    // ================================================================
+
+    /** 历史入库过滤；guard 默认 true 是 fail-closed（不进历史），available=false 时由本层归 null */
+    fun shouldSkipHistoryUrl(url: String): Boolean? = native { CoreNative.shouldSkipHistoryUrl(url) }
+
+    /** 法律 `**…**` 加粗区间（扁平 [start,end,...] 闭区间）；null = 不接管或区间算不出 */
+    fun legalParseBoldRanges(raw: String): IntArray? = native { CoreNative.legalParseBoldRanges(raw) }
 }

@@ -6,6 +6,7 @@ import android.text.Spannable
 import android.text.SpannableString
 import android.text.style.StyleSpan
 import androidx.annotation.StringRes
+import io.github.tan_sno.tangsnow.core.CoreImpl
 
 /**
  * 法律文本的**展示处理**：把 `**…**` 转成加粗。
@@ -63,6 +64,10 @@ object LegalText {
         val plain = StringBuilder(raw.length)
         val boldRanges = ArrayList<IntRange>()
         var cursor = 0
+        // W2 接缝：Rust 可用时加粗区间由其判定（同算法，legal_text.rs parity 钉住）。
+        // 注意 JNI 桥只回区间数组、不回正文 —— plain 仍由下面的共享循环去标记产出，
+        // 两者的口径一致性由 Rust 侧 legal_text_parity 测试保证。null = 不接管。
+        val nativeRanges: IntArray? = CoreImpl.legalParseBoldRanges(raw)
         while (cursor < raw.length) {
             val open = raw.indexOf(MARKER, cursor)
             if (open < 0) break
@@ -75,6 +80,16 @@ object LegalText {
             cursor = close + MARKER.length
         }
         if (cursor < raw.length) plain.append(raw, cursor, raw.length)
+        if (nativeRanges != null) {
+            // native 接管：扁平 [s0,e0,s1,e1,...] 还原为闭区间；空数组 = 无成对标记（合法结果）
+            val ranges = ArrayList<IntRange>(nativeRanges.size / 2)
+            var i = 0
+            while (i + 1 < nativeRanges.size) {
+                ranges += nativeRanges[i]..nativeRanges[i + 1]
+                i += 2
+            }
+            return Marked(plain.toString(), ranges)
+        }
         return Marked(plain.toString(), boldRanges)
     }
 }

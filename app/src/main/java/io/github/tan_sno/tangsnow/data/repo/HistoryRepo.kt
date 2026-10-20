@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data.repo
 
+import io.github.tan_sno.tangsnow.core.CoreImpl
 import io.github.tan_sno.tangsnow.data.BrowserDb
 import io.github.tan_sno.tangsnow.data.HistoryItem
 import kotlinx.coroutines.Dispatchers
@@ -20,8 +21,14 @@ object HistoryRepo {
      * 内核 onVisited 只给 URL），若这里把空标题落库就会互相覆盖（标题抖动）。
      */
     suspend fun add(url: String, title: String): Unit = withContext(Dispatchers.IO) {
-        val lower = url.lowercase()
-        if (SKIP_PREFIXES.any { lower.startsWith(it) }) return@withContext
+        // W2 接缝：Rust 可用时由其判定前缀过滤（同口径，history.rs parity 钉住）；
+        // null = 不接管 ⇒ 回落共享实现。二者同语义，混同无害。
+        val skip = CoreImpl.shouldSkipHistoryUrl(url)
+            ?: run {
+                val lower = url.lowercase()
+                SKIP_PREFIXES.any { lower.startsWith(it) }
+            }
+        if (skip) return@withContext
         BrowserDb.get(ApplicationScope.context)
             .touchHistory(url, title.trim().ifBlank { null })
     }
