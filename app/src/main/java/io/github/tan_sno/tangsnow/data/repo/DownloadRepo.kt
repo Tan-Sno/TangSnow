@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import io.github.tan_sno.tangsnow.BuildConfig
 import io.github.tan_sno.tangsnow.R
+import io.github.tan_sno.tangsnow.core.CoreImpl
 import io.github.tan_sno.tangsnow.data.AppHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -178,6 +179,9 @@ object DownloadRepo {
      *  - 统一做百分号解码与非法字符清洗，杜绝路径穿越与非法文件名落盘。
      */
     fun parseFileName(contentDisposition: String?, url: String?): String {
+        // W2 接缝：Rust 内核可用时由其接管（语义与下方实现等价，见 tangsnow-core 的
+        // download_filename_parity.rs 与 JVM 的 DownloadFileNameTest）。null = 不接管 ⇒ 回落共享实现。
+        CoreImpl.dlParseFileName(contentDisposition, url)?.let { return it }
         val fromHeader = contentDisposition?.let { header ->
             RFC5987_FILENAME.find(header)?.groupValues?.getOrNull(1)
                 ?: PLAIN_FILENAME.find(header)?.groupValues?.getOrNull(1)?.trim()?.trim('"')
@@ -209,6 +213,9 @@ object DownloadRepo {
 
     /** 文件名是否为可执行 / 安装类（取最后一段扩展名，大小写不敏感） */
     internal fun isExecutableName(fileName: String): Boolean {
+        // W2 接缝：Rust 可用时由其接管（同一扩展名表，见 download_filename_parity.rs）。
+        // null = 不接管 ⇒ 回落共享实现；非 null 即判定结果（Boolean，无 null 业务态）。
+        CoreImpl.dlIsExecutableName(fileName)?.let { return it }
         val ext = fileName.substringAfterLast('.', "").lowercase()
         return ext.isNotEmpty() && ext in EXECUTABLE_EXTENSIONS
     }
@@ -758,7 +765,10 @@ object DownloadRepo {
      * 纯函数，便于单测覆盖。
      */
     internal fun bareMimeType(raw: String?): String? =
-        raw?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() }
+        // W2 接缝：本函数的 null 是**合法业务结果**（无 mime），与「不接管」在返回值上撞车。
+        // 二者在本函数上是无害的：Rust 与共享实现同口径（download_filename_parity.rs），
+        // 于是 null 走到回落分支得到的仍是同一个答案，只是多跑一次纯 Kotlin 计算。
+        CoreImpl.dlBareMimeType(raw) ?: raw?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() }
 
     /**
      * 取响应头里第一个 `name`（**大小写不敏感**）的值；没有则 null。
@@ -953,6 +963,9 @@ object DownloadRepo {
 
     /** 文件名清洗：防路径穿越 / 非法字符注入，仅保留安全的基本文件名 */
     internal fun sanitizeFileName(raw: String): String {
+        // W2 接缝：Rust 可用时由其接管；null = 不接管 ⇒ 回落共享实现。
+        // （native 侧同函数即使内部失败也不会返回 null，而是给安全名 "download" —— 见 CoreNative）
+        CoreImpl.dlSanitizeFileName(raw)?.let { return it }
         val cleaned = raw
             // 不可见字符先**删除**（替换成 `_` 会把绕过面留在扩展名里，见 INVISIBLE_FILE_CHARS），
             // 再把结构性非法字符替换成 `_`

@@ -12,6 +12,7 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
+import io.github.tan_sno.tangsnow.core.CoreImpl
 import io.github.tan_sno.tangsnow.data.BookmarkHtml
 import io.github.tan_sno.tangsnow.data.repo.BookmarkRepo
 import io.github.tan_sno.tangsnow.data.repo.DownloadRepo
@@ -344,7 +345,10 @@ class LibraryActivity : AppCompatActivity() {
             val result = withContext(Dispatchers.IO) {
                 val list = BookmarkRepo.list()
                 if (list.isEmpty()) return@withContext null
-                list.size to writeBookmarksHtml(BookmarkHtml.export(list))
+                // W2 接缝：Rust 内核可用时由其导出（null = 不接管 ⇒ 回落共享实现）
+                list.size to writeBookmarksHtml(
+                    CoreImpl.bookmarkExport(list) ?: BookmarkHtml.export(list)
+                )
             }
             if (isFinishing || isDestroyed) return@launch
             when {
@@ -382,9 +386,13 @@ class LibraryActivity : AppCompatActivity() {
                 val text = readImportText(uri) ?: return@withContext null
                 // 解析上限造成的截断同样要计入「跳过」：否则一个 2.5 万条的导出文件会显示
                 // 「已导入 1000 / 跳过 19000」，与实际内容不符（余下 5000 条连数都没数）。
-                val (raw, truncated) = BookmarkHtml.parseImportCounted(text)
+                // W2 接缝：Rust 可用时由其解析/清洗；null = 不接管 ⇒ 逐段回落共享实现
+                val (raw, truncated) =
+                    CoreImpl.bookmarkParse(text, System.currentTimeMillis())
+                        ?: BookmarkHtml.parseImportCounted(text)
                 val existing = BookmarkRepo.list().mapTo(HashSet()) { it.url }
-                val (entries, skipped) = BookmarkHtml.sanitize(raw, existing)
+                val (entries, skipped) =
+                    CoreImpl.bookmarkSanitize(raw, existing) ?: BookmarkHtml.sanitize(raw, existing)
                 BookmarkRepo.addAll(entries.map { Triple(it.url, it.title, it.createdAtMs) })
                 entries.size to (skipped + truncated)
             }

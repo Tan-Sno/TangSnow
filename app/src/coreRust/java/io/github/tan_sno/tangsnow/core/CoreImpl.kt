@@ -1,5 +1,8 @@
 package io.github.tan_sno.tangsnow.core
 
+import io.github.tan_sno.tangsnow.data.Bookmark
+import io.github.tan_sno.tangsnow.data.BookmarkHtml
+
 /**
  * 「外部内核」接缝 —— **coreRust** flavor 侧实现（2026-10-19，W1 接线）。
  *
@@ -15,10 +18,13 @@ package io.github.tan_sno.tangsnow.core
  *    这是刻意的：guard 的默认值就是该函数在 Rust 侧失败时的事故口径（多数是 fail-closed），
  *    在这一层再叠一次回落只会把「Rust 侧出事了」这个事实盖掉，与 [CoreNative] 的降级设计相反。
  *
- * ## 为什么 W1 只接这 7 个
- * 都是单值进出的纯字符串函数，无 JNI 结构（无数组、无 JSON 桥）⇒ 签名漂移的后果可预期；
- * 带落盘/隐私语义的（W2）与结构敏感的（W3，JSON/数组/管道协议）另批，见
- * `notes-tangsnow/PLAN-2026-10-15-flavor-wiring.md` §二。
+ * ## 分批情况
+ *  - **W1（2026-10-19）**：7 个单值进出的纯字符串函数，无 JNI 结构 ⇒ 签名漂移的后果可预期。
+ *  - **W2（2026-10-20）**：带落盘 / 隐私 / 数据往返语义的 9 个桥 —— 下载文件名 4、崩溃日志 2、
+ *    书签 JSON 三件（`bookmarkParse/Sanitize/Export`）。书签那三个在原计划里归 W3（JSON 桥），
+ *    并入本批的理由：它们的边界缺陷（CESU-8 / 别名回显 / 描述符 / 数组写回）已在 `.so` 侧重编修复，
+ *    并有设备侧仪器测试（甲2）钉住前置。见 `notes-tangsnow/PLAN-2026-10-15-flavor-wiring.md` §二。
+ *  - **W3（未接）**：数组 / 管道协议族（`bitmap*`、`dt*`、`up*`、`legalParseBoldRanges`…）。
  */
 internal object CoreImpl {
 
@@ -42,4 +48,40 @@ internal object CoreImpl {
 
     fun displayForUrl(url: String, template: String, queryParam: String?, engineId: String): String? =
         native { CoreNative.displayForUrl(url, template, queryParam, engineId) }
+
+    // ================================================================
+    // W2 批（2026-10-20）—— 有落盘 / 隐私 / 数据往返语义的桥。
+    //
+    // ⚠️ 与 W1 的差别：W2 里几个桥在 **CoreNative 层**的非 null 默认值是「安全默认值」
+    // （`dlIsExecutableName` → true、`dlSanitizeFileName` → "download"、`crashDisplayStamp` → 原串）。
+    // 若不加 `available` 闸门，JVM 上（库必然不可用）这些默认值会被当成"接管结果"返回，
+    // 于是 coreRust 的共享测试就不再与 coreKotlin 逐字节一致。故本层统一先问 `CoreNative.available`，
+    // 不可用一律 null（= 不接管），与 W1 形状一致。
+    //
+    // 书签三件走 [CoreBridge]（JSON 适配）；只在 `available` 时调用 —— CoreBridge 会构造
+    // `org.json` 对象，JVM 上那是未打桩的 Android 类，直接调会抛。闸门把它挡住。
+    // ================================================================
+
+    fun bookmarkParse(html: String, nowMs: Long): Pair<List<BookmarkHtml.Entry>, Int>? =
+        native { CoreBridge.parseImportCounted(html, nowMs) }
+
+    fun bookmarkSanitize(
+        raw: List<BookmarkHtml.Entry>,
+        existingUrls: Set<String>,
+    ): Pair<List<BookmarkHtml.Entry>, Int>? = native { CoreBridge.sanitize(raw, existingUrls) }
+
+    fun bookmarkExport(bookmarks: List<Bookmark>): String? = native { CoreBridge.export(bookmarks) }
+
+    fun dlParseFileName(contentDisposition: String?, url: String?): String? =
+        native { CoreNative.dlParseFileName(contentDisposition, url) }
+
+    fun dlSanitizeFileName(raw: String): String? = native { CoreNative.dlSanitizeFileName(raw) }
+
+    fun dlIsExecutableName(fileName: String): Boolean? = native { CoreNative.dlIsExecutableName(fileName) }
+
+    fun dlBareMimeType(raw: String?): String? = native { CoreNative.dlBareMimeType(raw) }
+
+    fun crashRedactUrls(text: String): String? = native { CoreNative.crashRedactUrls(text) }
+
+    fun crashDisplayStamp(fileName: String): String? = native { CoreNative.crashDisplayStamp(fileName) }
 }

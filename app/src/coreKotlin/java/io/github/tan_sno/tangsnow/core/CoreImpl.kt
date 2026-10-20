@@ -1,5 +1,8 @@
 package io.github.tan_sno.tangsnow.core
 
+import io.github.tan_sno.tangsnow.data.Bookmark
+import io.github.tan_sno.tangsnow.data.BookmarkHtml
+
 /**
  * 「外部内核」接缝 —— **coreKotlin** flavor 侧实现（2026-10-19，W1 接线）。
  *
@@ -38,4 +41,34 @@ internal object CoreImpl {
     fun searchUrl(template: String, query: String): String? = null
 
     fun displayForUrl(url: String, template: String, queryParam: String?, engineId: String): String? = null
+
+    // ================================================================
+    // W2 批（2026-10-20）—— 有落盘 / 隐私 / 数据往返语义的桥。
+    // 契约同上：null = 本次不接管。coreKotlin 恒不接管 —— 它本身就是共享 Kotlin 实现。
+    // ================================================================
+
+    /** 书签导入解析；null = 不接管 */
+    fun bookmarkParse(html: String, nowMs: Long): Pair<List<BookmarkHtml.Entry>, Int>? = null
+
+    /** 书签导入清洗；null = 不接管 */
+    fun bookmarkSanitize(
+        raw: List<BookmarkHtml.Entry>,
+        existingUrls: Set<String>,
+    ): Pair<List<BookmarkHtml.Entry>, Int>? = null
+
+    /** 书签导出为 Netscape HTML；null = 不接管 */
+    fun bookmarkExport(bookmarks: List<Bookmark>): String? = null
+
+    /** 下载文件名解析；null = 不接管（native 可用时 Rust 侧恒给非空名，见 [dlSanitizeFileName]） */
+    fun dlParseFileName(contentDisposition: String?, url: String?): String? = null
+
+    fun dlSanitizeFileName(raw: String): String? = null
+
+    fun dlIsExecutableName(fileName: String): Boolean? = null
+
+    fun dlBareMimeType(raw: String?): String? = null
+
+    fun crashRedactUrls(text: String): String? = null
+
+    fun crashDisplayStamp(fileName: String): String? = null
 }

@@ -1,6 +1,7 @@
 package io.github.tan_sno.tangsnow.util
 
 import android.content.Context
+import io.github.tan_sno.tangsnow.core.CoreImpl
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -78,6 +79,9 @@ object CrashLogger {
      * 毫秒在展示中丢弃。解析不了时返回「去掉前缀/后缀的原始串」（与旧回退一致）。
      */
     internal fun displayStamp(fileName: String): String {
+        // W2 接缝：Rust 可用时由其接管（同口径，见 crash_logger_parity.rs / CrashLoggerDisplayTest）。
+        // null = 不接管 ⇒ 回落下面的共享实现。
+        CoreImpl.crashDisplayStamp(fileName)?.let { return it }
         val core = fileName.removePrefix("crash-").removeSuffix(".txt")
         val m = CRASH_NAME_STAMP.find(core) ?: return core
         return "${m.groupValues[1]}-${m.groupValues[2]}-${m.groupValues[3]} " +
@@ -98,7 +102,9 @@ object CrashLogger {
      * 纯字符串函数（不碰 Android 类型），故可直接被 JVM 单测覆盖。
      */
     internal fun redactUrls(text: String): String =
-        URL_IN_TEXT.replace(text) { m ->
+        // W2 接缝：只接这一**单层**（Rust 侧没有 redactSchemeless/redactCredentials 的对应，
+        // 其余两层仍留在 Kotlin）。null = 不接管 ⇒ 回落共享实现。
+        CoreImpl.crashRedactUrls(text) ?: URL_IN_TEXT.replace(text) { m ->
             val scheme = m.groupValues[1]
             // 先截 authority（第一个 '/'|'?'|'#' 之前），**再**剥 userinfo：
             // 顺序不能反 —— userinfo 的 `@` 只在 authority 里合法；若先对整段做
