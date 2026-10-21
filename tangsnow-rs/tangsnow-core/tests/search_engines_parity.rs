@@ -28,17 +28,19 @@ fn 夹具里的每条用例两侧同口径() {
         let a = c["args"].as_array().expect("args 必须是数组");
         match kind {
             "find" => {
-                // args[0] = 引擎 id（null = 空 id）；args[0] == "__empty_list__" 时
-                // 用**空列表**找（args[1] 才是要找的 id）
-                let empty = a[0].as_str() == Some("__empty_list__");
-                let list: &[SearchEngine] = if empty { &[] } else { builtins() };
-                let want: Option<&str> = if empty {
-                    Some(a[1].as_str().expect("args[1] 必须是字符串"))
-                } else {
-                    a[0].as_str()
-                };
+                // args[0] = 引擎 id（null = 空 id）
+                let want: Option<&str> = a[0].as_str();
                 assert_eq!(
-                    find(list, want).id,
+                    find(builtins(), want).id,
+                    c["expected"].as_str().expect("expected 必须是字符串"),
+                    "夹具用例「{id}」"
+                );
+            }
+            "findEmptyList" => {
+                // 用**空列表**找：兜底必须落到第一个内置引擎（而不是抛异常）
+                let want = a[0].as_str().expect("args[0] 必须是字符串");
+                assert_eq!(
+                    find(&[], Some(want)).id,
                     c["expected"].as_str().expect("expected 必须是字符串"),
                     "夹具用例「{id}」"
                 );

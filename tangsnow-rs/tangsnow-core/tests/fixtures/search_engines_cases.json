@@ -5,7 +5,7 @@
     { "id": "find: 按 id 命中内置引擎（bing_cn）", "kind": "find", "args": ["bing_cn"], "expected": "bing_cn" },
     { "id": "find: 未知 id 回退默认引擎", "kind": "find", "args": ["no-such-engine"], "expected": "bing_cn" },
     { "id": "find: 空 id 回退默认引擎", "kind": "find", "args": [null], "expected": "bing_cn" },
-    { "id": "find: 空列表兜底到第一个内置引擎", "kind": "find", "args": ["__empty_list__", "baidu"], "expected": "bing_cn" },
+    { "id": "find: 空列表兜底到第一个内置引擎", "kind": "findEmptyList", "args": ["baidu"], "expected": "bing_cn" },
 
     { "id": "hostMatches: 模板主机命中", "kind": "hostMatches", "args": ["cn.bing.com", "bing_cn", "cn.bing.com"], "expected": true },
     { "id": "hostMatches: 别名主机 bing.com", "kind": "hostMatches", "args": ["bing.com", "bing_cn", "cn.bing.com"], "expected": true },

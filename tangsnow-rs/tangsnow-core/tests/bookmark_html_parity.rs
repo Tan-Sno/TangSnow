@@ -9,11 +9,6 @@ use tangsnow_core::bookmark_html::*;
 fn parse(html: &str, now: i64) -> (Vec<Entry>, u64) {
     parse_import_counted(html, Some(now))
 }
-use tangsnow_core::java_is_whitespace;
-
-fn blank(s: &str) -> bool {
-    s.is_empty() || s.chars().all(java_is_whitespace)
-}
 
 // ------------------------------------------------------------- parseImport
 

@@ -21,7 +21,7 @@ const CASES: &str = include_str!("fixtures/bitmaps_sample_size_cases.json");
 // ------------------------------------------------------------- 采样
 
 #[test]
-fn 采样倍数与Kotlin侧同口径() {
+fn 采样倍数与_kotlin_侧同口径() {
     let v = common::load(CASES);
     for c in v["cases"].as_array().unwrap() {
         let id = c["id"].as_str().expect("id 必须是字符串");

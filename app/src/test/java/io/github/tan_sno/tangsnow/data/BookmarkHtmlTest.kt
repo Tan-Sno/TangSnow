@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.util.CodePoints
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -267,7 +268,9 @@ class BookmarkHtmlTest {
         val (entries, _) = BookmarkHtml.sanitize(
             listOf(BookmarkHtml.Entry("https://t.cn/", longTitle)), emptySet()
         )
-        assertEquals(BookmarkHtml.MAX_TITLE_LENGTH, entries[0].title.length)
+        // 量纲是**码点**（与 Rust `chars().take(n)` 同口径）—— 用 UTF-16 码元数断言
+        // 在标题含 emoji 时会骗过自己（emoji 占 2 个码元），所以这里走共享的码点计数。
+        assertEquals(BookmarkHtml.MAX_TITLE_LENGTH, CodePoints.countCodePoints(entries[0].title))
     }
 
     /**
@@ -301,7 +304,7 @@ class BookmarkHtmlTest {
             }
         }
         // 2) 量纲是码点（与 Rust `chars().count()` 一致），不是 UTF-16 码元
-        assertEquals(BookmarkHtml.MAX_TITLE_LENGTH, title.codePointCount(0, title.length))
+        assertEquals(BookmarkHtml.MAX_TITLE_LENGTH, CodePoints.countCodePoints(title))
         // 3) 截断后的末尾必须是完整的 emoji（而不是它的半个代理）
         assertTrue(title.endsWith(emoji))
     }
