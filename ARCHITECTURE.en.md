@@ -83,7 +83,7 @@ by the browser layer; no other layer references GeckoView types.
 - **Safe-browsing remote lookups are disabled** (that capability requires talking to Mozilla/Google — see the
   comment inside `buildContentBlocking`); `libxul.so` is stored uncompressed and split per ABI.
 
-## 6. The `core` flavor and the JNI seam (**currently NOT wired**)
+## 6. The `core` flavor and the JNI seam (**wired**: W1's 7 bridges + W2's 11 = 18)
 
 The app has a single product-flavor dimension: `core`.
 
@@ -95,22 +95,23 @@ The app has a single product-flavor dimension: `core`.
 **Verified facts (contrary to a common assumption)**:
 - `coreKotlin` has **no** dedicated source set (its logic is just `src/main`); `coreRust` **only adds**
   2 Kotlin files + 3 `.so` files.
-- **Nothing in `src/main` references** `CoreNative`/`CoreBridge` (confirmed by a full grep) ⇒
-  **the JNI route is not wired into the main line**; all `main` call sites still use plain Kotlin.
-- The bridge under `coreRust` **is currently exercised only by tests**:
-  `src/testCoreRust/.../CoreBridgeDecodeTest.kt` (4 cases).
-
-**Seam design (not yet implemented)**:
-- One `internal object CoreImpl` of the **same name and signature per flavor** (Kotlin body = current
-  implementation; Rust body calls `CoreNative`);
-- Call sites in `src/main` **change by not a single character** (they keep calling facades like `UrlUtils.resolveInfo`);
-- The compiler *is* the gate: both flavors must provide `CoreImpl`, and missing one is a compile error
-  (**no interface, no DI, no runtime `if`**).
-- That file **does not exist yet** (`find -name CoreImpl.kt` is empty) ⇒ this is where wiring would land.
+- **Nothing in `src/main` references** `CoreNative`/`CoreBridge` ⇒ the seam is a **compile-time
+  dispatch, not a runtime `if`**: each flavor provides one `internal object CoreImpl` of the **same
+  name and signature**, call sites in `src/main` **change by not a single character** (they keep
+  calling facades like `UrlUtils.resolveInfo`), and the **compiler** is the gate (a missing flavor
+  is a compile error — no interface, no DI, no runtime branch).
+- Where `CoreImpl` lives: `app/src/coreKotlin/.../CoreImpl.kt` and `app/src/coreRust/.../CoreImpl.kt`.
+- **18 bridges are wired**: W1's seven single-value string functions (`resolveInfo` / `looksLikeUri` /
+  `schemeOf` / `isPortableUrl` / `percentEncode` / `searchUrl` / `displayForUrl`) plus W2's eleven with
+  on-disk / privacy / round-trip semantics (4 download-filename, 2 crash-log, 3 bookmark-JSON,
+  1 history filter, 1 legal-bold ranges).
 
 **`guard` contract (`CoreNative`)**: `available` is evaluated eagerly at class init
 (`loadLibrary` failure ⇒ false, never throws); when `available=false` every `*Impl` returns a safe default and
 never touches native; callers use `nullIsResult` to distinguish "legitimately empty" from "failed".
+The `CoreImpl` layer **asks `available` first** and returns `null` (= does not take over) when it is
+false ⇒ on the JVM, coreRust and coreKotlin behave **byte for byte alike** — which is what lets the
+shared unit tests run under both flavors.
 
 ## 7. Rust core (`tangsnow-rs/`)
 
@@ -121,7 +122,10 @@ never touches native; callers use `nullIsResult` to distinguish "legitimately em
 - **Exports**: 34 `Java_io_github_tan_1sno_tangsnow_core_CoreNative_*` symbols (3 are known orphans; any new
   one outside the whitelist turns the gate red).
 - **Tests**: 15 `tests/*.rs`, including per-module `*_parity.rs` (Kotlin↔Rust behaviour alignment),
-  `jni_boundary_parity`, `properties_fuzz`. `cargo test --offline` = **232 cases**.
+  `jni_boundary_parity`, `properties_fuzz`. `cargo test --offline` = **207 cases**. Five pairs now
+  read a **JSON fixture shared by both sides** (`tests/fixtures/`, the Kotlin side reads the very
+  same files ⇒ changing a fixture turns both sides red); the rest are still mirrors (expectations
+  written twice) — see `tangsnow-rs/README.md`.
 - Kotlin↔Rust equivalence is guarded by meta tests: `CrossLanguageLiteralParityTest`,
   `PercentEncodeSetParityTest`, `BridgeSignatureParityTest`.
 
@@ -173,7 +177,7 @@ never touches native; callers use `nullIsResult` to distinguish "legitimately em
 - **Release gate** `tools/verify_release.py` — **11 checks** (clean tree / version declarations /
   package name+version+ABI / permission baseline / certificate fingerprint + v2 / freshness / dependency
   digests / `libxul.so` build id / `exported` whitelist / `lib/*.so` must be deflated / own `.so`
-  `p_align>=16384`); `--selftest` has 32 cases (it does not replace a real package).
+  `p_align>=16384`); `--selftest` has 22 cases (it does not replace a real package).
 - **CI** `.github/workflows/ci.yml`: both-flavor unit tests + both-flavor lint + gate self-test;
   it **deliberately** does not run `assembleRelease` and does not reference secrets.
 
@@ -181,11 +185,11 @@ never touches native; callers use `nullIsResult` to distinguish "legitimately em
 
 | Layer | Location | Size |
 |---|---|---|
-| Shared unit tests | `app/src/test` (36 files) | **277** (coreKotlin) / **281** (coreRust) |
-| Flavor-specific unit tests | `app/src/testCoreRust` (4 cases) | runs only in the coreRust compilation unit |
-| Rust unit tests | `tangsnow-rs/tangsnow-core/tests` (15 files) | **232** |
-| Gate self-test | `verify_release.py --selftest` | 32 |
-| **Instrumented tests** | — | ⚠️ **no `androidTest/`** (a real gap) |
+| Shared unit tests | `app/src/test` (43 files) | **287** (coreKotlin) / **294** (coreRust) |
+| Flavor-specific unit tests | `app/src/testCoreRust` (2 files / 7 cases) | runs only in the coreRust compilation unit |
+| Rust unit tests | `tangsnow-rs/tangsnow-core/tests` (15 `.rs` files + a shared fixture dir) | **207** |
+| Gate self-test | `verify_release.py --selftest` | 22 |
+| **Instrumented tests** | `app/src/androidTestCoreRust` (2 files / 12 cases) | ⚠️ **coreRust flavor only** (coreKotlin has none) |
 
 **Meta-test pins** (changing source obliges changing these): `TestCountCommentTest` (pins the count comment in
 build.gradle), `ReleaseGateConsistencyTest` (pins byte-identical `dist/jniLibs` + five invariants of
@@ -198,12 +202,23 @@ lint `checkAllWarnings=true` is a hard gate.
 
 ## 12. Current state and known limits
 
-1. **JNI seam not wired**: `CoreImpl` does not exist yet (see §6) ⇒ `coreRust` today amounts to
-   "a `.so` that is packaged but never called".
-2. **Shipped `.so` semantics drifted**: `app/src/coreRust/jniLibs/*.so` predate the `displayForUrlImpl`
-   4-argument change ⇒ wiring `displayForUrl` to Rust requires **rebuilding the `.so` with a stable NDK**
-   plus a smoke test on a real device.
-3. **Zero `androidTest/`**: no instrumented tests; UI/on-device behaviour has no automation.
+1. **Instrumented tests cover coreRust only**: `app/src/androidTestCoreRust` holds 12 cases
+   (W2's nine bridges, W1's two, plus a real round-trip), but **coreKotlin — the line that
+   actually ships — has none**, so UI/on-device behaviour still has no automated coverage.
+   Those 12 cases also **have not run on this machine**: the 16KB AVD boots, but the APK
+   carrying GeckoView's native libraries does not install (`adb install` times out, then the
+   shell stops answering) ⇒ a device that can install that package is required.
+2. **The packaged `.so` must be rebuilt whenever the Rust sources change**: the shipped `.so`
+   and `tangsnow-rs/` are **two sources of truth** (`ReleaseGateConsistencyTest` only checks that
+   `dist/` and the flavor copy are byte-identical). Change Rust without rebuilding ⇒ the
+   published behaviour is still the old one. Rebuilt for all three ABIs with the local NDK r30
+   on 2026-10-21 (`p_align` = `0x4000` throughout).
+3. **The two flavors are two independent app identities**: `coreKotlin` =
+   `io.github.tan_sno.tangsnow`, `coreRust` = `io.github.tan_sno.tangsnow.rust`
+   (`applicationIdSuffix = ".rust"`) ⇒ they can coexist on one device with isolated data and
+   independent upgrades; but they still **derive from the same versionCode base** (41 ⇒
+   411/412/413 per ABI), and the release discipline stays **one flavor at a time** (the gate
+   rejects the other flavor's APKs as "unexpected artifacts").
 
 ## 13. Sources
 

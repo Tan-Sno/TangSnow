@@ -31,9 +31,16 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
 | `bookmark_html` | `data/BookmarkHtml.kt` | 295 | `BookmarkHtmlTest`(23) |
 | `history` | `data/repo/HistoryRepo.kt` 纯函数 | 96 | — |
 
-**验证结果**：`cargo test` **207/207 通过**（2026-10-20 实测，15 个测试二进制合计；旧口径写的 70/70、210/210、213/213、223/223、224/224、231/231、233/233、235/235、236/236 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
-- 30 + 15 个差分用例与 JVM 单测同源（同输入 ⇒ 同输出，含防钓鱼 `@` 检查、
-  IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对）；
+**验证结果**：`cargo test` **207/207 通过**（2026-10-21 实测，15 个测试二进制合计；旧口径写的 70/70、210/210、213/213、223/223、224/224、231/231、233/233、235/235、236/236 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
+- 30 个库内单测 + 15 个测试二进制里的 177 例与 JVM 单测**同源**（同输入 ⇒ 同输出，含防钓鱼
+  `@` 检查、IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对）；
+- ⚠️ **「同源」有两种形态，别混为一谈**（2026-10-20 审查报告 C-14）：
+  - **共享夹具**（`tests/fixtures/*.json`，两侧读**同一个文件** ⇒ 改夹具必然两侧一起红）：
+    `legal_text` / `crash_logger` / `bitmaps` 采样 / `search_engines` / `download_filename` 五对；
+  - **仍是镜像**（期望值各写一份 ⇒ 改实现 + 同步改镜像期望值，两侧会一起绿而行为已漂）：
+    `url_utils` / `bookmark_html` / `bitmaps` 裁剪 / `history` / `url_idna` / `jni_boundary`。
+    这几对的函数**两侧签名本就不同**（如 `parse_import` 的 Rust 收 `now`、Kotlin 不收），
+    转共享夹具需逐侧派发，单独排期。
 - **IDNA 差分 3 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
   `IDN.toASCII` 的**实测行为**上，含本仓唯一一处**有意分歧**（退化输入 `.`）与 8 条已记录的口径差异，
   详见本文件「已知口径差异」表；
@@ -65,9 +72,10 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
   `HOST_ALIASES`（含「别名键必须是内置 id」）。它**第一次跑就抓到一条真漂移**：Rust 少了
   `"bing" → ["bing.com"]` 这一整行（⇒ 国际版引擎在 `www.bing.com` 结果页静默不回显关键词），
   已补，另加一条行为用例 `国际版引擎的结果页落在无区域前缀主机上也回显`。
-  ⚠️ 同 H3/M5：补的是源码，随包 `.so` 不重建就不带它。
+  ⚠️ 同 H3/M5：补的是源码，随包 `.so` 不重建就不带它 —— **2026-10-21 已用本机 NDK r30 重编三 ABI**
+  （`dist/` 与 `app/src/coreRust/jniLibs/` 逐字节一致、`p_align` 全 `0x4000`），该提醒对本次已闭环。
 
-**交叉编译**：NDK r27c 直连 clang，重编落点是 `dist/jniLibs/`（**该目录已不被 git 跟踪**，
+**交叉编译**：NDK r27c 起（**2026-10-21 本机实测用 r30** `30.0.16138531`），直连 clang，重编落点是 `dist/jniLibs/`（**该目录已不被 git 跟踪**，
 2026-10-15 整理：此前它与 `app/src/coreRust/jniLibs/` 各存一份逐字节相同的 `.so`，
 两份跟踪副本就是"改一边忘一边"的口径），**唯一进仓、进构建的副本在
 `app/src/coreRust/jniLibs/<abi>/libtangsnow_core.so`**。产物形状：arm64-v8a 2.2M /
@@ -75,11 +83,14 @@ armeabi-v7a 1.4M / x86_64 2.4M，opt-level=z + LTO + strip + panic=abort，**34*
 以 `tan_1sno` 正确转义导出（2026-10-15 从产物里实测；原先这里写 18 —— 与 `STATUS.md`
 记的「.so 34 导出 vs Kotlin 31 `external`」也对不上）。
 
-⚠️ **随包 `.so` 是 2026-10-10 那一批**（`app/src/coreRust/jniLibs/` 那三颗，实测），**不含**
-2026-10-15 的 H3（CESU-8）与 M5（`displayForUrlImpl` 多一个形参）。
-本机没有 android target、`.so` 在那台 Linux 环境交叉编译 ⇒ 源码与产物之间的偏差已知且在案：
-重建之前，`displayForUrlImpl` 在真机上会以 `UnsatisfiedLinkError` 形式被 `guard` 兜成降级
-（关键词回显失效），CESU-8 那条仍是旧行为。接线（PLAN 的 W1/W2/W3）之前必须先重建 `.so`。
+✅ **随包 `.so` 已与源码同代**（2026-10-21 用**本机** NDK r30 `30.0.16138531` 重编三 ABI：
+`aarch64-linux-android` / `armv7-linux-androideabi` / `x86_64-linux-android` 三个 target 本机已装，
+`cargo build --locked` + 16KB `max-page-size` 链接参数齐备；产物与 `dist/` 逐字节一致、
+`p_align` 全 `0x4000`、路径泄漏自检通过）⇒ 此前那段「本机没有 android target、`.so` 在那台 Linux
+环境交叉编译、源码与产物有已知偏差」的记录**已作废**：H3（CESU-8）与 M5（`displayForUrlImpl`
+多一个形参）现在都在产物里。
+⚠️ 但**纪律不变**：以后改 Rust 源码仍必须重编 `.so`（`ReleaseGateConsistencyTest` 只校验
+「dist 与 flavor 逐字节一致」，**不**校验它与源码同代）⇒ 改完 Rust 别忘了 `tools/build-android.sh`。
 
 ## 结构
 
@@ -90,6 +101,8 @@ tangsnow-rs/
 │   ├── src/                  # percent_encode / url_utils / search_engines /
 │   │                         # bookmark_html / history / jni(feature="jni")
 │   └── tests/                # 与 JVM 单测同源的差分测试
+│       ├── fixtures/         # **两侧共享的期望值夹具**（Kotlin 侧读同一批 JSON）
+│       └── common/mod.rs     # 夹具读取器（Kotlin 侧对应 data/SharedFixtures.kt）
 ├── dist/                   # 只剩重编落点（`jniLibs/`，已 gitignore）；2026-10-15 清空
 │   └── (已归档) CoreNative.kt 设计稿 / gradle-integration.gradle.kts / rust-core-integration.patch
 └── tools/build-android.sh    # 直连 NDK 重编脚本（不依赖 cargo-ndk）

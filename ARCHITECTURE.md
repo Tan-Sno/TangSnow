@@ -80,7 +80,7 @@
 - **内核安全浏览远程查询已关闭**（该能力需连 Mozilla/Google，见 `buildContentBlocking` 内注释）；
   `libxul.so` 未压缩存储、按 ABI 分包。
 
-## 6. `core` flavor 与 JNI 接缝（关键，且**当前未接线**）
+## 6. `core` flavor 与 JNI 接缝（**已接线**：W1 7 桥 + W2 11 桥 = 18 桥）
 
 应用有一维 product flavor：`core`。
 
@@ -91,18 +91,18 @@
 
 **已核实的关键事实（与常见误解相反）**：
 - `coreKotlin` **没有**专属 source set（逻辑就在 `src/main`）；`coreRust` **只新增** 2 个 Kotlin 文件 + 3 颗 `.so`。
-- `src/main` 里 **没有任何一处** 引用 `CoreNative`/`CoreBridge`（已 grep 全量确认）⇒
-  **JNI 路由目前尚未接进主线**：`main` 的调用点仍走 `src/main` 里的纯 Kotlin 实现。
-- `coreRust` 包里的桥**当前只被测试**使用：`src/testCoreRust/.../CoreBridgeDecodeTest.kt`（4 例）。
-
-**接缝设计（尚未实施）**：
-- 每个 flavor 各放一份同名同签名的 `internal object CoreImpl`（Kotlin 版体=现有实现；Rust 版体调 `CoreNative`）；
-- `src/main` 调用点**一个字不改**（继续调 `UrlUtils.resolveInfo` 这类门面）；
-- 编译器即闸门：两 flavor 必须都提供 `CoreImpl`，少一个就是编译失败（**不需要接口/DI/运行时 if**）。
-- 该文件**当前不存在**（`find -name CoreImpl.kt` 空）⇒ 这是下一步接线的落点。
+- `src/main` 里 **没有任何一处**引用 `CoreNative`/`CoreBridge` ⇒ **接缝是编译期分派、不是运行时 if**：
+  两 flavor 各提供一份同名同签名的 `internal object CoreImpl`，`src/main` 的调用点**一个字不改**
+  （继续调 `UrlUtils.resolveInfo` 这类门面），由**编译器**当闸门（少一个 flavor 就是编译失败）。
+- `CoreImpl` 的存在位置：`app/src/coreKotlin/.../CoreImpl.kt` 与 `app/src/coreRust/.../CoreImpl.kt`。
+- **已接线的桥共 18 个**：W1 七个单值纯字符串函数（`resolveInfo` / `looksLikeUri` / `schemeOf` /
+  `isPortableUrl` / `percentEncode` / `searchUrl` / `displayForUrl`）+ W2 十一个带落盘/隐私/往返语义的
+  （下载文件名 4、崩溃日志 2、书签 JSON 三件、历史入库过滤 1、法律粗体区间 1）。
 
 **`guard` 契约（`CoreNative`）**：`available` 在类初始化时急切求值（`loadLibrary` 失败=false、不抛）；
 `available=false` 时所有 `*Impl` 返回安全默认值、不触碰 native；调用方用 `nullIsResult` 区分"正常空"与"失败"。
+`CoreImpl` 这一层**先问 `available`**、不可用一律返回 `null`（= 不接管）⇒ JVM 上 coreRust 与 coreKotlin
+**逐字节一致**，这正是共享单测能在两个 flavor 上各跑一遍的前提。
 
 ## 7. Rust 核心（`tangsnow-rs/`）
 
@@ -111,7 +111,9 @@
   `legal_text` `bitmaps` `dt_prompts` `crash_logger` `update_logic` + `jni`（导出层）+ `lib`。
 - **导出**：34 个 `Java_io_github_tan_1sno_tangsnow_core_CoreNative_*`（其中 3 个为已知孤儿，白名单外新增即红）。
 - **测试**：15 个 `tests/*.rs`，含逐模块 `*_parity.rs`（Kotlin↔Rust 行为对齐）+ `jni_boundary_parity` + `properties_fuzz`。
-  `cargo test --offline` = **232 例**。
+  `cargo test --offline` = **207 例**。其中五对已改用**两侧共享的 JSON 夹具**
+  （`tests/fixtures/`，Kotlin 侧读同一批文件 ⇒ 改夹具必然两侧一起红）；
+  其余仍是「镜像」（期望值各写一份），见 `tangsnow-rs/README.md` 的说明。
 - **两条语言的等价性**由元测试守：`CrossLanguageLiteralParityTest`、`PercentEncodeSetParityTest`、`BridgeSignatureParityTest`。
 
 ## 8. 数据与隐私边界
@@ -151,7 +153,7 @@
   任何 release 任务**直接报错**，绝不静默出 debug 签名包。
 - **发版门禁** `tools/verify_release.py` **11 项**（工作区干净 / 版本声明 / 包名版本 ABI / 权限基准 /
   证书指纹+v2 / 新鲜度 / 依赖散列 / `libxul.so` 构建号 / `exported` 白名单 / `lib/*.so` 必须 deflate /
-  自家 `.so` `p_align>=16384`）；`--selftest` 32 项自检（不替代真包）。
+  自家 `.so` `p_align>=16384`）；`--selftest` 22 项自检（不替代真包）。
 - **CI** `.github/workflows/ci.yml`：两 flavor 单测 + 两 flavor lint + 门禁自检；
   **刻意不跑 `assembleRelease`、不引用 secrets**。
 
@@ -159,11 +161,11 @@
 
 | 层 | 位置 | 规模 |
 |---|---|---|
-| 共享单测 | `app/src/test`（36 文件） | **277**（coreKotlin）/ **281**（coreRust） |
-| flavor 专有单测 | `app/src/testCoreRust`（4 例） | 只在 coreRust 编译单元里跑 |
-| Rust 单测 | `tangsnow-rs/tangsnow-core/tests`（15 文件） | **232** |
-| 门禁自检 | `verify_release.py --selftest` | 32 |
-| **仪器测试** | — | ⚠️ **无 `androidTest/`**（真实缺口） |
+| 共享单测 | `app/src/test`（43 文件） | **287**（coreKotlin）/ **294**（coreRust） |
+| flavor 专有单测 | `app/src/testCoreRust`（2 文件 / 7 例） | 只在 coreRust 编译单元里跑 |
+| Rust 单测 | `tangsnow-rs/tangsnow-core/tests`（15 个 `.rs` + 共享夹具目录） | **207** |
+| 门禁自检 | `verify_release.py --selftest` | 22 |
+| **仪器测试** | `app/src/androidTestCoreRust`（2 文件 / 12 例） | ⚠️ **只覆盖 coreRust flavor**（coreKotlin 无仪器测试） |
 
 **元测试钉子**（改源码必须同步改它们）：`TestCountCommentTest`（钉 build.gradle 计数注释）、
 `ReleaseGateConsistencyTest`（钉 `dist/jniLibs` 逐字节一致 + `build-android.sh` 五处口径）、
@@ -174,10 +176,18 @@
 
 ## 12. 现状与已知限制
 
-1. **JNI 接缝未接线**：`CoreImpl` 尚未存在（见 §6）⇒ `coreRust` 目前 = "多带一颗未被调用的 `.so`"。
-2. **随包 `.so` 语义漂移**：`app/src/coreRust/jniLibs/*.so` 早于 `displayForUrlImpl` 的 4 参改动 ⇒
-   若要接 `displayForUrl` 到 Rust，必须先**用稳定版 NDK 重编 `.so`** 并做真机冒烟。
-3. **零 `androidTest/`**：无仪器测试；UI/真机行为无自动化。
+1. **仪器测试只覆盖 coreRust**：`app/src/androidTestCoreRust` 有 12 例（W2 九桥 + W1 两桥 + 真机
+   往返），但 **coreKotlin（实际发布的那条线）没有仪器测试** ⇒ UI / 真机行为仍无自动化覆盖。
+   且这 12 例**在本机尚未跑通**：16KB AVD 起得来，但带 GeckoView 原生库的 APK 装不下
+   （`adb install` 超时、随后 shell 无响应）⇒ 需要能装该包的设备才能执行。
+2. **`.so` 产物必须随 Rust 源码重编**：随包 `.so` 与 `tangsnow-rs/` 源码是**两份事实**
+   （`ReleaseGateConsistencyTest` 只校验「dist 与 flavor 逐字节一致」）。改 Rust 后未重编 ⇒
+   发布出去的行为仍是旧的。2026-10-21 已用本机 NDK r30 重编三 ABI（`p_align` 全 `0x4000`）。
+3. **两 flavor 是两个独立应用身份**：`coreKotlin` = `io.github.tan_sno.tangsnow`，
+   `coreRust` = `io.github.tan_sno.tangsnow.rust`（`applicationIdSuffix = ".rust"`）
+   ⇒ 可同机并存、数据隔离、各自升级；**但共用同一套 versionCode 基准**（41 ⇒ ABI 派生
+   411/412/413），发布纪律仍是**一次只发一个 flavor**（门禁把另一个 flavor 的包判为
+   「预期之外的 APK」）。
 
 ## 13. 事实来源
 

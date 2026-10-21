@@ -106,9 +106,12 @@ the other flavor's compile errors, lint findings and tests slip in unseen (CI do
 
 Release builds must also name one flavor: `:app:assembleCoreKotlinRelease`. A bare
 `assembleRelease` produces both flavors (six APKs) into `app/release/`, which the pre-release
-gate then rejects as unexpected artifacts — publishing is deliberately one-flavor-at-a-time
-because both flavors share the `applicationId` and derive the same `versionCode`, so a mixed
-publication would silently swap a user's engine on upgrade. The GeckoView native libraries
+gate then rejects as unexpected artifacts — publishing is deliberately one-flavor-at-a-time.
+(The two flavors are **separate app identities** since A1 — `coreKotlin` is
+`io.github.tan_sno.tangsnow`, `coreRust` is `io.github.tan_sno.tangsnow.rust` — so they can
+coexist on one device with isolated data; but they derive from the same `versionCode` base, and
+the Rust line ships under its own `v<ver>-rust-preview` tag.)
+The GeckoView native libraries
 (`libxul.so` and friends) make up roughly 86% of the APK, so builds are split per ABI
 (`arm64-v8a` / `armeabi-v7a` / `x86_64`) and no universal APK is produced; each split gets a
 distinct `versionCode`, so you can switch architectures on the same device. Signing credentials

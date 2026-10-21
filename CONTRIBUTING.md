@@ -69,8 +69,11 @@ recognised and exempt (it injects its own credentials).
 For local verification of the packaging pipeline only, pass
 `-Ptangsnow.allowDebugSignedRelease` explicitly to skip the gate — the artifact still
 uses the debug certificate and must not be distributed or published.
-Release artifacts are one flavor at a time on purpose: both flavors share the `applicationId` and
-derive the same `versionCode`, so a mixed publication would silently swap the engine under a user.
+Release artifacts are one flavor at a time on purpose: both flavors derive from the same
+`versionCode` base, so a mixed publication would silently swap the engine under a user. (Since A1
+they are also **separate app identities** — `coreKotlin` is `io.github.tan_sno.tangsnow`,
+`coreRust` is `io.github.tan_sno.tangsnow.rust` — so they can coexist on one device; the Rust
+line ships under its own `v<ver>-rust-preview` tag.)
 
 Make sure all of the commands above pass before submitting, and that lint stays at **zero issues**.
 Note that `checkAllWarnings` is enabled (`app/build.gradle.kts`), so **warnings are reported too** —
