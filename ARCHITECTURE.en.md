@@ -122,11 +122,12 @@ shared unit tests run under both flavors.
   `legal_text` `bitmaps` `dt_prompts` `crash_logger` `update_logic` + `jni` (export layer) + `lib`.
 - **Exports**: 34 `Java_io_github_tan_1sno_tangsnow_core_CoreNative_*` symbols (3 are known orphans; any new
   one outside the whitelist turns the gate red).
-- **Tests**: 15 `tests/*.rs`, including per-module `*_parity.rs` (Kotlin↔Rust behaviour alignment),
-  `jni_boundary_parity`, `properties_fuzz`. `cargo test --offline` = **207 cases**. Five pairs now
-  read a **JSON fixture shared by both sides** (`tests/fixtures/`, the Kotlin side reads the very
-  same files ⇒ changing a fixture turns both sides red); the rest are still mirrors (expectations
-  written twice) — see `tangsnow-rs/README.md`.
+- **Tests**: 15 `tests/*.rs` (14 test binaries + the shared reader `common/mod.rs`), including per-module
+  `*_parity.rs` (Kotlin↔Rust behaviour alignment), `jni_boundary_parity`, `properties_fuzz`.
+  `cargo test --offline` = **169 cases**. **Ten pairs** now read a **JSON fixture shared by both sides**
+  (`tests/fixtures/`, the Kotlin side reads the very same files ⇒ changing a fixture turns both sides
+  red); the rest are deliberately **one-sided** cases (source-level sentinels, properties, regression
+  batches) — see `tangsnow-rs/README.md`.
 - Kotlin↔Rust equivalence is guarded by meta tests: `CrossLanguageLiteralParityTest`,
   `PercentEncodeSetParityTest`, `BridgeSignatureParityTest`.
 
@@ -189,9 +190,9 @@ shared unit tests run under both flavors.
 
 | Layer | Location | Size |
 |---|---|---|
-| Shared unit tests | `app/src/test` (43 files) | **287** (coreKotlin) / **294** (coreRust) |
+| Shared unit tests | `app/src/test` (45 files) | **248** (coreKotlin) / **255** (coreRust) |
 | Flavor-specific unit tests | `app/src/testCoreRust` (2 files / 7 cases) | runs only in the coreRust compilation unit |
-| Rust unit tests | `tangsnow-rs/tangsnow-core/tests` (15 `.rs` files + a shared fixture dir) | **207** |
+| Rust unit tests | `tangsnow-rs/tangsnow-core/tests` (15 `.rs` files + 10 shared fixtures) | **169** |
 | Gate self-test | `verify_release.py --selftest` | 25 |
 | **Instrumented tests** | `app/src/androidTestCoreRust` (2 files / 12 cases) | ⚠️ **coreRust flavor only** (coreKotlin has none) |
 

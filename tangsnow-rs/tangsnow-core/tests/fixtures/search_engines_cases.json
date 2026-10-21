@@ -1,5 +1,5 @@
 {
-  "_说明": "搜索引擎引擎表的**共享期望值**：Kotlin 侧 `app/src/test/.../data/SearchEnginesTest.kt` 与 Rust 侧 `tests/search_engines_parity.rs` 读同一份（2026-10-20 审查报告 C-14）。kind ∈ find / hostMatches / templateHostOf；args 按 kind 顺序；expected 为 null 表示「无结果」。内置引擎**模板表**不在本夹具内 —— 它由 `SearchEngineTableParityTest` 并排比对两侧源码（那是一张表，不是一串用例）。",
+  "_说明": "搜索引擎引擎表的**共享期望值**：Kotlin 侧 `app/src/test/.../data/SearchEnginesTest.kt` 与 Rust 侧 `tests/search_engines_parity.rs` 读同一份（2026-10-20 审查报告 C-14）。kind ∈ find / findEmptyList / hostMatches / templateHostOf / searchUrl；args 按 kind 顺序（searchUrl 的 args = [模板, 关键词]）；expected 为 null 表示「无结果」。内置引擎**模板表**不在本夹具内 —— 它由 `SearchEngineTableParityTest` 并排比对两侧源码（那是一张表，不是一串用例）。searchUrl 那一组原先是 Kotlin 侧 `PercentEncodeTest.kt` 与 Rust 侧 `search_engines_parity.rs` **各写一份**的镜像期望值（两侧实现逐行等价，却各自钉一份）⇒ 现并入本夹具。",
   "cases": [
     { "id": "find: 按 id 命中内置引擎", "kind": "find", "args": ["baidu"], "expected": "baidu" },
     { "id": "find: 按 id 命中内置引擎（bing_cn）", "kind": "find", "args": ["bing_cn"], "expected": "bing_cn" },
@@ -46,6 +46,15 @@
     { "id": "templateHostOf: 大小写归一", "kind": "templateHostOf", "args": ["HTTPS://CN.Bing.COM/search?q={q}"], "expected": "cn.bing.com" },
     { "id": "templateHostOf: 空模板无主机", "kind": "templateHostOf", "args": [""], "expected": null },
     { "id": "templateHostOf: 缺主机", "kind": "templateHostOf", "args": ["https:///search?q={q}"], "expected": null },
-    { "id": "templateHostOf: 只有端口", "kind": "templateHostOf", "args": ["https://:8080/x"], "expected": null }
+    { "id": "templateHostOf: 只有端口", "kind": "templateHostOf", "args": ["https://:8080/x"], "expected": null },
+
+    { "id": "searchUrl: q 占位符替换为编码后的关键词", "kind": "searchUrl", "args": ["https://s.test/?q={q}", "abc"], "expected": "https://s.test/?q=abc" },
+    { "id": "searchUrl: q 占位符替换为编码后的中文关键词", "kind": "searchUrl", "args": ["https://s.test/?q={q}", "棠雪"], "expected": "https://s.test/?q=%E6%A3%A0%E9%9B%AA" },
+    { "id": "searchUrl: 关键词里的空格按 %20 编码", "kind": "searchUrl", "args": ["https://s.test/?q={q}", "棠雪 浏览器"], "expected": "https://s.test/?q=%E6%A3%A0%E9%9B%AA%20%E6%B5%8F%E8%A7%88%E5%99%A8" },
+    { "id": "searchUrl: 百分号 s 占位符同样替换", "kind": "searchUrl", "args": ["https://s.test/?wd=%s", "abc"], "expected": "https://s.test/?wd=abc" },
+    { "id": "searchUrl: 模板不含占位符时追加 q 参数", "kind": "searchUrl", "args": ["https://s.test/search", "abc"], "expected": "https://s.test/search?q=abc" },
+    { "id": "searchUrl: 模板已有查询串时用 &q= 追加", "kind": "searchUrl", "args": ["https://s.test/search?lang=cn", "abc"], "expected": "https://s.test/search?lang=cn&q=abc" },
+    { "id": "searchUrl: 空模板回退到内置兜底地址", "kind": "searchUrl", "args": ["", "abc"], "expected": "https://www.bing.com/search?q=abc" },
+    { "id": "searchUrl: 关键词前后空白被裁剪", "kind": "searchUrl", "args": ["https://s.test/?q={q}", "  abc  "], "expected": "https://s.test/?q=abc" }
   ]
 }

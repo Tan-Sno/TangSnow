@@ -75,8 +75,13 @@ object UrlUtils {
      * 把可能的 Unicode 域名（如中文域名「例子.测试」）转成 ASCII（punycode）形式，
      * 便于 [HOST_PATTERN] 识别；保留端口与路径。无法识别为域名时返回 null。
      * 仅处理裸域名 + 可选端口 + 可选路径，不含协议前缀（协议已在上层单独判断）。
+     *
+     * 可见性放宽到 internal 的理由：这条口径必须与 Rust 侧 `to_ascii_url` **钉在同一条**上，
+     * 而 JVM 侧此前**一个针对它的测试都没有**（它是 private）⇒ 口径只在 Rust 侧被钉着，
+     * 哪一侧改了都不会红。现在两侧读同一份夹具
+     * （Rust 侧 `tests/fixtures/url_idna_cases.json`），改夹具必然两侧一起红。
      */
-    private fun toAsciiUrl(input: String): String? {
+    internal fun toAsciiUrl(input: String): String? {
         if (input.any { it.isWhitespace() }) return null
         // 不含点就不是域名形态（「例子」这类单词仍应走搜索）
         val host = input.substringBefore('/')

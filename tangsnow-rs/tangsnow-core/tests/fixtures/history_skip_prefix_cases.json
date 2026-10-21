@@ -1,0 +1,25 @@
+{
+  "_说明": "历史入库前缀过滤的**共享期望值**：Kotlin 侧 `HistoryRepo.shouldSkipHistoryUrl`（共享实现的回落分支）与 Rust 侧 `tests/history_parity.rs` 读同一份（2026-10-20 审查报告 C-14）。`args` = [url]；`expected` = 是否跳过入库（true = 不进历史：内部页 / 临时文档 / 脚本协议 / 扩展页）。前缀清单本身（SKIP_PREFIXES）两侧各存一份，由 `CrossLanguageLiteralParityTest` 并排比对两侧源码；Rust 侧另有一条用例把「清单」与本夹具互相钉住（清单里多一个前缀而夹具没覆盖 ⇒ 红）。",
+  "cases": [
+    { "id": "about:blank 不进历史", "args": ["about:blank"], "expected": true },
+    { "id": "about:config 不进历史", "args": ["about:config"], "expected": true },
+    { "id": "chrome 内部页不进历史", "args": ["chrome://settings"], "expected": true },
+    { "id": "data 临时文档不进历史", "args": ["data:text/html,hello"], "expected": true },
+    { "id": "blob 临时文档不进历史", "args": ["blob:https://a.com/uuid"], "expected": true },
+    { "id": "javascript 协议不进历史", "args": ["javascript:void(0)"], "expected": true },
+    { "id": "扩展页不进历史", "args": ["moz-extension://uuid/page.html"], "expected": true },
+
+    { "id": "协议大小写不敏感（about）", "args": ["ABOUT:BLANK"], "expected": true },
+    { "id": "协议大小写不敏感（javascript）", "args": ["JavaScript:void(0)"], "expected": true },
+    { "id": "协议大小写不敏感（data）", "args": ["Data:"], "expected": true },
+
+    { "id": "普通网页进历史", "args": ["https://example.com"], "expected": false },
+    { "id": "带查询串的网页进历史", "args": ["http://a.com/b?c=d"], "expected": false },
+    { "id": "本地文件进历史", "args": ["file:///sdcard/x.pdf"], "expected": false },
+    { "id": "裸域名进历史", "args": ["example.com"], "expected": false },
+
+    { "id": "前缀相近但不是该协议（aboutx）", "args": ["aboutx:not-a-scheme"], "expected": false },
+    { "id": "前缀相近但不是该协议（javascriptx）", "args": ["javascriptx:alert(1)"], "expected": false },
+    { "id": "前导空白不算协议前缀", "args": [" https://example.com"], "expected": false }
+  ]
+}

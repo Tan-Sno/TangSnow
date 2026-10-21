@@ -110,10 +110,11 @@
 - **13 个模块**：`url_utils` `percent_encode` `search_engines` `download_filename` `bookmark_html` `history`
   `legal_text` `bitmaps` `dt_prompts` `crash_logger` `update_logic` + `jni`（导出层）+ `lib`。
 - **导出**：34 个 `Java_io_github_tan_1sno_tangsnow_core_CoreNative_*`（其中 3 个为已知孤儿，白名单外新增即红）。
-- **测试**：15 个 `tests/*.rs`，含逐模块 `*_parity.rs`（Kotlin↔Rust 行为对齐）+ `jni_boundary_parity` + `properties_fuzz`。
-  `cargo test --offline` = **207 例**。其中五对已改用**两侧共享的 JSON 夹具**
+- **测试**：15 个 `tests/*.rs`（14 个测试二进制 + 共享读取器 `common/mod.rs`），含逐模块 `*_parity.rs`
+  （Kotlin↔Rust 行为对齐）+ `jni_boundary_parity` + `properties_fuzz`。
+  `cargo test --offline` = **169 例**。其中**十对**已改用**两侧共享的 JSON 夹具**
   （`tests/fixtures/`，Kotlin 侧读同一批文件 ⇒ 改夹具必然两侧一起红）；
-  其余仍是「镜像」（期望值各写一份），见 `tangsnow-rs/README.md` 的说明。
+  其余是**单侧**用例（源码级哨兵、性质、回归批），刻意只有一侧，见 `tangsnow-rs/README.md` 的说明。
 - **两条语言的等价性**由元测试守：`CrossLanguageLiteralParityTest`、`PercentEncodeSetParityTest`、`BridgeSignatureParityTest`。
 
 ## 8. 数据与隐私边界
@@ -163,9 +164,9 @@
 
 | 层 | 位置 | 规模 |
 |---|---|---|
-| 共享单测 | `app/src/test`（43 文件） | **287**（coreKotlin）/ **294**（coreRust） |
+| 共享单测 | `app/src/test`（45 文件） | **248**（coreKotlin）/ **255**（coreRust） |
 | flavor 专有单测 | `app/src/testCoreRust`（2 文件 / 7 例） | 只在 coreRust 编译单元里跑 |
-| Rust 单测 | `tangsnow-rs/tangsnow-core/tests`（15 个 `.rs` + 共享夹具目录） | **207** |
+| Rust 单测 | `tangsnow-rs/tangsnow-core/tests`（15 个 `.rs` + 10 份共享夹具） | **169** |
 | 门禁自检 | `verify_release.py --selftest` | 25 |
 | **仪器测试** | `app/src/androidTestCoreRust`（2 文件 / 12 例） | ⚠️ **只覆盖 coreRust flavor**（coreKotlin 无仪器测试） |
 

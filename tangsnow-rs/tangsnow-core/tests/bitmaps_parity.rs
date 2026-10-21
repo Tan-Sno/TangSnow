@@ -1,13 +1,18 @@
 //! `Bitmaps`（位图采样/裁剪数学）差分测试。
 //!
-//! ## 采样那一半的期望值来自**两侧共享的 JSON 夹具**（2026-10-20 审查报告 C-14）
+//! ## 两半的期望值都来自**两侧共享的 JSON 夹具**（2026-10-20 审查报告 C-14）
 //!
-//! 此前这里与 JVM 侧 `BitmapsSampleSizeTest.kt` **各写一份期望值** —— 那是**镜像**：
-//! 改实现 + 同步改本侧的镜像期望值 ⇒ 两侧照样全绿，而两边的采样口径已经漂了
-//! （采样不足 → 解码出上百 MB 位图直接崩；采样过头 → 背景图糊）。
-//! 现在两边读**同一份**夹具（`tests/fixtures/bitmaps_sample_size_cases.json`）。
+//! 此前这里与 JVM 侧 `BitmapsSampleSizeTest.kt` / `BitmapsCoverRectTest.kt` **各写一份期望值**
+//! —— 那是**镜像**：改实现 + 同步改本侧的镜像期望值 ⇒ 两侧照样全绿，而两边的口径已经漂了
+//! （采样不足 → 解码出上百 MB 位图直接崩；采样过头 → 背景图糊；
+//! 裁剪矩形偏几个像素 → 缩放后宽高比与目标不符，出现拉伸）。
+//! 现在两边读**同一份**夹具：
+//! - 采样：`tests/fixtures/bitmaps_sample_size_cases.json`
+//! - 裁剪：`tests/fixtures/bitmaps_cover_rect_cases.json`
 //!
-//! 居中裁剪（`center_crop_rect`）两侧函数名与语义各写各的，留在本文件里。
+//! ⚠️ 期望值**只写一份**：任何一侧想改口径都必须改夹具 —— 那一刻两侧一起变。
+//! 留在本文件里的只有**性质**断言（矩形落在源图内、宽高比与目标一致）：
+//! 它们与逐点的期望值是两类东西，混进夹具会让「这条期望值错」和「这个性质不成立」分不清。
 
 mod common;
 
@@ -15,8 +20,11 @@ use tangsnow_core::bitmaps::{center_crop_rect, required_sample_size};
 
 const FOUR_MP: i64 = 4_000_000;
 
-/// 共享夹具（编译期读入；路径相对本文件）。
+/// 采样那一半的共享夹具（编译期读入；路径相对本文件）。
 const CASES: &str = include_str!("fixtures/bitmaps_sample_size_cases.json");
+
+/// 居中裁剪那一半的共享夹具（编译期读入；路径相对本文件）。
+const COVER_CASES: &str = include_str!("fixtures/bitmaps_cover_rect_cases.json");
 
 // ------------------------------------------------------------- 采样
 
@@ -80,6 +88,104 @@ fn 上限极大时退化为纯按尺寸采样() {
 
 // ------------------------------------------------------------- 居中裁剪
 
+/// 夹具里的一条裁剪用例。
+struct CoverCase {
+    /// 与 Kotlin 侧共用的稳定 id（失败时指认是哪一条）
+    id: String,
+    /// `[srcW, srcH, targetW, targetH]`
+    dims: [i32; 4],
+    /// `[x, y, w, h]`
+    expected: [i32; 4],
+}
+
+/// 把共享夹具读成结构化用例。
+///
+/// 为什么不用 `common::pick`：那份读取器是给「单个字符串入参/出参」的用例设计的，
+/// 而裁剪矩形是四个整数入参、四个整数出参 ⇒ 形状不同，只能另写。
+/// 格式不对 ⇒ 直接 panic（绝不静默跳过，那会让门禁空转）。
+fn cover_cases() -> Vec<CoverCase> {
+    let v = common::load(COVER_CASES);
+    v["cases"]
+        .as_array()
+        .expect("cases 必须是数组")
+        .iter()
+        .map(|c| {
+            let id = c["id"].as_str().expect("id 必须是字符串").to_string();
+            let dims = ints(c, "args", &id);
+            let expected = ints(c, "expected", &id);
+            CoverCase {
+                id,
+                dims,
+                expected,
+            }
+        })
+        .collect()
+}
+
+/// 取一个「四个整数」的数组字段。
+fn ints(c: &serde_json::Value, key: &str, id: &str) -> [i32; 4] {
+    let a = c[key]
+        .as_array()
+        .unwrap_or_else(|| panic!("夹具用例「{id}」缺 {key} 数组"));
+    assert_eq!(a.len(), 4, "夹具用例「{id}」的 {key} 必须是四个整数");
+    let mut out = [0i32; 4];
+    for (i, v) in a.iter().enumerate() {
+        out[i] = v
+            .as_i64()
+            .unwrap_or_else(|| panic!("夹具用例「{id}」的 {key}[{i}] 必须是整数")) as i32;
+    }
+    out
+}
+
+#[test]
+fn 裁剪矩形与_kotlin_侧同口径() {
+    for c in cover_cases() {
+        let [sw, sh, tw, th] = c.dims;
+        let r = center_crop_rect(sw, sh, tw, th);
+        assert_eq!(
+            [r[0], r[1], r[2], r[3]],
+            c.expected,
+            "夹具用例「{}」",
+            c.id
+        );
+    }
+}
+
+#[test]
+fn 合法输入下矩形落在源图内且宽高比与目标一致() {
+    let mut checked = 0;
+    for c in cover_cases() {
+        let [sw, sh, tw, th] = c.dims;
+        // 退化输入走的是守卫分支（压根不裁），不满足「宽高比与目标一致」这个性质
+        if sw <= 0 || sh <= 0 || tw <= 0 || th <= 0 {
+            continue;
+        }
+        let r = center_crop_rect(sw, sh, tw, th);
+        assert_consistent(r, sw, sh, tw, th);
+        checked += 1;
+    }
+    assert!(checked > 0, "一条合法输入都没有 ⇒ 性质断言空转");
+}
+
+#[test]
+fn 退化输入返回可用的矩形() {
+    let mut checked = 0;
+    for c in cover_cases() {
+        let [sw, sh, tw, th] = c.dims;
+        if sw > 0 && sh > 0 && tw > 0 && th > 0 {
+            continue;
+        }
+        let r = center_crop_rect(sw, sh, tw, th);
+        assert!(
+            r[2] >= 1 && r[3] >= 1,
+            "夹具用例「{}」：退化输入也要给出可用的矩形",
+            c.id
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "一条退化输入都没有 ⇒ 守卫分支没人盯");
+}
+
 fn assert_consistent(r: [i32; 4], sw: i32, sh: i32, tw: i32, th: i32) {
     let [x, y, w, h] = r;
     assert!(x >= 0, "x 越界: {x}");
@@ -91,50 +197,9 @@ fn assert_consistent(r: [i32; 4], sw: i32, sh: i32, tw: i32, th: i32) {
         (w as i64 * th as i64 - h as i64 * tw as i64).abs() <= tw.max(th) as i64,
         "宽高比偏离目标 ({w}×{h} vs {tw}×{th})",
     );
-}
-
-#[test]
-fn 宽幅源图配竖向目标_裁掉左右不放大() {
-    let r = center_crop_rect(8000, 500, 1080, 2400);
-    assert_consistent(r, 8000, 500, 1080, 2400);
-    assert_eq!(r[2], 225);
-    assert_eq!(r[3], 500);
-    assert!(r[2] as i64 * r[3] as i64 <= 8000i64 * 500);
-}
-
-#[test]
-fn 竖幅源图配横向目标_裁掉上下() {
-    let r = center_crop_rect(500, 8000, 2400, 1080);
-    assert_consistent(r, 500, 8000, 2400, 1080);
-    assert_eq!(r[2], 500);
-    assert_eq!(r[3], 225);
-}
-
-#[test]
-fn 方形源配竖向目标_左右各裁一半() {
-    let r = center_crop_rect(1000, 1000, 1080, 2400);
-    assert_consistent(r, 1000, 1000, 1080, 2400);
-    assert_eq!(r[2], 450);
-    assert_eq!(r[3], 1000);
-    assert_eq!(r[0], 275, "居中");
-    assert_eq!(r[1], 0);
-}
-
-#[test]
-fn 宽高比恰好相等时原样返回整张() {
-    let r = center_crop_rect(1080, 2400, 1080, 2400);
-    assert_consistent(r, 1080, 2400, 1080, 2400);
-    assert_eq!([r[0], r[1], r[2], r[3]], [0, 0, 1080, 2400]);
-}
-
-#[test]
-fn 极端_1px_源图与长宽比不越界也不除零() {
-    let cases = [
-        center_crop_rect(1, 1, 1080, 2400),
-        center_crop_rect(1, 4000, 1080, 2400),
-        center_crop_rect(4000, 1, 1080, 2400),
-    ];
-    for r in cases {
-        assert!(r[2] > 0 && r[3] > 0);
-    }
+    // 中间图不得大于源图：先裁后缩的前提 —— 越界就意味着这一步偷偷放大了（会爆内存）
+    assert!(
+        w as i64 * h as i64 <= sw as i64 * sh as i64,
+        "中间图大于源图 ({w}×{h} vs {sw}×{sh})",
+    );
 }

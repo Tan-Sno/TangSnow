@@ -94,8 +94,10 @@ class CrossLanguageLiteralParityTest {
 
     @Test
     fun 历史跳过前缀两侧一致() {
-        // ⚠️ Rust 侧 `tests/history_parity.rs::前缀清单与_kotlin_侧一致` 是**镜像**：
-        // 它把自己那份清单硬编码在测试里，Kotlin 侧改了它照绿。真正的跨语言比对在这里。
+        // ⚠️ Rust 侧 `tests/history_parity.rs::前缀清单与共享夹具隐含的前缀集合一致` 只钉「Rust 侧清单
+        // 与共享夹具隐含的集合一致」，**不比两侧清单**。真正的跨语言比对在这里 ——
+        // 两份清单是各存一份的手抄事实（2026-10-20 审查报告 C-14 已把行为期望值改成共享夹具，
+        // 但清单本身仍是两份）。
         assertSameSet(
             "HistoryRepo 不写历史的前缀（内部页与脚本协议）",
             collection(historyRepo, "private val SKIP_PREFIXES = listOf", '(', "Kotlin HistoryRepo"),

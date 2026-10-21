@@ -3,6 +3,7 @@ package io.github.tan_sno.tangsnow.data
 import io.github.tan_sno.tangsnow.util.CodePoints
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -10,72 +11,112 @@ import org.junit.Test
 /**
  * [BookmarkHtml]：Netscape 书签 HTML 的解析与导入清洗。
  * 全部为纯字符串/数据逻辑，可在普通 JVM 单测中运行。
+ *
+ * ## 期望值来自**两侧共享的 JSON 夹具**（2026-10-20 审查报告 C-14）
+ *
+ * 解析/清洗/导出/ADD_DATE 的期望值此前与 Rust 侧 `tests/bookmark_html_parity.rs`
+ * **各写一份** —— 那是**镜像**：改实现 + 同步改本侧的镜像期望值 ⇒ 两侧照样全绿，
+ * 而两边的口径已经漂了（「标题截断按码点 vs 按 UTF-16」就是这么活下来的）。
+ * 现在两边读**同一份**夹具
+ * （`tangsnow-rs/tangsnow-core/tests/fixtures/bookmark_html_cases.json`）⇒ 改夹具必然两侧一起红。
+ *
+ * 留在本文件里的是**性质**（复杂度哨兵、体积/条数上限、按码点截断、导出→导入往返、
+ * 与改造前两段式实现的逐条差分），它们断言的是「性质」而非「某个具体值」，故不进夹具。
  */
 class BookmarkHtmlTest {
 
-    // ------------------------------------------------------------- parseImport
+    // ------------------------------------------------------------- 共享夹具
 
+    /**
+     * **夹具里的每条用例与 Rust 侧同口径**。
+     *
+     * kind ∈ parse / parseAddDate / sanitize / export / isHttpUrl；args 按 kind 顺序；
+     * expected 的形状随 kind 而定（详见夹具的 `_kind`）。
+     *
+     * 为什么这比「两侧各写一份期望值」更强：夹具里的期望值**独立于实现**，
+     * 故「实现错了 ⇒ 两侧一起红」；而镜像写法里改实现 + 同步改本侧期望值 ⇒ 两侧照样全绿。
+     */
     @Test
-    fun `解析标准 Netscape 导出格式`() {
-        val html = """
-            <!DOCTYPE NETSCAPE-Bookmark-file-1>
-            <DL><p>
-            <DT><A HREF="https://example.com/" ADD_DATE="1700000000">示例站点</A>
-            <DT><A HREF="https://x.cn/a" ADD_DATE="1700000001">另一个</A>
-            </DL><p>
-        """.trimIndent()
-        val entries = BookmarkHtml.parseImport(html)
-        assertEquals(2, entries.size)
-        assertEquals("https://example.com/", entries[0].url)
-        assertEquals("示例站点", entries[0].title)
-        assertEquals("https://x.cn/a", entries[1].url)
+    fun `夹具里的每条用例与Rust侧同口径`() {
+        val cases = SharedFixtures.cases(FIXTURE)
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val id = c.getString("id")
+            val kind = c.getString("kind")
+            val a = c.getJSONArray("args")
+            when (kind) {
+                // args=[html] → expected=[{url,title,createdAtMs}]（按导入顺序）
+                "parse" -> {
+                    val got = BookmarkHtml.parseImport(a.getString(0))
+                    val want = c.getJSONArray("expected")
+                    assertEquals("夹具用例「$id」条目数", want.length(), got.size)
+                    for (j in 0 until want.length()) {
+                        val w = want.getJSONObject(j)
+                        assertEquals("夹具用例「$id」第 $j 条 url", w.getString("url"), got[j].url)
+                        assertEquals("夹具用例「$id」第 $j 条 title", w.getString("title"), got[j].title)
+                        assertTrue("夹具用例「$id」第 $j 条缺 createdAtMs", w.has("createdAtMs"))
+                        val wantMs = if (w.isNull("createdAtMs")) null else w.getLong("createdAtMs")
+                        // 分开判 null：交给 assertEquals 会被解析成 (long, long) 重载 ⇒ null 时抛 NPE
+                        if (wantMs == null) {
+                            assertNull("夹具用例「$id」第 $j 条 createdAtMs", got[j].createdAtMs)
+                        } else {
+                            assertEquals("夹具用例「$id」第 $j 条 createdAtMs", wantMs, got[j].createdAtMs!!)
+                        }
+                    }
+                }
+                // args=[raw, now] → expected=int|null
+                "parseAddDate" -> {
+                    // now 是**夹具给的数据** ⇒ 与真实墙钟无关，两侧同值
+                    assertTrue("夹具用例「$id」缺 expected", c.has("expected"))
+                    val want = if (c.isNull("expected")) null else c.getLong("expected")
+                    val got = BookmarkHtml.parseAddDate(a.getString(0), a.getLong(1))
+                    if (want == null) {
+                        assertNull("夹具用例「$id」", got)
+                    } else {
+                        assertEquals("夹具用例「$id」", want, got!!)
+                    }
+                }
+                // args=[html, existingUrls[]] → expected={kept:[{url,title}], skipped:int}
+                "sanitize" -> {
+                    val existing = a.getJSONArray(1).let { arr ->
+                        (0 until arr.length()).map { arr.getString(it) }.toSet()
+                    }
+                    val (kept, skipped) = BookmarkHtml.sanitize(
+                        BookmarkHtml.parseImport(a.getString(0)), existing
+                    )
+                    val want = c.getJSONObject("expected")
+                    val wantKept = want.getJSONArray("kept")
+                    assertEquals("夹具用例「$id」kept 条数", wantKept.length(), kept.size)
+                    for (j in 0 until wantKept.length()) {
+                        val w = wantKept.getJSONObject(j)
+                        assertEquals("夹具用例「$id」第 $j 条 url", w.getString("url"), kept[j].url)
+                        assertEquals("夹具用例「$id」第 $j 条 title", w.getString("title"), kept[j].title)
+                    }
+                    assertEquals("夹具用例「$id」skipped", want.getInt("skipped"), skipped)
+                }
+                // args=[{url,title,createdAt}] → expected=str（完整导出文本）
+                "export" -> {
+                    val items = a.getJSONArray(0)
+                    val list = (0 until items.length()).map { j ->
+                        val o = items.getJSONObject(j)
+                        Bookmark(0L, o.getString("url"), o.getString("title"), o.getLong("createdAt"))
+                    }
+                    assertEquals("夹具用例「$id」", c.getString("expected"), BookmarkHtml.export(list))
+                }
+                // args=[url] → expected=bool
+                "isHttpUrl" -> {
+                    assertEquals(
+                        "夹具用例「$id」",
+                        c.getBoolean("expected"),
+                        BookmarkHtml.isHttpUrl(a.getString(0)),
+                    )
+                }
+                else -> throw AssertionError("夹具里的 kind「$kind」本文件不认（改夹具要同步两侧的派发）")
+            }
+        }
     }
 
-    @Test
-    fun `属性顺序与引号风格不影响解析`() {
-        val html = """<a add_date="1" target="_blank" href='https://single.cn/x'>单引号</a>""" +
-            "<a TITLE=\"标题在前\" HREF=https://bare.cn/y>裸引号</a>"
-        val entries = BookmarkHtml.parseImport(html)
-        assertEquals(2, entries.size)
-        assertEquals("https://single.cn/x", entries[0].url)
-        assertEquals("https://bare.cn/y", entries[1].url)
-        // 书签标题 = 标签内的可见文本（TITLE 等属性不是标题）
-        assertEquals("裸引号", entries[1].title)
-    }
-
-    @Test
-    fun `标题中的基本实体被解码`() {
-        val html = """<DT><A HREF="https://e.cn/">A&amp;B&lt;C&gt;"q"&#39;s&#39;</A>"""
-        val entries = BookmarkHtml.parseImport(html)
-        assertEquals("""A&B<C>"q"'s'""", entries[0].title)
-    }
-
-    @Test
-    fun `实体只解一趟——已转义的实体样文本往返不被二次解码`() {
-        // 为什么必须有这条独立断言：差分基准（parseBeforeLinearization）调的是**当前**的
-        // decodeEntities，链式实现与单趟实现的差异会被同一个函数自我抵消 —— 全仓的差分用例
-        // 在旧的链式实现下同样全绿。只有直接对语义下断言才钉得住：`&amp;lt;` 只能解成字面量
-        // `&lt;`；若按链式先解 `&amp;` 再解 `&lt;`，它会一路变成 `<`，于是「Use &lt;div&gt;」
-        // 这类**标题里本就写着实体样文字**的站点，导出→导入一次就被永久改写。
-        assertEquals("&lt;div&gt;", BookmarkHtml.decodeEntities("&amp;lt;div&amp;gt;"))
-
-        // 与 export 的转义（先 & 再 < > "）互为逆运算：往返之后标题逐字不变
-        val original = "Use &lt;div&gt; & \"q\""
-        val html = BookmarkHtml.export(
-            listOf(Bookmark(1, "https://e.cn/", original, 0L))
-        )
-        val parsed = BookmarkHtml.parseImport(html)
-        assertEquals(1, parsed.size)
-        assertEquals(original, parsed[0].title)
-    }
-
-    @Test
-    fun `无 href 的行被跳过`() {
-        val html = "<DT><A>没有链接</A>\n<DT><A HREF=\"https://ok.cn/\">好的</A>"
-        val entries = BookmarkHtml.parseImport(html)
-        assertEquals(1, entries.size)
-        assertEquals("https://ok.cn/", entries[0].url)
-    }
+    // ------------------------------------------------------------- 上限与体积（性质）
 
     @Test
     fun `空输入与超限输入返回空`() {
@@ -106,6 +147,18 @@ class BookmarkHtmlTest {
         // 解析入口（不计数的那个）行为不变：仍然只收前 RAW_PARSE_ENTRY_CAP 条
         assertEquals(BookmarkHtml.RAW_PARSE_ENTRY_CAP, BookmarkHtml.parseImport(html).size)
     }
+
+    @Test
+    fun `导入数量受上限约束`() {
+        val raw = (0 until BookmarkHtml.MAX_IMPORT_COUNT + 50).map {
+            BookmarkHtml.Entry("https://p$it.cn/", "t$it")
+        }
+        val (entries, skipped) = BookmarkHtml.sanitize(raw, emptySet())
+        assertEquals(BookmarkHtml.MAX_IMPORT_COUNT, entries.size)
+        assertEquals(50, skipped)
+    }
+
+    // ------------------------------------------------------------- 复杂度哨兵（性质）
 
     @Test(timeout = 15_000)
     fun `有效锚极多时仍在时限内完成——计数版本不得拖慢解析`() {
@@ -144,15 +197,6 @@ class BookmarkHtmlTest {
         for (t in cases) {
             assertEquals("形态长度 ${t.length}", 0, BookmarkHtml.parseImport(t).size)
         }
-    }
-
-    @Test
-    fun `收尾标签前缀相似但不成立的输入按原语义处理`() {
-        // `</abbr>` 里有 `</a` 前缀但不是收尾标签：标题应继续延伸到真正的 `</a>`
-        val e = BookmarkHtml.parseImport("<a href=\"https://a.cn/\">标题</abbr>继续</a>")
-        assertEquals(1, e.size)
-        assertEquals("https://a.cn/", e[0].url)
-        assertEquals("标题</abbr>继续", e[0].title)
     }
 
     // ------------------------------------------------- 与改造前的差分（行为等价性）
@@ -223,44 +267,7 @@ class BookmarkHtmlTest {
         }
     }
 
-    // ------------------------------------------------------------- sanitize
-
-    @Test
-    fun `非 http_s scheme 一律拒收`() {
-        val raw = listOf(
-            BookmarkHtml.Entry("javascript:alert(1)", "脚本"),
-            BookmarkHtml.Entry("file:///sdcard/x", "本地文件"),
-            BookmarkHtml.Entry("about:blank", "内部页"),
-            BookmarkHtml.Entry("https://ok.cn/", "好的"),
-        )
-        val (entries, skipped) = BookmarkHtml.sanitize(raw, emptySet())
-        assertEquals(1, entries.size)
-        assertEquals(3, skipped)
-        assertEquals("https://ok.cn/", entries[0].url)
-    }
-
-    @Test
-    fun `与已有书签及批内自身去重`() {
-        val raw = listOf(
-            BookmarkHtml.Entry("https://a.cn/", "已有"),
-            BookmarkHtml.Entry("https://a.cn/", "批内重复"),
-            BookmarkHtml.Entry("https://b.cn/", "新的"),
-        )
-        val (entries, skipped) = BookmarkHtml.sanitize(raw, setOf("https://a.cn/"))
-        assertEquals(1, entries.size)
-        assertEquals(2, skipped)
-        assertEquals("https://b.cn/", entries[0].url)
-    }
-
-    @Test
-    fun `导入数量受上限约束`() {
-        val raw = (0 until BookmarkHtml.MAX_IMPORT_COUNT + 50).map {
-            BookmarkHtml.Entry("https://p$it.cn/", "t$it")
-        }
-        val (entries, skipped) = BookmarkHtml.sanitize(raw, emptySet())
-        assertEquals(BookmarkHtml.MAX_IMPORT_COUNT, entries.size)
-        assertEquals(50, skipped)
-    }
+    // ------------------------------------------------------------- 标题截断（性质）
 
     @Test
     fun `超长标题截断而非拒收`() {
@@ -278,7 +285,7 @@ class BookmarkHtmlTest {
      *
      * 回归的是什么：`String.take(n)` 取的是前 n 个 **UTF-16 码元**，n 落在代理对中间时
      * 会把一个 emoji 劈成两半 ⇒ 落库一个**孤立代理**（渲染成 `�`）。而 Rust 侧
-     * `chars().take(n)` 按码点 ⇒ 两侧原本对同一条含 emoji 的标题给出不同结果。
+     * `chars().take(n)` 按码点 ⇒ 两侧原本对同一条含 emoji 的标题会给出不同结果。
      * 现两侧统一按码点（Kotlin 见 `util/CodePoints.takeCodePoints`）。
      */
     @Test
@@ -309,83 +316,28 @@ class BookmarkHtmlTest {
         assertTrue(title.endsWith(emoji))
     }
 
-    // ------------------------------------------------------------- export
+    // ------------------------------------------------------------- 导出→导入往返（性质）
 
+    /**
+     * 导出→导入必须**无损**（性质，不是某个具体期望值）。
+     *
+     * 前提：标题**两端无空白** —— 导入侧会裁掉两端空白（`trim`），导出侧不裁，
+     * 故带空白标题的往返不是无损的（那是既有口径，不在本性质的范围内）。
+     */
     @Test
-    fun `导出可被自身解析往返且转义正确`() {
-        val list = listOf(
-            Bookmark(1, "https://e.cn/a&b", "标题<一>", 1700000000000L),
-            Bookmark(2, "https://e.cn/\"q\"", "", 1700000001000L),
-        )
-        val html = BookmarkHtml.export(list)
-        // 空标题回退为 URL（与解析端 ifBlank 口径一致）
-        assertTrue(html.contains("""<A HREF="https://e.cn/a&amp;b" ADD_DATE="1700000000">标题&lt;一&gt;</A>"""))
-        val parsed = BookmarkHtml.parseImport(html)
-        assertEquals(2, parsed.size)
-        assertEquals("https://e.cn/a&b", parsed[0].url)
-        assertEquals("标题<一>", parsed[0].title)
-        assertEquals("https://e.cn/\"q\"", parsed[1].url)
-        assertEquals("https://e.cn/\"q\"", parsed[1].title)
-    }
-
-    // ------------------------------------------------------------- isHttpUrl
-
-    @Test
-    fun `scheme 判定大小写不敏感且拒绝无 scheme`() {
-        assertTrue(BookmarkHtml.isHttpUrl("HTTPS://A.cn/"))
-        assertTrue(BookmarkHtml.isHttpUrl("http://a.cn/"))
-        assertFalse(BookmarkHtml.isHttpUrl("a.cn/"))
-        assertFalse(BookmarkHtml.isHttpUrl("moz-extension://abc/x"))
-    }
-
-    // ------------------------------------------------------------- ADD_DATE
-
-    @Test
-    fun `ADD_DATE 秒与毫秒都解析为毫秒`() {
-        // Netscape 约定秒；个别工具导毫秒。1e11 为界：两侧真实时间各归其位（见 parseAddDate）
-        val html = """<DT><A HREF="https://a.cn/" ADD_DATE="1700000000">秒</A>""" +
-            """<DT><A HREF="https://b.cn/" ADD_DATE="1700000000000">毫秒</A>"""
-        val entries = BookmarkHtml.parseImport(html)
-        assertEquals(1_700_000_000_000L, entries[0].createdAtMs)
-        assertEquals(1_700_000_000_000L, entries[1].createdAtMs)
-    }
-
-    @Test
-    fun `ADD_DATE 非法或超前一律回落 null`() {
-        val now = 1_790_000_000_000L
-        // 非数字 / 负值 / 空 / 未来超过一天（秒、毫秒两种写法各验一例）
-        assertNull(BookmarkHtml.parseAddDate("abc", now))
-        assertNull(BookmarkHtml.parseAddDate("-5", now))
-        assertNull(BookmarkHtml.parseAddDate("", now))
-        assertNull(BookmarkHtml.parseAddDate("4000000000", now))      // 秒：公元 2096
-        assertNull(BookmarkHtml.parseAddDate("9999999999999", now))   // 毫秒：公元 2286
-        // 现在前后一秒内仍有效（钟表微小偏差不丢时间）
-        assertEquals(now, BookmarkHtml.parseAddDate("1790000000", now))
-    }
-
-    @Test
-    fun `sanitize 保留原始收藏时间且属性名大小写无关`() {
-        val html = """<dt><a add_date="1700000000" href="https://a.cn/">A</a></dt>"""
-        val raw = BookmarkHtml.parseImport(html)
-        assertEquals(1_700_000_000_000L, raw[0].createdAtMs)
-        val (entries, skipped) = BookmarkHtml.sanitize(raw, emptySet())
-        assertEquals(0, skipped)
-        assertEquals(1_700_000_000_000L, entries[0].createdAtMs)
-    }
-
-    @Test
-    fun `无 ADD_DATE 时 createdAtMs 为 null`() {
-        val entries = BookmarkHtml.parseImport("""<DT><A HREF="https://a.cn/">无时间</A>""")
-        assertNull(entries[0].createdAtMs)
-    }
-
-    @Test
-    fun `导出导入往返保留收藏时间`() {
-        val html = BookmarkHtml.export(listOf(Bookmark(1, "https://e.cn/t", "标题", 1_700_000_000_123L)))
-        val parsed = BookmarkHtml.parseImport(html)
-        assertEquals(1, parsed.size)
-        // 秒级精度：往返损失亚秒（与导出格式 ADD_DATE=秒 一致）
-        assertEquals(1_700_000_000_000L, parsed[0].createdAtMs)
+    fun `导出导入往返_标题与收藏时间逐字不变`() {
+        for (title in listOf("Use &lt;div&gt;", "示例 & <站点>", "say \"hi\"", "普通标题")) {
+            val html = BookmarkHtml.export(
+                listOf(Bookmark(0L, "https://r.cn/", title, 1_700_000_000_000L))
+            )
+            val parsed = BookmarkHtml.parseImport(html)
+            assertEquals("标题 $title 往返后条目数不对", 1, parsed.size)
+            assertEquals("标题 $title 往返后 URL 变了", "https://r.cn/", parsed[0].url)
+            assertEquals("标题 $title 往返后被改写", title, parsed[0].title)
+            // 往返损失亚秒（导出格式的 ADD_DATE 是秒级）
+            assertNotNull("标题 $title 往返后收藏时间丢了", parsed[0].createdAtMs)
+            assertEquals("标题 $title 往返后收藏时间变了", 1_700_000_000_000L, parsed[0].createdAtMs!!)
+        }
     }
 
     // ------------------------------------------- 差分基准（仅测试用，非生产代码）
@@ -420,6 +372,9 @@ class BookmarkHtmlTest {
     }
 
     private companion object {
+        /** 两侧共享的夹具（Rust 侧读同一个文件） */
+        const val FIXTURE = "bookmark_html_cases.json"
+
         val REF_ANCHOR_TAG = Regex("""<a\s[^>]*>""", RegexOption.IGNORE_CASE)
         val REF_CLOSE_TAG = Regex("""</a\s*>""", RegexOption.IGNORE_CASE)
         val REF_HREF_ATTR =

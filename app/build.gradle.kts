@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **287**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **248**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -431,6 +431,13 @@ android {
         //   `BitmapsSampleSizeTest`（7→2）、`SearchEnginesTest`（10→2）、
         //   `DownloadFileNameTest`（26→17）⇒ 合计 −31，
         //   合计 **287**。
+        //   2026-10-22 收口（C-14 剩余 5 对 + 最后 1 处镜像）：`url_utils` / `bookmark_html` /
+        //   `bitmaps` 裁剪 / `history` / `url_idna` 五对也改用共享夹具（新增
+        //   `HistoryRepoSkipUrlTest`(新类,1 例) 与 `UrlIdnaParityTest`(新类,15 例)），
+        //   `UrlUtilsTest`（30→3）、`SchemeGateTest`（6→2）、`PercentEncodeTest`（10→2，
+        //   搜索模板那 5 条镜像并入 `search_engines` 夹具）、`BookmarkHtmlTest`（24→11）、
+        //   `BitmapsCoverRectTest`（6→3）⇒ 合计 −39，
+        //   合计 **248**。
         //   （上一版这里被我写成 274 —— `TestCountCommentTest` 当场把这句注释本身钉红了，钉子有效。）
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则两个 flavor 的单测任务
         //   （`:app:testCoreKotlinDebugUnitTest` / `:app:testCoreRustDebugUnitTest`）都直接红。
@@ -603,6 +610,18 @@ androidComponents {
             output.versionCode.set(output.versionCode.get() * 10 + offset)
         }
     }
+}
+
+// 跨语言**共享夹具**（`tangsnow-rs/tangsnow-core/tests/fixtures/*.json`）是 JVM 单测的**运行时输入**：
+// Kotlin 侧由 `SharedFixtures` 在用例执行时读文件，Gradle **看不见**这条依赖 ⇒ 只改夹具时
+// `:app:testCoreKotlinDebugUnitTest` 判为 UP-TO-DATE、**根本不重跑**，于是「改了夹具却没跑测试」
+// 看起来一切正常（2026-10-22 实测撞到过：夹具被改成另一个值，Gradle 直接跳过，绿得毫无意义）。
+// 声明成 test input 之后，改夹具必然重跑。
+// Rust 侧不受这条影响：`include_str!` 已登记依赖，cargo 按 mtime 判新鲜度。
+tasks.withType<Test>().configureEach {
+    inputs.dir(file("../tangsnow-rs/tangsnow-core/tests/fixtures"))
+        .withPropertyName("tangsnowSharedFixtures")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // 第三道签名闸门：keystore.properties **整个缺失**时 release 静默回退 debug 证书

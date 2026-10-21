@@ -23,28 +23,34 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
 
 ## 移植范围（已完成，测试全绿）
 
-| Rust 模块 | Kotlin 源 | 行数 | 对应 JVM 测试 |
+| Rust 模块 | Kotlin 源 | 行数 | 对应 JVM 测试（括号内为**当前**用例数） |
 |---|---|---|---|
-| `percent_encode` | `util/UrlUtils.kt` 顶层 | 30 | `PercentEncodeTest` |
-| `url_utils` | `util/UrlUtils.kt` | 399 | `UrlUtilsTest`(27)+`SchemeGateTest`(6) |
-| `search_engines` | `data/SearchEngines.kt` | 217 | `SearchEnginesTest`(9) |
-| `bookmark_html` | `data/BookmarkHtml.kt` | 295 | `BookmarkHtmlTest`(23) |
-| `history` | `data/repo/HistoryRepo.kt` 纯函数 | 96 | — |
+| `percent_encode` | `util/UrlUtils.kt` 顶层 | 30 | `PercentEncodeTest`(2) |
+| `url_utils` | `util/UrlUtils.kt` | 399 | `UrlUtilsTest`(3)+`SchemeGateTest`(2)+`PercentEncodeTest`(2) |
+| `search_engines` | `data/SearchEngines.kt` | 217 | `SearchEnginesTest`(2) |
+| `bookmark_html` | `data/BookmarkHtml.kt` | 295 | `BookmarkHtmlTest`(11) |
+| `history` | `data/repo/HistoryRepo.kt` 纯函数 | 96 | `HistoryRepoSkipUrlTest`(1) |
 
-**验证结果**：`cargo test` **207/207 通过**（2026-10-21 实测，15 个测试二进制合计；旧口径写的 70/70、210/210、213/213、223/223、224/224、231/231、233/233、235/235、236/236 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
-- 30 个库内单测 + 15 个测试二进制里的 177 例与 JVM 单测**同源**（同输入 ⇒ 同输出，含防钓鱼
-  `@` 检查、IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对）；
-- ⚠️ **「同源」有两种形态，别混为一谈**（2026-10-20 审查报告 C-14）：
-  - **共享夹具**（`tests/fixtures/*.json`，两侧读**同一个文件** ⇒ 改夹具必然两侧一起红）：
-    `legal_text` / `crash_logger` / `bitmaps` 采样 / `search_engines` / `download_filename` 五对；
-  - **仍是镜像**（期望值各写一份 ⇒ 改实现 + 同步改镜像期望值，两侧会一起绿而行为已漂）：
-    `url_utils` / `bookmark_html` / `bitmaps` 裁剪 / `history` / `url_idna` / `jni_boundary`。
-    这几对的函数**两侧签名本就不同**（如 `parse_import` 的 Rust 收 `now`、Kotlin 不收），
-    转共享夹具需逐侧派发，单独排期。
-- **IDNA 差分 3 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
-  `IDN.toASCII` 的**实测行为**上，含本仓唯一一处**有意分歧**（退化输入 `.`）与 8 条已记录的口径差异，
+**验证结果**：`cargo test` **169/169 通过**（2026-10-22 实测，**14 个测试二进制**合计 —— `tests/` 下另有共享读取器
+`tests/common/mod.rs`，它不是一个二进制；旧口径写的 70/70、207/207、210/210、213/213、223/223、224/224、231/231、233/233、235/235、236/236 均已过期。**这个数在本工作区只在这一处维护** —— 结构图与 `自建验证指南.md` 都只指回这里，不再各抄一份：Rust 侧计数**没有**像 Kotlin 那样被 `TestCountCommentTest` 钉住，多写一处就多一处会过期），其中
+- 78 个库内单测（`src/` 内）+ 91 例分布在 14 个测试二进制里；
+- 与 JVM 单测**同源**的有 10 对（下面「共享夹具」那组），含防钓鱼
+  `@` 检查、IPv4-mapped IPv6 三种写法、scheme 三分法、引擎表逐条核对；
+- ⚠️ **「同源」有两种形态，别混为一谈**（2026-10-20 审查报告 C-14，2026-10-22 收口）：
+  - **共享夹具**（`tests/fixtures/*.json`，两侧读**同一个文件** ⇒ 改夹具必然两侧一起红）——
+    **10 对 / 10 份夹具**：`legal_text` / `crash_logger` / `bitmaps` 采样 / `bitmaps` 裁剪 /
+    `search_engines` / `download_filename` / `url_utils` / `bookmark_html` / `history` / `url_idna`。
+    两侧**逐点期望值**已全部并入夹具；两侧**签名本就不同**的地方（Kotlin `parseImport` 不收 `now`、
+    Kotlin `toAsciiUrl` 原为 private）用「夹具给数据 + 各自派发」解决，不需要改生产语义。
+  - **仍是镜像 / 不是行为对**：`jni_boundary`（3 例**源码级哨兵**，不是行为对）、
+    `regression_2026_10_17`（7 例单侧回归批）、`properties_fuzz` / `modified_utf8`（单侧性质）。
+    这几类**刻意只有一侧**：它们钉的是「源码必须长什么样」或「某条性质」，不是「同一输入两侧同输出」。
+- **IDNA 差分 15 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
+  `IDN.toASCII` 的**实测行为**上（57 条同口径语料在共享夹具里），并把 **11 类实测分歧**逐条单列冻结
+  （含 2026-10-22 新量出的 3 类：ASCII 大小写折叠、全角/半角句点造成的空标签、标签超长），
   详见本文件「已知口径差异」表；
-- 22 个书签用例含 **500 例固定种子随机语料差分**（线性实现 vs 参考正则实现）；
+- 书签那一对：54 条逐点期望值在共享夹具里，另有 9 例**性质**用例（复杂度哨兵 ×2、上限 ×2、码点截断、
+  emoji 不劈代理、导出→导入往返、**500 例固定种子随机语料差分**）；
 - **复杂度哨兵**：2MB 对抗输入（`<a >` 重复 / 无 `>` 收尾）毫秒级完成，
   钉住 Kotlin 侧「单趟线性扫描防 O(n²)」的设计不变量；
 - **JNI 边界 8 例**（2026-10-15 加，外部审查 H3/M5/L8 的落点）：
@@ -152,12 +158,12 @@ bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core
 
 | 点 | Kotlin | Rust | 影响 |
 |---|---|---|---|
-| IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | **8 类实测分歧 + 1 类已修**，逐条见下表 |
-| 字母判定 | `isLetterOrDigit`（L*+Nl+Nd） | `is_alphabetic/is_numeric`（含 No） | 仅影响 scheme 合法性判定中的罕见 Unicode 数字 |
+| IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | **11 类实测分歧 + 1 类已修**，逐条见下表 |
+| 字母判定 | `isLetterOrDigit`（L*+Nl+Nd） | `is_alphabetic/is_numeric`（含 No） | 仅影响 scheme 合法性判定中的罕见 Unicode 数字；实测例：`a²://x` ⇒ Kotlin 判「无 scheme」（当搜索词），Rust 判「`a²` 是合法 scheme」 |
 | 标题截断 | `take(200)` 按**码点**（2026-10-20 修正，原按 UTF-16 单元） | 按 char（码点） | **已抹平**：两侧同为 200 个码点；原先「Kotlin 侧切断代理对留下孤立代理、且两侧最多差一倍」的差异随修正消失 |
 | nbsp 处理 | `Character.isWhitespace(nbsp)=false` | 已用 `java_is_whitespace` 对齐 | 已抹平；正则 `\S` 类已按 Java ASCII 口径改写 |
 
-### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」）
+### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」。2026-10-22 把两侧放进**共享夹具**（`tests/fixtures/url_idna_cases.json`，57 条同口径语料）时又量出 3 条新分歧，追加为 ⑨⑩⑪）
 
 | # | 输入 | 主线 (Java) | Rust | 性质 |
 |---|---|---|---|---|
@@ -169,6 +175,9 @@ bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core
 | 6 | `xn--.com`、`xn--xn--a.com` | 原样放行 | `<None>` | Rust 做 punycode 回环校验，Java 完全不验 |
 | 7 | `.`（单点） | `.` | `<None>` | 退化输入，Rust 拒 |
 | 8 | `\u{0378}.com`（未分配码位） | `xn--zva.com`（`ALLOW_UNASSIGNED` 放行） | `<None>` | 原表那句"未分配码位判定不同"指的就是这类，罕见但确实不同 |
+| 9 | `EXAMPLE.COM` | `EXAMPLE.COM` | `example.com` | Java 的 `IDN.toASCII` 对**纯 ASCII 标签**走快路径、**不做大小写折叠**（`examPLe.com` 同样原样保留）；UTS46 折叠 ⇒ 两侧转出的主机大小写不同（键相等性受影响） |
+| 10 | `．.com`（U+FF0E 全角句点）、`｡.com`（U+FF61 半角句点） | `<None>` | `..com` | UTS46 把全角/半角句点当**标签分隔符**，映射后才出现的空标签**漏检** ⇒ Rust 转出了首标签为空的**非法主机**；Java 侧映射后判空标签 → 拒。⚠️ 这是 Rust 侧更宽松的一处，建议单独排期修 |
+| 11 | 标签 64 / 128 字符 | `<None>`（超 63 字符抛异常） | 原样放行 | Java 强制标签 ≤ 63 字符；Rust 的 idna 默认 `verify_dns_length=false` ⇒ Rust 放行 **DNS 非法**标签。⚠️ 同上，Rust 侧更宽松 |
 
 **已修**：空标签（`a..b.com`、`.example.com`、`a...b`、`..`）此前 Rust **放过**，比浏览器和主线都宽松 —— 结果是同一条输入主线当搜索词、Rust flavor 当网址导航。现两侧一致拒，而**尾点**（`example.com.`）两边都保留。
 

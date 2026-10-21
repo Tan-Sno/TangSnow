@@ -1,8 +1,9 @@
 package io.github.tan_sno.tangsnow.util
 
 import io.github.tan_sno.tangsnow.data.SearchEngine
+import io.github.tan_sno.tangsnow.data.SharedFixtures
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,6 +14,21 @@ import org.junit.Test
  * 这些用例锁住的是「用户敲了什么 → 打开什么」这条最基础的行为：
  * 该当网址的不能丢给搜索引擎，该当搜索词的不能被误当域名。
  * 全部为纯逻辑（不依赖 android.net.Uri），可在普通 JVM 单测中运行。
+ *
+ * ## 期望值来自**两侧共享的 JSON 夹具**（2026-10-20 审查报告 C-14）
+ *
+ * 此前这里与 Rust 侧 `tests/url_utils_parity.rs` **各写一份期望值** —— 那是**镜像**：
+ * 改实现 + 同步改本侧的镜像期望值 ⇒ 两侧照样全绿，而两边的口径已经漂了
+ * （B-1 那次「Rust 按码点、Kotlin 按 UTF-16」就是这么活下来的）。
+ * 现在两边读**同一份**夹具（`tangsnow-rs/tangsnow-core/tests/fixtures/url_utils_cases.json`）
+ * ⇒ 改夹具必然两侧一起红；只想改一侧的期望值，必须显式改夹具 —— 那一刻两侧就一起变了。
+ *
+ * ## 本文件负责哪几个 kind
+ * `looksLikeUri` / `resolveInfo` / `isLocalNetworkAddress` / `extractUrlFromText`；
+ * 另两个 kind 归 [SchemeGateTest] 与 [PercentEncodeTest]。
+ * **三个文件负责的 kind 并集必须与夹具里的 kind 集合相等**（下面那条用例在钉这件事）：
+ * 否则夹具里会出现「有条用例、却没有任何一个 Kotlin 文件认领」的空转 ——
+ * Rust 侧会红（它的派发不认这个 kind），Kotlin 侧也必须红。
  */
 class UrlUtilsTest {
 
@@ -22,324 +38,100 @@ class UrlUtilsTest {
         queryParam = "q",
     )
 
-    // ------------------------------------------------------------- looksLikeUri
-
     @Test
-    fun `带协议与路径的完整地址识别为网址`() {
-        assertTrue(UrlUtils.looksLikeUri("https://example.com/a/b?c=d"))
-        assertTrue(UrlUtils.looksLikeUri("http://example.com"))
-    }
-
-    @Test
-    fun `裸域名识别为网址`() {
-        assertTrue(UrlUtils.looksLikeUri("example.com"))
-        assertTrue(UrlUtils.looksLikeUri("sub.example.com/path"))
-        assertTrue(UrlUtils.looksLikeUri("example.com:8080"))
-    }
-
-    @Test
-    fun `localhost 与内网设备名识别为网址而非搜索词`() {
-        // 开发/内网日常入口：丢给搜索引擎等于功能缺失
-        assertTrue(UrlUtils.looksLikeUri("localhost"))
-        assertTrue(UrlUtils.looksLikeUri("localhost:8080"))
-        assertTrue(UrlUtils.looksLikeUri("nas:5000"))
-    }
-
-    @Test
-    fun `中文域名识别为网址`() {
-        assertTrue(UrlUtils.looksLikeUri("例子.测试"))
-    }
-
-    @Test
-    fun `普通词句不是网址`() {
-        assertFalse(UrlUtils.looksLikeUri("hello"))
-        assertFalse(UrlUtils.looksLikeUri("今天天气怎么样"))
-        assertFalse(UrlUtils.looksLikeUri(""))
-        assertFalse(UrlUtils.looksLikeUri("   "))
-    }
-
-    @Test
-    fun `authority 段含 @ 的裸输入按搜索处理——防 userinfo 钓鱼`() {
-        // trusted.com@evil.com 会导航到 evil.com，而用户视线里的前缀是 trusted.com ——
-        // 主流浏览器对 authority 含 @ 的裸输入按搜索处理，这里钉住同款行为（2026-10-01）。
-        assertFalse(UrlUtils.looksLikeUri("trusted.com@evil.com"))
-        assertFalse(UrlUtils.looksLikeUri("trusted.com@evil.com/x"))
-        // 路径里的 @ 是合法用法（社交 handle），不能误伤
-        assertTrue(UrlUtils.looksLikeUri("twitter.com/@jack"))
-    }
-
-    @Test
-    fun `含空白的输入一律不是网址`() {
-        assertFalse(UrlUtils.looksLikeUri("example.com 空格"))
-        assertFalse(UrlUtils.looksLikeUri("aa bb.com"))
-    }
-
-    // ------------------------------------------------------------- resolveInfo
-
-    @Test
-    fun `http 与 https 直接透传且不标记为搜索`() {
-        val r = UrlUtils.resolveInfo("https://example.com/x", engine)
-        assertEquals("https://example.com/x", r?.url)
-        assertEquals(false, r?.isSearch)
-    }
-
-    @Test
-    fun `裸域名补 https`() {
-        val r = UrlUtils.resolveInfo("example.com", engine)
-        assertEquals("https://example.com", r?.url)
-        assertEquals(false, r?.isSearch)
-    }
-
-    @Test
-    fun `localhost 与内网主机补 http`() {
-        assertEquals("http://localhost:8080", UrlUtils.resolveInfo("localhost:8080", engine)?.url)
-        assertEquals("http://nas:5000", UrlUtils.resolveInfo("nas:5000", engine)?.url)
-    }
-
-    @Test
-    fun `中文域名转 punycode 后按网址导航`() {
-        val r = UrlUtils.resolveInfo("例子.测试", engine)
-        assertTrue(r?.url?.startsWith("https://xn--") == true)
-        assertEquals(false, r?.isSearch)
-    }
-
-    @Test
-    fun `普通词句走搜索引擎且标记为搜索`() {
-        val r = UrlUtils.resolveInfo("棠雪 浏览器", engine)
-        assertEquals(true, r?.isSearch)
-        // 关键词必须被百分号编码后放进模板
-        assertEquals("https://search.test/?q=%E6%A3%A0%E9%9B%AA%20%E6%B5%8F%E8%A7%88%E5%99%A8", r?.url)
-    }
-
-    @Test
-    fun `about 自省页地址栏直达而非搜索`() {
-        // Firefox 系自省页族从地址栏直达（about:license / about:buildinfo / about:blank）。
-        // data:/blob: 刻意维持进搜索：data: 顶层数据: 导航 Firefox 59 起已封禁（反钓鱼，
-        // 与 externalUrl 同向）；blob: 从地址栏新输入时会话里没有注册对象、打开必为空。
-        val r = UrlUtils.resolveInfo("about:license", engine)
-        assertEquals("about:license", r?.url)
-        assertEquals(false, r?.isSearch)
-        // scheme 大小写不敏感
-        val upper = UrlUtils.resolveInfo("ABOUT:blank", engine)
-        assertEquals("ABOUT:blank", upper?.url)
-        assertEquals(false, upper?.isSearch)
-        // 无冒号的 "about" 是普通词（无点不匹配 HOST_PATTERN）⇒ 维持既有行为：搜索
-        assertTrue(UrlUtils.resolveInfo("about", engine)?.isSearch == true)
-    }
-
-    @Test
-    fun `data 与 blob 维持进搜索——刻意不放开并用断言钉住`() {
-        // 2026-10-03 补：这两条是**刻意的取舍**（理由写在 resolveInfo 的分支注释里），
-        // 但此前只有注释、**没有断言** ⇒ 以后有人"顺手把它修好"不会有任何测试变红。
-        val data = UrlUtils.resolveInfo("data:text/html;base64,PGgxPmhpPC9oMT4=", engine)
-        assertTrue("data: 必须仍进搜索（顶层数据: 导航 Firefox 59 起封禁，反钓鱼，与 externalUrl 同向）", data?.isSearch == true)
-        val blob = UrlUtils.resolveInfo("blob:https://example.com/2f9c-uuid", engine)
-        assertTrue("blob: 必须仍进搜索（地址栏新输入时会话里没有注册对象，打开必为空）", blob?.isSearch == true)
-    }
-
-    @Test
-    fun `只有冒号的 about 前缀也走直达——已知的边界，用断言钉住现状`() {
-        // 现状：`startsWith("about:")` 不检查冒号后是否有页面名，故 "about:" 也被当作直达。
-        // 打开是内核的空白/错误页，不崩、无副作用。刻意在此**钉住现状**避免无声漂移；
-        // 若将来收紧判据（要求冒号后非空），本断言会提醒同步改这里与实现。
-        val r = UrlUtils.resolveInfo("about:", engine)
-        assertEquals("about:", r?.url)
-        assertEquals(false, r?.isSearch)
-    }
-
-    @Test
-    fun `空输入返回 null`() {
-        assertNull(UrlUtils.resolveInfo("", engine))
-        assertNull(UrlUtils.resolveInfo("   ", engine))
-    }
-
-    @Test
-    fun `resolve 为空输入返回 null 且等价于 resolveInfo 的 url`() {
-        assertNull(UrlUtils.resolve("", engine))
-        assertEquals(
-            UrlUtils.resolveInfo("example.com", engine)?.url,
-            UrlUtils.resolve("example.com", engine),
-        )
-    }
-
-    // ------------------------------------------------------------- extractUrlFromText
-
-    @Test
-    fun `分享提取_纯链接原样返回`() {
-        assertEquals(
-            "https://example.com/a/b?q=1",
-            UrlUtils.extractUrlFromText("https://example.com/a/b?q=1"),
-        )
-    }
-
-    @Test
-    fun `分享提取_链接前后有文字时取第一个链接`() {
-        assertEquals(
-            "https://x.com/1",
-            UrlUtils.extractUrlFromText("看看这个 https://x.com/1 还有 https://y.com/2"),
-        )
-    }
-
-    @Test
-    fun `分享提取_句尾标点被剥离`() {
-        assertEquals(
-            "https://x.com/1",
-            UrlUtils.extractUrlFromText("快看 https://x.com/1."),
-        )
-        assertEquals(
-            "https://x.com/1",
-            UrlUtils.extractUrlFromText("快看 (https://x.com/1)"),
-        )
-    }
-
-    @Test
-    fun `分享提取_说明文字黏在链接后被 CJK 标点截断`() {
-        // 无空格黏连：\S+ 会连「。转疯了」一起捕获，必须从 CJK 标点处硬截断
-        assertEquals(
-            "https://x.com/1",
-            UrlUtils.extractUrlFromText("https://x.com/1。转疯了"),
-        )
-        assertEquals(
-            "https://x.com/1",
-            UrlUtils.extractUrlFromText("https://x.com/1，快看"),
-        )
-    }
-
-    @Test
-    fun `分享提取_截断的百分号编码残渣被剥掉而完整编码保留`() {
-        // 完整编码（如 %20）是 URL 的正常组成部分，必须保留
-        assertEquals(
-            "https://x.com/a%20b",
-            UrlUtils.extractUrlFromText("https://x.com/a%20b。"),
-        )
-        // 「% + 不足两位十六进制」的不完整残渣剥回边界；已形如完整编码的尾巴
-        // （%B8）与真实编码无法区分，保守保留 —— 宁可多留两位也不损坏合法 URL
-        assertEquals(
-            "https://x.com/a%E4",
-            UrlUtils.extractUrlFromText("https://x.com/a%E4%B"),
-        )
-        assertEquals(
-            "https://x.com/a%E4%B8",
-            UrlUtils.extractUrlFromText("https://x.com/a%E4%B8%"),
-        )
-        assertEquals(
-            "https://x.com/a",
-            UrlUtils.extractUrlFromText("https://x.com/a%"),
-        )
-    }
-
-    @Test
-    fun `分享提取_大写 scheme 原样保留`() {
-        assertEquals(
-            "HTTP://X.com/Path",
-            UrlUtils.extractUrlFromText("HTTP://X.com/Path"),
-        )
-    }
-
-    @Test
-    fun `分享提取_无链接的纯文本返回 null`() {
-        assertNull(UrlUtils.extractUrlFromText("今天天气不错"))
-        assertNull(UrlUtils.extractUrlFromText(""))
-        assertNull(UrlUtils.extractUrlFromText("ftp://example.com/file"))
-        assertNull(UrlUtils.extractUrlFromText("example.com/无协议地址"))
-    }
-
-    // ------------------------------------------------------ isLocalNetworkAddress
-
-    /**
-     * 判定「要不要为该地址申请本地网络权限」（Android 17 起访问局域网必需）。
-     * 误判的代价不对称：**漏判**只是用户需要去系统设置里手动授权；
-     * **误判**则会给每个公网域名都弹一次权限。故边界值必须钉住。
-     */
-    @Test
-    fun `局域网地址被识别`() {
-        for (url in listOf(
-            "http://192.168.1.1",
-            "http://192.168.0.1:8080/admin",
-            "https://10.0.0.5/",
-            "http://10.255.255.254",
-            "http://172.16.0.1",
-            "http://172.31.255.1:5000",
-            "http://169.254.1.1",
-            "nas.local",
-            "http://printer.local:631/",
-        )) {
-            assertTrue("应判为局域网：$url", UrlUtils.isLocalNetworkAddress(url))
+    fun `夹具里的每条用例与Rust侧同口径`() {
+        val cases = SharedFixtures.cases(FIXTURE)
+        val seen = mutableMapOf<String, Int>()
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val kind = c.getString("kind")
+            if (kind !in OWNED_KINDS) continue
+            seen[kind] = (seen[kind] ?: 0) + 1
+            val id = c.getString("id")
+            val a = c.getJSONArray("args")
+            when (kind) {
+                "looksLikeUri" -> assertEquals(
+                    "夹具用例「$id」",
+                    c.getBoolean("expected"),
+                    UrlUtils.looksLikeUri(a.getString(0)),
+                )
+                "resolveInfo" -> {
+                    val got = UrlUtils.resolveInfo(a.getString(0), engine)
+                    if (c.isNull("expected")) {
+                        assertNull("夹具用例「$id」", got)
+                    } else {
+                        val want = c.getJSONObject("expected")
+                        assertNotNull("夹具用例「$id」", got)
+                        assertEquals("夹具用例「$id」", want.getString("url"), got!!.url)
+                        assertEquals("夹具用例「$id」", want.getBoolean("isSearch"), got.isSearch)
+                    }
+                }
+                "isLocalNetworkAddress" -> assertEquals(
+                    "夹具用例「$id」",
+                    c.getBoolean("expected"),
+                    UrlUtils.isLocalNetworkAddress(a.getString(0)),
+                )
+                "extractUrlFromText" -> {
+                    val got = UrlUtils.extractUrlFromText(a.getString(0))
+                    if (c.isNull("expected")) {
+                        assertNull("夹具用例「$id」", got)
+                    } else {
+                        assertEquals("夹具用例「$id」", c.getString("expected"), got)
+                    }
+                }
+                else -> throw AssertionError("夹具里的 kind「$kind」本文件不认（改夹具要同步两侧的派发）")
+            }
+        }
+        for (k in OWNED_KINDS) {
+            assertTrue("kind「$k」在夹具里一条用例都没有 ⇒ 门禁空转", (seen[k] ?: 0) > 0)
         }
     }
 
     @Test
-    fun `公网地址与回环不被判为局域网`() {
-        for (url in listOf(
-            "https://example.com",
-            "https://addons.mozilla.org/firefox/",
-            "http://8.8.8.8",
-            "http://172.15.0.1",   // 172.16/12 的下边界外侧
-            "http://172.32.0.1",   // 172.16/12 的上边界外侧
-            "http://11.0.0.1",     // 10/8 之外
-            "http://192.169.1.1",  // 192.168/16 之外
-            "http://127.0.0.1",    // 回环不经本地网络，不受该权限限制
-            "localhost",
-            "http://localhost:8080/",
-            "http://[::1]:8080/",  // IPv6 回环
+    fun `夹具里的kind全部有归属`() {
+        val cases = SharedFixtures.cases(FIXTURE)
+        val kinds = (0 until cases.length())
+            .map { cases.getJSONObject(it).getString("kind") }
+            .toSet()
+        val owned = UrlUtilsTest.OWNED_KINDS + SchemeGateTest.OWNED_KINDS + PercentEncodeTest.OWNED_KINDS
+        assertEquals(
+            "夹具里的 kind 集合与三个 Kotlin 文件负责的 kind 并集不一致 —— " +
+                "新增 kind 必须有人认领，否则那条用例在 Kotlin 侧会静默空转（Rust 侧会红，这里也得红）",
+            owned,
+            kinds,
+        )
+    }
+
+    @Test
+    fun `resolve 就是 resolveInfo 的 url`() {
+        // 这是**同一侧两个函数之间的关系**，不是跨语言的期望值 ⇒ 不进共享夹具
+        // （进了就得两侧各写一遍，又变回镜像）。夹具里的 resolveInfo 已钉住两者的输入。
+        for (input in listOf(
+            "https://example.com/x",
+            "example.com",
+            "localhost:8080",
+            "棠雪 浏览器",
             "",
-            "not a url",
+            "   ",
         )) {
-            assertFalse("不应判为局域网：$url", UrlUtils.isLocalNetworkAddress(url))
+            assertEquals(
+                "resolve 必须就是 resolveInfo 的 url（输入：$input）",
+                UrlUtils.resolveInfo(input, engine)?.url,
+                UrlUtils.resolve(input, engine),
+            )
         }
     }
 
-    @Test
-    fun `IPv6 局域网段识别正确`() {
-        assertTrue(UrlUtils.isLocalNetworkAddress("http://[fe80::1]/"))
-        assertTrue(UrlUtils.isLocalNetworkAddress("http://[fd00::1]:8080/"))
-        assertTrue(UrlUtils.isLocalNetworkAddress("http://[fc00::abcd]/"))
-        assertFalse(UrlUtils.isLocalNetworkAddress("http://[2001:4860:4860::8888]/"))
-        assertFalse(UrlUtils.isLocalNetworkAddress("http://[::1]/"))
-    }
+    companion object {
+        /** 两侧共享的夹具（Rust 侧读同一个文件） */
+        const val FIXTURE = "url_utils_cases.json"
 
-    @Test
-    fun `非标准点分十进制字面量不判局域网`() {
-        // 内核不认前导零/带符号的 IPv4 字面量（会走 DNS）——按它们弹权限框纯属误扰，
-        // 故 isLocalIpv4 必须严格点分十进制（审查 L4）
-        for (url in listOf(
-            "http://010.0.0.1",     // 前导零
-            "http://+10.0.0.1",     // 带符号
-            "http://192.168.01.1",  // 段内前导零
-            "http://1.2.3.999",     // 段超界
-        )) {
-            assertFalse("不应判为局域网：$url", UrlUtils.isLocalNetworkAddress(url))
-        }
-    }
-
-    @Test
-    fun `IPv4-mapped IPv6 的三种写法都按内嵌 IPv4 判局域网`() {
-        // 压缩 / 展开零 / 十六进制内嵌：内核实际按 192.168.1.1 连接，
-        // 字面量是 IPv6 ⇒ 不认就会漏弹权限框（Android 17 静默连不上）
-        for (url in listOf(
-            "http://[::ffff:192.168.1.1]/",
-            "http://[0:0:0:0:0:ffff:192.168.1.1]/",
-            "http://[::ffff:c0a8:101]/",          // c0a8:101 = 192.168.1.1
-            "http://[0::ffff:10.0.0.2]/",
-        )) {
-            assertTrue("应判为局域网（mapped）：$url", UrlUtils.isLocalNetworkAddress(url))
-        }
-    }
-
-    @Test
-    fun `mapped 公网地址与非 mapped 形式不误判`() {
-        for (url in listOf(
-            "http://[::ffff:8.8.8.8]/",           // mapped 但公网
-            "http://[ffff::192.168.1.1]/",        // ffff 在前：非 mapped 结构
-            "http://[::1:192.168.1.1]/",          // 前缀零组数不足（仅 1 个零 + 1 组，凑不满 5 零 + ffff）
-            "http://[::fffe:192.168.1.1]/",       // 第 6 组不是 ffff
-            "http://[::ffff:192.168.1.1.9]/",     // 内嵌段数不对（5 段）
-        )) {
-            assertFalse("不应判为局域网：$url", UrlUtils.isLocalNetworkAddress(url))
-        }
-        // 边界补钉：c0a8:808 = 192.168.8.8（属 192.168/16 → 真）；
-        // fe80 前缀与 mapped 混合——按 fe80 链路本地已判真，mapped 分支不参与
-        assertTrue(UrlUtils.isLocalNetworkAddress("http://[::ffff:c0a8:808]/"))
-        assertTrue(UrlUtils.isLocalNetworkAddress("http://[fe80::ffff:192.168.1.1]/"))
+        /** 本文件负责的 kind（其余归兄弟文件；并集必须与夹具里的 kind 集合相等） */
+        val OWNED_KINDS: Set<String> = setOf(
+            "looksLikeUri",
+            "resolveInfo",
+            "isLocalNetworkAddress",
+            "extractUrlFromText",
+        )
     }
 }

@@ -1,5 +1,7 @@
 package io.github.tan_sno.tangsnow.util
 
+import io.github.tan_sno.tangsnow.data.SharedFixtures
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,9 +11,17 @@ import org.junit.Test
  *
  * 这张矩形是「先裁后缩」的无拉伸依据，也是内存上界的来源：裁完的中间图不得大于源图，
  * 缩放产物恒等于目标尺寸 —— 因此**绝不允许**出现「按长边放大到 9600×2400」那种中间态。
+ *
+ * 期望值来自**两侧共享的 JSON 夹具**
+ * （`tangsnow-rs/tangsnow-core/tests/fixtures/bitmaps_cover_rect_cases.json`），
+ * Rust 侧 `tests/bitmaps_parity.rs` 读同一个文件。
+ * 此前两侧各写一份期望值 —— 那是**镜像**：改实现 + 同步改本侧的镜像期望值 ⇒
+ * 两侧照样全绿，而两边的裁剪口径已经漂了
+ * （矩形偏几个像素 ⇒ 缩放后宽高比与目标不符 ⇒ 背景被拉伸）。
  */
 class BitmapsCoverRectTest {
 
+    /** 裁剪结果 `[x, y, w, h]` */
     private fun rect(srcW: Int, srcH: Int, tw: Int, th: Int): IntArray =
         Bitmaps.centerCropRect(srcW, srcH, tw, th)
 
@@ -27,67 +37,88 @@ class BitmapsCoverRectTest {
             "宽高比偏离目标 ($w×$h vs $tw×$th)",
             kotlin.math.abs(w.toLong() * th - h.toLong() * tw) <= maxOf(tw, th).toLong(),
         )
+        // 中间图不得大于源图：先裁后缩的前提 —— 越界就意味着这一步偷偷放大了（会爆内存）
+        assertTrue(
+            "中间图大于源图 ($w×$h vs $srcW×$srcH)",
+            w.toLong() * h <= srcW.toLong() * srcH,
+        )
     }
 
+    /**
+     * **裁剪矩形与 Rust 侧同口径**（期望值来自两侧共享的 JSON 夹具）。
+     *
+     * 改口径只能改夹具 —— 那一刻两侧一起变；只改一侧的期望值这条路已经堵死。
+     */
     @Test
-    fun `宽幅源图配竖向目标：裁掉左右，不放大`() {
-        // 旧实现会把 8000×500 放大到 9600×2400（≈23MP / 92MB）—— 这是本批要消灭的形态
-        val r = rect(8000, 500, 1080, 2400)
-        assertConsistent(r, 8000, 500, 1080, 2400)
-        assertEquals(225, r[2])
-        assertEquals(500, r[3])
-        assertTrue("中间图不得超过源图像素数", r[2].toLong() * r[3] <= 8000L * 500)
-    }
-
-    @Test
-    fun `竖幅源图配横向目标：裁掉上下`() {
-        val r = rect(500, 8000, 2400, 1080)
-        assertConsistent(r, 500, 8000, 2400, 1080)
-        assertEquals(500, r[2])
-        assertEquals(225, r[3])
-    }
-
-    @Test
-    fun `方形源配竖向目标：左右各裁一半`() {
-        val r = rect(1000, 1000, 1080, 2400)
-        assertConsistent(r, 1000, 1000, 1080, 2400)
-        assertEquals(450, r[2])
-        assertEquals(1000, r[3])
-        assertEquals("居中", 275, r[0])
-        assertEquals(0, r[1])
-    }
-
-    @Test
-    fun `宽高比恰好相等时原样返回整张`() {
-        val r = rect(1080, 2400, 1080, 2400)
-        assertConsistent(r, 1080, 2400, 1080, 2400)
-        assertEquals(0, r[0]); assertEquals(0, r[1])
-        assertEquals(1080, r[2]); assertEquals(2400, r[3])
-    }
-
-    @Test
-    fun `1px 源图与极端长宽比不越界也不除零`() {
-        listOf(
-            rect(1, 1, 1080, 2400),
-            rect(1, 4000, 1080, 2400),
-            rect(4000, 1, 1080, 2400),
-            rect(3, 2, 4000, 4000),
-        ).forEachIndexed { i, r ->
-            assertTrue("第 $i 个矩形的 w 必须为正: ${r[2]}", r[2] > 0)
-            assertTrue("第 $i 个矩形的 h 必须为正: ${r[3]}", r[3] > 0)
+    fun `裁剪矩形与Rust侧同口径`() {
+        val cases = SharedFixtures.cases(FIXTURE)
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val id = c.getString("id")
+            val d = dims(c)
+            val r = rect(d[0], d[1], d[2], d[3])
+            val e = c.getJSONArray("expected")
+            assertEquals("夹具用例「$id」的 x", e.getInt(0), r[0])
+            assertEquals("夹具用例「$id」的 y", e.getInt(1), r[1])
+            assertEquals("夹具用例「$id」的 w", e.getInt(2), r[2])
+            assertEquals("夹具用例「$id」的 h", e.getInt(3), r[3])
         }
     }
 
+    /**
+     * **合法输入下矩形落在源图内、宽高比与目标一致**。
+     *
+     * 性质（而不是逐点的期望值）：它对**任何**合法输入都成立，而夹具只能钉住有限的几个点。
+     * 从夹具里筛出合法输入 ⇒ 往夹具里加用例时，这一侧的性质覆盖面同步变大。
+     */
     @Test
-    fun `非法尺寸不崩溃且返回可用的矩形`() {
-        listOf(
-            rect(0, 100, 1080, 2400),
-            rect(100, 0, 1080, 2400),
-            rect(100, 100, 0, 2400),
-            rect(100, 100, 1080, 0),
-        ).forEach { r ->
-            assertTrue(r[2] >= 1)
-            assertTrue(r[3] >= 1)
+    fun `合法输入下矩形落在源图内且宽高比与目标一致`() {
+        var checked = 0
+        val cases = SharedFixtures.cases(FIXTURE)
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val d = dims(c)
+            // 退化输入走的是守卫分支（压根不裁），不满足「宽高比与目标一致」这个性质
+            if (d.any { it <= 0 }) continue
+            val r = rect(d[0], d[1], d[2], d[3])
+            assertConsistent(r, d[0], d[1], d[2], d[3])
+            checked++
         }
+        assertTrue("一条合法输入都没有 ⇒ 性质断言空转", checked > 0)
+    }
+
+    /**
+     * **退化输入也要给出可用的矩形**。
+     *
+     * 守卫分支不是「返回零尺寸」而是「返回一个至少 1px 的矩形」—— 调用方拿它去裁，
+     * 零尺寸会让 `Bitmap.createBitmap` 直接抛异常。
+     */
+    @Test
+    fun `退化输入返回可用的矩形`() {
+        var checked = 0
+        val cases = SharedFixtures.cases(FIXTURE)
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val d = dims(c)
+            if (d.all { it > 0 }) continue
+            val r = rect(d[0], d[1], d[2], d[3])
+            assertTrue(
+                "夹具用例「${c.getString("id")}」：退化输入也要给出可用的矩形",
+                r[2] >= 1 && r[3] >= 1,
+            )
+            checked++
+        }
+        assertTrue("一条退化输入都没有 ⇒ 守卫分支没人盯", checked > 0)
+    }
+
+    /** 夹具用例的四个尺寸入参 `[srcW, srcH, targetW, targetH]` */
+    private fun dims(c: JSONObject): IntArray {
+        val a = c.getJSONArray("args")
+        return intArrayOf(a.getInt(0), a.getInt(1), a.getInt(2), a.getInt(3))
+    }
+
+    private companion object {
+        /** 两侧共享的夹具（Rust 侧读同一个文件） */
+        const val FIXTURE = "bitmaps_cover_rect_cases.json"
     }
 }

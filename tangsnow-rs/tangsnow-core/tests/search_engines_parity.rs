@@ -12,6 +12,8 @@
 
 mod common;
 
+use std::collections::BTreeSet;
+
 use tangsnow_core::search_engines::*;
 
 /// 共享夹具（编译期读入；路径相对本文件）。
@@ -22,10 +24,12 @@ const CASES: &str = include_str!("fixtures/search_engines_cases.json");
 #[test]
 fn 夹具里的每条用例两侧同口径() {
     let v = common::load(CASES);
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
     for c in v["cases"].as_array().unwrap() {
         let id = c["id"].as_str().expect("id 必须是字符串");
         let kind = c["kind"].as_str().expect("kind 必须是字符串");
         let a = c["args"].as_array().expect("args 必须是数组");
+        seen.insert(kind);
         match kind {
             "find" => {
                 // args[0] = 引擎 id（null = 空 id）
@@ -63,8 +67,23 @@ fn 夹具里的每条用例两侧同口径() {
                     "夹具用例「{id}」"
                 );
             }
+            "searchUrl" => {
+                // args = [模板, 关键词]；引擎的 id 与查询参数名都不参与生成 ⇒ 只需模板
+                let tpl = a[0].as_str().expect("args[0] 必须是字符串");
+                let q = a[1].as_str().expect("args[1] 必须是字符串");
+                assert_eq!(
+                    SearchEngine::new("test", tpl, None).search_url(q),
+                    c["expected"].as_str().expect("expected 必须是字符串"),
+                    "夹具用例「{id}」"
+                );
+            }
             other => panic!("夹具里的 kind「{other}」本文件不认（改夹具要同步两侧的派发）"),
         }
+    }
+    // 夹具里出现但本文件没派发的 kind ⇒ 有人加了语料却没人读 ⇒ 静默空转。
+    // 断言「夹具里的 kind 集合 == 本文件认的 kind 集合」，两侧同时改。
+    for k in ["find", "findEmptyList", "hostMatches", "templateHostOf", "searchUrl"] {
+        assert!(seen.contains(k), "夹具里没有 kind「{k}」的用例 ⇒ 这一支永远跑不到");
     }
 }
 
@@ -92,42 +111,10 @@ fn 内置引擎表_条目与模板完备() {
 }
 
 // ------------------------------------------------------------- searchUrl
-
-#[test]
-fn 占位符_q_替换为编码后的关键词() {
-    let e = SearchEngine::new("x", "https://s.test/?q={q}", None);
-    assert_eq!(e.search_url("abc"), "https://s.test/?q=abc");
-    assert_eq!(
-        e.search_url("棠雪 浏览器"),
-        "https://s.test/?q=%E6%A3%A0%E9%9B%AA%20%E6%B5%8F%E8%A7%88%E5%99%A8"
-    );
-}
-
-#[test]
-fn 模板也支持百分号_s_占位符() {
-    let e = SearchEngine::new("x", "https://s.test/?wd=%s", None);
-    assert_eq!(e.search_url("abc"), "https://s.test/?wd=abc");
-}
-
-#[test]
-fn 模板不含占位符时追加_q_参数() {
-    let e = SearchEngine::new("x", "https://s.test/search", None);
-    assert_eq!(e.search_url("abc"), "https://s.test/search?q=abc");
-    let with_query = SearchEngine::new("y", "https://s.test/search?lang=cn", None);
-    assert_eq!(with_query.search_url("abc"), "https://s.test/search?lang=cn&q=abc");
-}
-
-#[test]
-fn 空模板回退到内置兜底地址() {
-    let e = SearchEngine::new("x", "", None);
-    assert_eq!(e.search_url("abc"), "https://www.bing.com/search?q=abc");
-}
-
-#[test]
-fn 关键词前后空白被裁剪() {
-    let e = SearchEngine::new("x", "https://s.test/?q={q}", None);
-    assert_eq!(e.search_url("  abc  "), "https://s.test/?q=abc");
-}
+//
+// 模板替换那组原先是本文件与 JVM 侧 `PercentEncodeTest.kt` **各写一份**的镜像期望值
+// （两侧实现逐行等价，却各自钉一份）⇒ 现并入 `search_engines_cases.json` 的 `searchUrl` 一组，
+// 改期望值必然两侧一起红。
 
 // ------------------------------------------------------------- displayForUrl
 

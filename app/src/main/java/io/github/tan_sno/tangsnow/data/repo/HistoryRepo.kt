@@ -23,14 +23,25 @@ object HistoryRepo {
     suspend fun add(url: String, title: String): Unit = withContext(Dispatchers.IO) {
         // W2 接缝：Rust 可用时由其判定前缀过滤（同口径，history.rs parity 钉住）；
         // null = 不接管 ⇒ 回落共享实现。二者同语义，混同无害。
-        val skip = CoreImpl.shouldSkipHistoryUrl(url)
-            ?: run {
-                val lower = url.lowercase()
-                SKIP_PREFIXES.any { lower.startsWith(it) }
-            }
+        val skip = CoreImpl.shouldSkipHistoryUrl(url) ?: shouldSkipHistoryUrl(url)
         if (skip) return@withContext
         BrowserDb.get(ApplicationScope.context)
             .touchHistory(url, title.trim().ifBlank { null })
+    }
+
+    /**
+     * 内部页与脚本协议**不进历史**（共享实现的判定分支）。
+     *
+     * 抽成纯函数是为了**能测**：原先这段逻辑内联在 [add] 里，而 [add] 要写库 ⇒
+     * JVM 单测碰不到 ⇒ Rust 侧改前缀过滤时，Kotlin 这边没有任何行为用例能发现漂移。
+     * 现在两侧读**同一份夹具**（`tangsnow-rs/tangsnow-core/tests/fixtures/history_skip_prefix_cases.json`）
+     * ⇒ 改一边必然另一边一起红。
+     *
+     * 语义与 Rust 的 `should_skip_history_url` 逐字一致：小写后按前缀匹配。
+     */
+    internal fun shouldSkipHistoryUrl(url: String): Boolean {
+        val lower = url.lowercase()
+        return SKIP_PREFIXES.any { lower.startsWith(it) }
     }
 
     suspend fun list(): List<HistoryItem> = withContext(Dispatchers.IO) {

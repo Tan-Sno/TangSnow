@@ -28,16 +28,19 @@ class SearchEnginesTest {
     /**
      * **夹具里的每条用例与 Rust 侧同口径**。
      *
-     * kind ∈ find / hostMatches / templateHostOf；args 按 kind 顺序；expected 为 null 表示「无结果」。
+     * kind ∈ find / findEmptyList / hostMatches / templateHostOf / searchUrl；
+     * args 按 kind 顺序（searchUrl 的 args = [模板, 关键词]）；expected 为 null 表示「无结果」。
      */
     @Test
     fun `夹具里的每条用例与Rust侧同口径`() {
         val cases = SharedFixtures.cases(FIXTURE)
+        val seen = mutableSetOf<String>()
         for (i in 0 until cases.length()) {
             val c = cases.getJSONObject(i)
             val id = c.getString("id")
             val kind = c.getString("kind")
             val a = c.getJSONArray("args")
+            seen.add(kind)
             when (kind) {
                 "find" -> {
                     // args[0] = 引擎 id（null = 空 id）
@@ -73,8 +76,21 @@ class SearchEnginesTest {
                         assertEquals("夹具用例「$id」", c.getString("expected"), got)
                     }
                 }
+                "searchUrl" -> {
+                    // 引擎的 id 与查询参数名都不参与 URL 生成 ⇒ 只需模板
+                    val engine = SearchEngine(id = "test", template = a.getString(0))
+                    assertEquals(
+                        "夹具用例「$id」",
+                        c.getString("expected"),
+                        engine.searchUrl(a.getString(1)),
+                    )
+                }
                 else -> throw AssertionError("夹具里的 kind「$kind」本文件不认（改夹具要同步两侧的派发）")
             }
+        }
+        // 夹具里出现但本文件没派发的 kind ⇒ 有人加了语料却没人读 ⇒ 静默空转。
+        for (k in listOf("find", "findEmptyList", "hostMatches", "templateHostOf", "searchUrl")) {
+            assertTrue("夹具里没有 kind「$k」的用例 ⇒ 这一支永远跑不到", k in seen)
         }
     }
 

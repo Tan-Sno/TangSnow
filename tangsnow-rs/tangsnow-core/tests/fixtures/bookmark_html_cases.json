@@ -1,0 +1,453 @@
+{
+  "_说明": "书签 HTML（解析 / 清洗 / 导出）的**共享期望值**：Rust 侧 `tests/bookmark_html_parity.rs` 与 JVM 侧 `app/src/test/java/io/github/tan_sno/tangsnow/data/BookmarkHtmlTest.kt` 读**同一份**（2026-10-20 审查报告 C-14）。刻意**不各写一份**：各写一份就是镜像 —— 改实现 + 同步改本侧的镜像期望值，两侧照样全绿，而两边口径已经漂了（「标题截断按码点 vs 按 UTF-16」就是这么活下来的）。现在改这份夹具必然两侧一起红。",
+  "_kind": "parse（args=[html] → expected=[{url,title,createdAtMs}]，按导入顺序）/ parseAddDate（args=[raw,now] → expected=int|null）/ sanitize（args=[html,existingUrls[]] → expected={kept:[{url,title}],skipped:int}）/ export（args=[{url,title,createdAt}] → expected=str，完整导出文本）/ isHttpUrl（args=[url] → expected=bool）。两侧按同一个 `when(kind)` 派发，未知 kind 直接 panic / AssertionError（不静默跳过）。",
+  "_parse为什么与now无关": "`parse` 用例里的 `ADD_DATE` 一律取**早已过去**的绝对时间（1700000000 秒 = 2023-11-14）：落库毫秒值因此是确定的，两侧必然相同。**不放**「未来时间被拒」「now±1 天边界」这类依赖 now 的语料 —— Kotlin 侧 `parseImport` 用的是真实墙钟（`System.currentTimeMillis()`），Rust 侧 `parse_import_counted` 收显式的 now，两边没有同一个 now 就无法共享这类语料（那条语料改由 `parseAddDate` 承担：now 写在夹具里）。",
+  "_parseAddDate为什么能共享": "`parseAddDate` 能共享是因为**两侧都能显式传 now**：Kotlin `parseAddDate(raw, nowMs)` 本来就有 nowMs 形参，Rust `parse_add_date(raw, now_ms)` 同样 ⇒ now 是夹具给的数据，与墙钟无关，「未来超过一天被拒」这类语料因此可以进夹具。",
+  "_没进夹具的语料": "复杂度哨兵（对抗性输入必须线性）、体积/条数上限、标题按**码点**截断（emoji 不劈半个代理）、导出→导入往返、线性实现 vs 参考正则实现的随机语料差分 —— 这些是**性质**，两侧各留一条性质用例，不进夹具（与 `tests/fixtures/download_filename_cases.json` 同一处置）。",
+  "cases": [
+    {
+      "id": "parse: 标准 Netscape 导出格式",
+      "kind": "parse",
+      "args": [
+        "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<DL><p>\n<DT><A HREF=\"https://example.com/\" ADD_DATE=\"1700000000\">示例站点</A>\n<DT><A HREF=\"https://x.cn/a\" ADD_DATE=\"1700000001\">另一个</A>\n</DL><p>\n"
+      ],
+      "expected": [
+        { "url": "https://example.com/", "title": "示例站点", "createdAtMs": 1700000000000 },
+        { "url": "https://x.cn/a", "title": "另一个", "createdAtMs": 1700000001000 }
+      ]
+    },
+    {
+      "id": "parse: 属性顺序与大小写不保证",
+      "kind": "parse",
+      "args": [
+        "<DT><a add_date='1699999999' href='https://mixed.cn/'>倒序属性</A>"
+      ],
+      "expected": [
+        { "url": "https://mixed.cn/", "title": "倒序属性", "createdAtMs": 1699999999000 }
+      ]
+    },
+    {
+      "id": "parse: data-href 不抢匹配",
+      "kind": "parse",
+      "args": [
+        "<DT><A data-href=\"https://evil.example/x\" HREF=\"https://good.example/\">测试</A>"
+      ],
+      "expected": [
+        { "url": "https://good.example/", "title": "测试", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 无引号 href",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=https://bare.example/x>无引号</A>"
+      ],
+      "expected": [
+        { "url": "https://bare.example/x", "title": "无引号", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 缺收尾标签时标题为空但条目保留",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"https://nc.example/\">没有收尾"
+      ],
+      "expected": [
+        { "url": "https://nc.example/", "title": "", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 收尾标签容忍空白与大小写",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"https://a.example/\">标题一</A >\n<DT><A HREF=\"https://b.example/\">标题二</a>"
+      ],
+      "expected": [
+        { "url": "https://a.example/", "title": "标题一", "createdAtMs": null },
+        { "url": "https://b.example/", "title": "标题二", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 实体只解一趟（导出→导入往返性）",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"https://e.example/\">Use &amp;lt;div&amp;gt;</A>"
+      ],
+      "expected": [
+        { "url": "https://e.example/", "title": "Use &lt;div&gt;", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: href 里的实体被解码",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"https://e.example/?a=1&amp;b=2\">链接</A>"
+      ],
+      "expected": [
+        { "url": "https://e.example/?a=1&b=2", "title": "链接", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 未知实体与 &AMP; 大小写原样保留",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"https://e.example/\">&AMP; &unknown; &nbsp;x</A>"
+      ],
+      "expected": [
+        { "url": "https://e.example/", "title": "&AMP; &unknown;  x", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 标题里的基本实体被解码",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"https://e.cn/\">A&amp;B&lt;C&gt;\"q\"&#39;s&#39;</A>"
+      ],
+      "expected": [
+        { "url": "https://e.cn/", "title": "A&B<C>\"q\"'s'", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: href 为空或缺失的条目被跳过、其余照常",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"\">空href</A>\n<DT><A>无href</A>\n<DT><A HREF=\"https://ok.example/\">好条目</A>\n"
+      ],
+      "expected": [
+        { "url": "https://ok.example/", "title": "好条目", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 空白 href 也被跳过",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"   \">空白</A>\n<DT><A HREF=\"https://ok.example/\">好条目</A>"
+      ],
+      "expected": [
+        { "url": "https://ok.example/", "title": "好条目", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: TITLE 属性不是标题",
+      "kind": "parse",
+      "args": [
+        "<a TITLE=\"标题在前\" HREF=https://bare.cn/y>裸引号</a>"
+      ],
+      "expected": [
+        { "url": "https://bare.cn/y", "title": "裸引号", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: hreflang 不抢匹配",
+      "kind": "parse",
+      "args": [
+        "<a hreflang=\"zh\" href=\"https://good.example/\">t</a>"
+      ],
+      "expected": [
+        { "url": "https://good.example/", "title": "t", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 收尾标签前缀相似但不成立（</abbr>）",
+      "kind": "parse",
+      "args": [
+        "<a href=\"https://a.cn/\">标题</abbr>继续</a>"
+      ],
+      "expected": [
+        { "url": "https://a.cn/", "title": "标题</abbr>继续", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 一个 </a> 只被消费一次",
+      "kind": "parse",
+      "args": [
+        "<a href=\"https://u.example/\">x<a href=\"https://v.example/\">y</a><a href=\"https://w.example/\">z</a>"
+      ],
+      "expected": [
+        { "url": "https://u.example/", "title": "x<a href=\"https://v.example/\">y", "createdAtMs": null },
+        { "url": "https://w.example/", "title": "z", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 跨行标题保留换行",
+      "kind": "parse",
+      "args": [
+        "<a href=\"https://u.example/\">第一行\n第二行</a>"
+      ],
+      "expected": [
+        { "url": "https://u.example/", "title": "第一行\n第二行", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: 全角空格不是标签分隔符",
+      "kind": "parse",
+      "args": [
+        "<a\u3000href=\"https://u.example/\">t</a>"
+      ],
+      "expected": []
+    },
+    {
+      "id": "parse: 标签内含 < 不影响取 href",
+      "kind": "parse",
+      "args": [
+        "<a title=\"a<b\" href=\"https://u.example/\">t</a>"
+      ],
+      "expected": [
+        { "url": "https://u.example/", "title": "t", "createdAtMs": null }
+      ]
+    },
+    {
+      "id": "parse: ADD_DATE 给毫秒时按毫秒解析",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"https://ms.example/\" ADD_DATE=\"1700000000000\">毫秒</A>"
+      ],
+      "expected": [
+        { "url": "https://ms.example/", "title": "毫秒", "createdAtMs": 1700000000000 }
+      ]
+    },
+    {
+      "id": "parse: ADD_DATE 非法时条目仍保留、时间回落 null",
+      "kind": "parse",
+      "args": [
+        "<DT><A HREF=\"https://bad.example/\" ADD_DATE=\"abc\">坏时间</A>"
+      ],
+      "expected": [
+        { "url": "https://bad.example/", "title": "坏时间", "createdAtMs": null }
+      ]
+    },
+
+    {
+      "id": "parseAddDate: 秒按秒解析",
+      "kind": "parseAddDate",
+      "args": ["1700000000", 1790000000000],
+      "expected": 1700000000000
+    },
+    {
+      "id": "parseAddDate: 毫秒按毫秒解析",
+      "kind": "parseAddDate",
+      "args": ["1700000000000", 1790000000000],
+      "expected": 1700000000000
+    },
+    {
+      "id": "parseAddDate: 1e11 为界（1e11 毫秒归毫秒）",
+      "kind": "parseAddDate",
+      "args": ["100000000000", 1790000000000],
+      "expected": 100000000000
+    },
+    {
+      "id": "parseAddDate: 两端空白被裁掉",
+      "kind": "parseAddDate",
+      "args": ["  1700000000  ", 1790000000000],
+      "expected": 1700000000000
+    },
+    {
+      "id": "parseAddDate: 等于 now 的值仍有效",
+      "kind": "parseAddDate",
+      "args": ["1790000000", 1790000000000],
+      "expected": 1790000000000
+    },
+    {
+      "id": "parseAddDate: 空串回落 null",
+      "kind": "parseAddDate",
+      "args": ["", 1790000000000],
+      "expected": null
+    },
+    {
+      "id": "parseAddDate: 非数字回落 null",
+      "kind": "parseAddDate",
+      "args": ["abc", 1790000000000],
+      "expected": null
+    },
+    {
+      "id": "parseAddDate: 零回落 null",
+      "kind": "parseAddDate",
+      "args": ["0", 1790000000000],
+      "expected": null
+    },
+    {
+      "id": "parseAddDate: 负值回落 null",
+      "kind": "parseAddDate",
+      "args": ["-5", 1790000000000],
+      "expected": null
+    },
+    {
+      "id": "parseAddDate: 含非数字字符回落 null",
+      "kind": "parseAddDate",
+      "args": ["12a4", 1790000000000],
+      "expected": null
+    },
+    {
+      "id": "parseAddDate: 超过 16 位回落 null",
+      "kind": "parseAddDate",
+      "args": ["99999999999999999", 1790000000000],
+      "expected": null
+    },
+    {
+      "id": "parseAddDate: 未来超过一天被拒（秒）",
+      "kind": "parseAddDate",
+      "args": ["1700086401", 1700000000000],
+      "expected": null
+    },
+    {
+      "id": "parseAddDate: 未来超过一天被拒（秒，公元 2096）",
+      "kind": "parseAddDate",
+      "args": ["4000000000", 1790000000000],
+      "expected": null
+    },
+    {
+      "id": "parseAddDate: 未来超过一天被拒（毫秒，公元 2286）",
+      "kind": "parseAddDate",
+      "args": ["9999999999999", 1790000000000],
+      "expected": null
+    },
+
+    {
+      "id": "sanitize: 非 http(s) scheme 一律拒收",
+      "kind": "sanitize",
+      "args": [
+        "<DT><A HREF=\"javascript:alert(1)\">脚本</A>\n<DT><A HREF=\"file:///sdcard/x\">本地文件</A>\n<DT><A HREF=\"about:blank\">内部页</A>\n<DT><A HREF=\"https://ok.cn/\">好的</A>",
+        []
+      ],
+      "expected": {
+        "kept": [{ "url": "https://ok.cn/", "title": "好的" }],
+        "skipped": 3
+      }
+    },
+    {
+      "id": "sanitize: 与已有书签及批内自身去重",
+      "kind": "sanitize",
+      "args": [
+        "<DT><A HREF=\"https://a.cn/\">已有</A>\n<DT><A HREF=\"https://a.cn/\">批内重复</A>\n<DT><A HREF=\"https://b.cn/\">新的</A>",
+        ["https://a.cn/"]
+      ],
+      "expected": {
+        "kept": [{ "url": "https://b.cn/", "title": "新的" }],
+        "skipped": 2
+      }
+    },
+    {
+      "id": "sanitize: 批内重复（URL 带空白）也算重复",
+      "kind": "sanitize",
+      "args": [
+        "<DT><A HREF=\"https://a.example/\">一</A>\n<DT><A HREF=\"  https://a.example/  \">一</A>",
+        []
+      ],
+      "expected": {
+        "kept": [{ "url": "https://a.example/", "title": "一" }],
+        "skipped": 1
+      }
+    },
+    {
+      "id": "sanitize: 已有 URL 带空白时不判为重复（既有口径，两侧同）",
+      "kind": "sanitize",
+      "args": [
+        "<DT><A HREF=\"https://a.cn/\">已有</A>",
+        [" https://a.cn/ "]
+      ],
+      "expected": {
+        "kept": [{ "url": "https://a.cn/", "title": "已有" }],
+        "skipped": 0
+      }
+    },
+
+    {
+      "id": "export: 标准 Netscape 格式（转义 + 空白标题回落 URL）",
+      "kind": "export",
+      "args": [
+        [
+          { "url": "https://example.com/?a=1&b=2", "title": "示例 & <站点>", "createdAt": 1700000000123 },
+          { "url": "https://blank.example/", "title": "  ", "createdAt": 1700000001000 }
+        ]
+      ],
+      "expected": "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file. It will be read and overwritten. DO NOT EDIT! -->\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n<DT><A HREF=\"https://example.com/?a=1&amp;b=2\" ADD_DATE=\"1700000000\">示例 &amp; &lt;站点&gt;</A>\n<DT><A HREF=\"https://blank.example/\" ADD_DATE=\"1700000001\">https://blank.example/</A>\n</DL><p>\n"
+    },
+    {
+      "id": "export: 标题里的双引号被转义",
+      "kind": "export",
+      "args": [
+        [{ "url": "https://q.example/", "title": "say \"hi\"", "createdAt": 1700000000000 }]
+      ],
+      "expected": "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file. It will be read and overwritten. DO NOT EDIT! -->\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n<DT><A HREF=\"https://q.example/\" ADD_DATE=\"1700000000\">say &quot;hi&quot;</A>\n</DL><p>\n"
+    },
+    {
+      "id": "export: 空列表导出为空骨架",
+      "kind": "export",
+      "args": [[]],
+      "expected": "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file. It will be read and overwritten. DO NOT EDIT! -->\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n</DL><p>\n"
+    },
+
+    {
+      "id": "isHttpUrl: http 放行",
+      "kind": "isHttpUrl",
+      "args": ["http://a.com"],
+      "expected": true
+    },
+    {
+      "id": "isHttpUrl: scheme 大小写不敏感",
+      "kind": "isHttpUrl",
+      "args": ["HTTPS://a.com"],
+      "expected": true
+    },
+    {
+      "id": "isHttpUrl: scheme 后无内容也放行",
+      "kind": "isHttpUrl",
+      "args": ["https://"],
+      "expected": true
+    },
+    {
+      "id": "isHttpUrl: about: 拒收",
+      "kind": "isHttpUrl",
+      "args": ["about:blank"],
+      "expected": false
+    },
+    {
+      "id": "isHttpUrl: javascript: 拒收",
+      "kind": "isHttpUrl",
+      "args": ["javascript:alert(1)"],
+      "expected": false
+    },
+    {
+      "id": "isHttpUrl: file: 拒收",
+      "kind": "isHttpUrl",
+      "args": ["file:///x"],
+      "expected": false
+    },
+    {
+      "id": "isHttpUrl: ftp: 拒收",
+      "kind": "isHttpUrl",
+      "args": ["ftp://x"],
+      "expected": false
+    },
+    {
+      "id": "isHttpUrl: moz-extension: 拒收",
+      "kind": "isHttpUrl",
+      "args": ["moz-extension://abc/x"],
+      "expected": false
+    },
+    {
+      "id": "isHttpUrl: 无 scheme 拒收",
+      "kind": "isHttpUrl",
+      "args": ["//x"],
+      "expected": false
+    },
+    {
+      "id": "isHttpUrl: 相对路径拒收",
+      "kind": "isHttpUrl",
+      "args": ["a.cn/"],
+      "expected": false
+    },
+    {
+      "id": "isHttpUrl: 空 scheme（冒号在最前）拒收",
+      "kind": "isHttpUrl",
+      "args": [":x"],
+      "expected": false
+    },
+    {
+      "id": "isHttpUrl: 空串拒收",
+      "kind": "isHttpUrl",
+      "args": [""],
+      "expected": false
+    }
+  ]
+}
