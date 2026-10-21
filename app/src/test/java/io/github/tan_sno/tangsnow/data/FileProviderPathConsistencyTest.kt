@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -30,7 +31,7 @@ class FileProviderPathConsistencyTest {
 
     @Test
     fun `代码里的外部私有目录落点都被 file_paths_xml 覆盖`() {
-        val xml = File(repoRoot(), "app/src/main/res/xml/file_paths.xml").readText()
+        val xml = File(TestPaths.repoRoot(), "app/src/main/res/xml/file_paths.xml").readText()
         // ⚠️ 只认**外部**类标签，且要容忍属性顺序与换行 —— xml 里实际写的是
         //    `<external-files-path\n  name="ext_downloads"\n  path="Download/" />`，
         //    所以不能假设 `path` 紧跟标签名（第一版这么写，被下方"没解析出任何 path"的自检当场抓出）。
@@ -47,7 +48,7 @@ class FileProviderPathConsistencyTest {
         val call = Regex(
             """getExternalFilesDir\(\s*(?:android\.os\.)?Environment\.DIRECTORY_([A-Z_]+)\s*\)"""
         )
-        val javaDir = File(repoRoot(), "app/src/main/java")
+        val javaDir = File(TestPaths.repoRoot(), "app/src/main/java")
         for (f in javaDir.walkTopDown().filter { it.isFile && it.extension == "kt" }) {
             // 按整篇匹配而非逐行：真实调用有跨行写法（参数另起一行）
             val text = f.readText()
@@ -86,13 +87,4 @@ class FileProviderPathConsistencyTest {
         )
     }
 
-    /** 工作目录在本地与 CI 上可能不同（模块目录 / 仓库根），以 `settings.gradle.kts` 为标记向上找 */
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 }

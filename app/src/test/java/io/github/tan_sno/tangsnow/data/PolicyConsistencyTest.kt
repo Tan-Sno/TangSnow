@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import io.github.tan_sno.tangsnow.update.UpdateChecker
 import io.github.tan_sno.tangsnow.util.CrashLogger
 import io.github.tan_sno.tangsnow.util.LegalText
@@ -39,25 +40,10 @@ class PolicyConsistencyTest {
 
     // ------------------------------------------------------------------ 基础设施
 
-    /**
-     * 定位仓库根。工作目录在本地与 CI 上可能不同（模块目录 / 仓库根），
-     * 故以 `settings.gradle.kts` 为标记向上查找，两种情形都能命中。
-     */
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError(
-            "定位不到仓库根（没找到 settings.gradle.kts）。当前目录：" +
-                File(".").absolutePath
-        )
-    }
 
     /** 取某语言的隐私政策正文（`strings.xml` 里被 `\n` 转义成一行的那个字符串）。 */
     private fun policyText(localeDir: String): String {
-        val f = File(repoRoot(), "app/src/main/res/$localeDir/strings.xml")
+        val f = File(TestPaths.repoRoot(), "app/src/main/res/$localeDir/strings.xml")
         assertTrue("找不到 $localeDir/strings.xml：${f.absolutePath}", f.isFile)
         val xml = f.readText()
         val m = Regex("""<string name="privacy_policy_text">(.*?)</string>""", RegexOption.DOT_MATCHES_ALL)
@@ -122,7 +108,7 @@ class PolicyConsistencyTest {
 
     @Test
     fun `应用声明的每一项权限都在政策里被提及`() {
-        val manifest = File(repoRoot(), "app/src/main/AndroidManifest.xml")
+        val manifest = File(TestPaths.repoRoot(), "app/src/main/AndroidManifest.xml")
         assertTrue("找不到 AndroidManifest.xml", manifest.isFile)
         val declared = Regex("""<uses-permission\s+android:name="([^"]+)"""")
             .findAll(manifest.readText())
@@ -154,7 +140,7 @@ class PolicyConsistencyTest {
         val hosts = hostsInPolicyNetworkSection()
         assertTrue("政策第 4 条里没解析出任何主机名，正则可能失效了", hosts.isNotEmpty())
 
-        val readme = File(repoRoot(), "README.md").readText()
+        val readme = File(TestPaths.repoRoot(), "README.md").readText()
         for (h in hosts) {
             assertTrue(
                 "政策第 4 条披露了外部地址「$h」，但 README 的隐私说明里没有它。\n" +
@@ -209,7 +195,7 @@ class PolicyConsistencyTest {
     @Test
     fun `崩溃日志写入的字段集合与预期一致`() {
         val src = File(
-            repoRoot(),
+            TestPaths.repoRoot(),
             "app/src/main/java/io/github/tan_sno/tangsnow/util/CrashLogger.kt",
         )
         assertTrue("找不到 CrashLogger.kt", src.isFile)

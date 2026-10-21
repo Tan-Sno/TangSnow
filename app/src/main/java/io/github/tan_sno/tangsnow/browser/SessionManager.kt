@@ -1072,370 +1072,411 @@ class BrowserSessionManager private constructor(
             override fun onAlertPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.AlertPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onAlert(prompt.title, prompt.message) {
-                        // AlertPrompt 无公开 confirm()，看完后一律 dismiss 应答
-                        settleResult(result, prompt.dismiss())
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleAlertPrompt(tab, prompt)
 
             override fun onButtonPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.ButtonPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onConfirm(prompt.title, prompt.message) { ok ->
-                        settleResult(result, 
-                            if (ok) prompt.confirm(GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE)
-                            else prompt.dismiss()
-                        )
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleButtonPrompt(tab, prompt)
 
             override fun onTextPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.TextPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onTextPrompt(prompt.title, prompt.message, prompt.defaultValue.orEmpty()) { text ->
-                        settleResult(result, if (text == null) prompt.dismiss() else prompt.confirm(text))
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleTextPrompt(tab, prompt)
 
             override fun onChoicePrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.ChoicePrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                val choices = prompt.choices
-                val multiple = prompt.type == GeckoSession.PromptDelegate.ChoicePrompt.Type.MULTIPLE
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onChoice(
-                        prompt.title,
-                        multiple,
-                        choices.map { Triple(it.id.orEmpty(), it.label.orEmpty(), it.selected) },
-                    ) { picked ->
-                        when {
-                            picked == null -> settleResult(result, prompt.dismiss())
-                            multiple -> settleResult(result, 
-                                prompt.confirm(picked.toTypedArray())
-                            )
-                            else -> settleResult(result, prompt.confirm(picked.firstOrNull().orEmpty()))
-                        }
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleChoicePrompt(tab, prompt)
 
             override fun onFilePrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.FilePrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                val multiple = prompt.type != GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onFilePrompt(prompt.mimeTypes ?: emptyArray(), multiple) { uris ->
-                        when {
-                            uris == null -> settleResult(result, prompt.dismiss())
-                            multiple -> settleResult(result, 
-                                prompt.confirm(appContext, uris.toTypedArray())
-                            )
-                            else -> settleResult(result, 
-                                uris.firstOrNull()?.let { prompt.confirm(appContext, it) }
-                                    ?: prompt.dismiss()
-                            )
-                        }
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleFilePrompt(tab, prompt)
 
             override fun onAuthPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.AuthPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onAuthPrompt(prompt.title, prompt.message) { cred ->
-                        settleResult(result, 
-                            if (cred == null) prompt.dismiss()
-                            else prompt.confirm(cred.first, cred.second)
-                        )
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleAuthPrompt(tab, prompt)
 
             override fun onBeforeUnloadPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.confirm(AllowOrDeny.DENY))
-                    else h.onBeforeUnload(prompt.title) { leave ->
-                        settleResult(result, 
-                            prompt.confirm(if (leave) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
-                        )
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleBeforeUnloadPrompt(tab, prompt)
 
             override fun onColorPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.ColorPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onColorPrompt(prompt.defaultValue.orEmpty()) { value ->
-                        // ColorPrompt.confirm(String) 无 type 参数：色值字符串即为内核所需全部信息
-                        settleResult(result, if (value == null) prompt.dismiss() else prompt.confirm(value))
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleColorPrompt(tab, prompt)
 
             override fun onDateTimePrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.DateTimePrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                // type 是 int 常量，提前取出避免 lambda 内二次引用 prompt
-                val type = prompt.type
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onDateTimePrompt(
-                        type,
-                        prompt.defaultValue.orEmpty(),
-                        prompt.minValue,
-                        prompt.maxValue,
-                    ) { value ->
-                        // DateTimePrompt.confirm(String) 只收格式化串；type 仅供界面决定控件
-                        settleResult(result, if (value == null) prompt.dismiss() else prompt.confirm(value))
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleDateTimePrompt(tab, prompt)
 
             override fun onPopupPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.PopupPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                // 本标签已被用户选过「阻止并不再询问」：静默拒绝，不建窗、不问。
-                // 没有这条，页面循环 window.open 依旧能刷出一摞对话框（用户只能逐个点）。
-                if (tab.popupDenyAlways) {
-                    return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.DENY))
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onPopupPrompt(prompt.targetUri.orEmpty()) { answer ->
-                        if (answer == PopupAnswer.DENY_ALWAYS) tab.popupDenyAlways = true
-                        // 三态：允许=ALLOW，阻止/DENY_ALWAYS=DENY（后者已由 Tab 记住）
-                        settleResult(result,
-                            when (answer) {
-                                PopupAnswer.ALLOW -> prompt.confirm(AllowOrDeny.ALLOW)
-                                PopupAnswer.DENY, PopupAnswer.DENY_ALWAYS ->
-                                    prompt.confirm(AllowOrDeny.DENY)
-                            }
-                        )
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handlePopupPrompt(tab, prompt)
 
             override fun onRepostConfirmPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.RepostConfirmPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onRepostConfirmPrompt { ok ->
-                        // 内核 confirm 只收 AllowOrDeny（无空参重载）：确认=ALLOW，取消=dismiss
-                        settleResult(result, if (ok) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleRepostConfirmPrompt(tab, prompt)
 
             override fun onRedirectPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.RedirectPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onRedirectPrompt(prompt.targetUri.orEmpty()) { ok ->
-                        settleResult(result, if (ok) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleRedirectPrompt(tab, prompt)
 
             override fun onSharePrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.SharePrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onSharePrompt(prompt.text.orEmpty(), prompt.uri.orEmpty()) {
-                        // SharePrompt.confirm(int) 无「用户拒绝」语义：唤起系统选择器后即确认成功
-                        settleResult(result, 
-                            prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.SUCCESS)
-                        )
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleSharePrompt(tab, prompt)
 
             override fun onFolderUploadPrompt(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.FolderUploadPrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-                // 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
-                //（isAlive 拦死标签迟到回调；active 拦后台标签 setInterval 型无节流弹窗）。
-                // ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 post{} 里才创建，故那里用 promptStale 复查。
-                if (!isAlive(tab) || tab !== active) {
-                    return GeckoResult.fromValue(prompt.dismiss())
-                }
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                post {
-                    if (promptStale(tab, result, prompt)) return@post
-                    val h = promptHandler
-                    if (h == null) settleResult(result, prompt.dismiss())
-                    else h.onFolderUploadPrompt { picked ->
-                        // FolderUploadPrompt.confirm(AllowOrDeny) 无 confirm(Uri) 重载：选目录即确认允许
-                        settleResult(result, if (picked == true) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
-                    }
-                }
-                return result
-            }
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = handleFolderUploadPrompt(tab, prompt)
         }
     }
+
+    // --------------------------------------------------------- 弹窗处理（各类型的具体逻辑见下面的 handle* 方法）
+
+    /**
+     * 模态弹窗此刻是否可以打扰用户。
+     *
+     * 后台/已关标签的模态弹窗一律自动 dismiss：不抢用户焦点
+     * （`isAlive` 拦死标签迟到回调；`active` 拦后台标签 setInterval 型无节流弹窗）。
+     *
+     * ⚠️ 这里只是**投递瞬间**的判定：对话框在下方 `post {}` 里才创建，故那里用 [promptStale] 复查。
+     */
+    private fun promptMayInterrupt(tab: Tab): Boolean = isAlive(tab) && tab === active
+
+    /** AlertPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleAlertPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.AlertPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onAlert(prompt.title, prompt.message) {
+                // AlertPrompt 无公开 confirm()，看完后一律 dismiss 应答
+                settleResult(result, prompt.dismiss())
+            }
+        }
+        return result
+    
+    }
+
+    /** ButtonPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleButtonPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.ButtonPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onConfirm(prompt.title, prompt.message) { ok ->
+                settleResult(result, 
+                    if (ok) prompt.confirm(GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE)
+                    else prompt.dismiss()
+                )
+            }
+        }
+        return result
+    
+    }
+
+    /** TextPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleTextPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.TextPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onTextPrompt(prompt.title, prompt.message, prompt.defaultValue.orEmpty()) { text ->
+                settleResult(result, if (text == null) prompt.dismiss() else prompt.confirm(text))
+            }
+        }
+        return result
+    
+    }
+
+    /** ChoicePrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleChoicePrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.ChoicePrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        val choices = prompt.choices
+        val multiple = prompt.type == GeckoSession.PromptDelegate.ChoicePrompt.Type.MULTIPLE
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onChoice(
+                prompt.title,
+                multiple,
+                choices.map { Triple(it.id.orEmpty(), it.label.orEmpty(), it.selected) },
+            ) { picked ->
+                when {
+                    picked == null -> settleResult(result, prompt.dismiss())
+                    multiple -> settleResult(result, 
+                        prompt.confirm(picked.toTypedArray())
+                    )
+                    else -> settleResult(result, prompt.confirm(picked.firstOrNull().orEmpty()))
+                }
+            }
+        }
+        return result
+    
+    }
+
+    /** FilePrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleFilePrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.FilePrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        val multiple = prompt.type != GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onFilePrompt(prompt.mimeTypes ?: emptyArray(), multiple) { uris ->
+                when {
+                    uris == null -> settleResult(result, prompt.dismiss())
+                    multiple -> settleResult(result, 
+                        prompt.confirm(appContext, uris.toTypedArray())
+                    )
+                    else -> settleResult(result, 
+                        uris.firstOrNull()?.let { prompt.confirm(appContext, it) }
+                            ?: prompt.dismiss()
+                    )
+                }
+            }
+        }
+        return result
+    
+    }
+
+    /** AuthPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleAuthPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.AuthPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onAuthPrompt(prompt.title, prompt.message) { cred ->
+                settleResult(result, 
+                    if (cred == null) prompt.dismiss()
+                    else prompt.confirm(cred.first, cred.second)
+                )
+            }
+        }
+        return result
+    
+    }
+
+    /** BeforeUnloadPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleBeforeUnloadPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.confirm(AllowOrDeny.DENY))
+            else h.onBeforeUnload(prompt.title) { leave ->
+                settleResult(result, 
+                    prompt.confirm(if (leave) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+                )
+            }
+        }
+        return result
+    
+    }
+
+    /** ColorPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleColorPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.ColorPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onColorPrompt(prompt.defaultValue.orEmpty()) { value ->
+                // ColorPrompt.confirm(String) 无 type 参数：色值字符串即为内核所需全部信息
+                settleResult(result, if (value == null) prompt.dismiss() else prompt.confirm(value))
+            }
+        }
+        return result
+    
+    }
+
+    /** DateTimePrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleDateTimePrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.DateTimePrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        // type 是 int 常量，提前取出避免 lambda 内二次引用 prompt
+        val type = prompt.type
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onDateTimePrompt(
+                type,
+                prompt.defaultValue.orEmpty(),
+                prompt.minValue,
+                prompt.maxValue,
+            ) { value ->
+                // DateTimePrompt.confirm(String) 只收格式化串；type 仅供界面决定控件
+                settleResult(result, if (value == null) prompt.dismiss() else prompt.confirm(value))
+            }
+        }
+        return result
+    
+    }
+
+    /** PopupPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handlePopupPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.PopupPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        // 本标签已被用户选过「阻止并不再询问」：静默拒绝，不建窗、不问。
+        // 没有这条，页面循环 window.open 依旧能刷出一摞对话框（用户只能逐个点）。
+        if (tab.popupDenyAlways) {
+            return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.DENY))
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onPopupPrompt(prompt.targetUri.orEmpty()) { answer ->
+                if (answer == PopupAnswer.DENY_ALWAYS) tab.popupDenyAlways = true
+                // 三态：允许=ALLOW，阻止/DENY_ALWAYS=DENY（后者已由 Tab 记住）
+                settleResult(result,
+                    when (answer) {
+                        PopupAnswer.ALLOW -> prompt.confirm(AllowOrDeny.ALLOW)
+                        PopupAnswer.DENY, PopupAnswer.DENY_ALWAYS ->
+                            prompt.confirm(AllowOrDeny.DENY)
+                    }
+                )
+            }
+        }
+        return result
+    
+    }
+
+    /** RepostConfirmPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleRepostConfirmPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.RepostConfirmPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onRepostConfirmPrompt { ok ->
+                // 内核 confirm 只收 AllowOrDeny（无空参重载）：确认=ALLOW，取消=dismiss
+                settleResult(result, if (ok) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
+            }
+        }
+        return result
+    
+    }
+
+    /** RedirectPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleRedirectPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.RedirectPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onRedirectPrompt(prompt.targetUri.orEmpty()) { ok ->
+                settleResult(result, if (ok) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
+            }
+        }
+        return result
+    
+    }
+
+    /** SharePrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleSharePrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.SharePrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onSharePrompt(prompt.text.orEmpty(), prompt.uri.orEmpty()) {
+                // SharePrompt.confirm(int) 无「用户拒绝」语义：唤起系统选择器后即确认成功
+                settleResult(result, 
+                    prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.SUCCESS)
+                )
+            }
+        }
+        return result
+    
+    }
+
+    /** FolderUploadPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
+    private fun handleFolderUploadPrompt(tab: Tab, prompt: GeckoSession.PromptDelegate.FolderUploadPrompt):
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        if (!promptMayInterrupt(tab)) {
+            return GeckoResult.fromValue(prompt.dismiss())
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        post {
+            if (promptStale(tab, result, prompt)) return@post
+            val h = promptHandler
+            if (h == null) settleResult(result, prompt.dismiss())
+            else h.onFolderUploadPrompt { picked ->
+                // FolderUploadPrompt.confirm(AllowOrDeny) 无 confirm(Uri) 重载：选目录即确认允许
+                settleResult(result, if (picked == true) prompt.confirm(AllowOrDeny.ALLOW) else prompt.dismiss())
+            }
+        }
+        return result
+    
+    }
+
 
     // --------------------------------------------------------- 站点权限（A3）
 

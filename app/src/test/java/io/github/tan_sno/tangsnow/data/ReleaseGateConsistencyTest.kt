@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,8 +25,8 @@ import java.io.File
  */
 class ReleaseGateConsistencyTest {
 
-    private val buildText: String by lazy { File(repoRoot(), "app/build.gradle.kts").readText() }
-    private val gateText: String by lazy { File(repoRoot(), "tools/verify_release.py").readText() }
+    private val buildText: String by lazy { File(TestPaths.repoRoot(), "app/build.gradle.kts").readText() }
+    private val gateText: String by lazy { File(TestPaths.repoRoot(), "tools/verify_release.py").readText() }
 
     /**
      * 「这个用例真的会判定」的粗判标记（Rust 侧）。
@@ -97,7 +98,7 @@ class ReleaseGateConsistencyTest {
 
     @Test
     fun `第 ⑩ 项依赖的 padding 检查脚本存在且真被门禁调用`() {
-        val script = File(repoRoot(), "tools/check_zip_padding.py")
+        val script = File(TestPaths.repoRoot(), "tools/check_zip_padding.py")
         assertTrue(
             "tools/check_zip_padding.py 不见了，但 verify_release.py 第 ⑩ 项依赖它（缺文件必须红，" +
                 "不能让 -113 那道门静默消失）",
@@ -144,7 +145,7 @@ class ReleaseGateConsistencyTest {
     @Test
     fun `随包 so 只有一份真相`() {
         val abis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
-        val flavor = abis.map { File(repoRoot(), "app/src/coreRust/jniLibs/$it/libtangsnow_core.so") }
+        val flavor = abis.map { File(TestPaths.repoRoot(), "app/src/coreRust/jniLibs/$it/libtangsnow_core.so") }
         val missing = flavor.filter { !it.isFile || it.length() == 0L }
         assertTrue(
             "coreRust flavor 的 `.so` 缺失或为空 ⇒ 这个 flavor 打出来的包里没有 Rust 内核" +
@@ -153,7 +154,7 @@ class ReleaseGateConsistencyTest {
             missing.isEmpty(),
         )
 
-        val ignore = File(repoRoot(), "tangsnow-rs/.gitignore").readText()
+        val ignore = File(TestPaths.repoRoot(), "tangsnow-rs/.gitignore").readText()
         assertTrue(
             "tangsnow-rs/.gitignore 里缺 `/dist/jniLibs/` 这条 —— 那样 `tools/build-android.sh` 的产物" +
                 "会再次被提交，仓里就又有了第二份 `.so`（本测试与 gitignore 是同一件事的两道闸）",
@@ -163,8 +164,8 @@ class ReleaseGateConsistencyTest {
         // 落点目录里若还有文件（本机重编过），必须与 flavor 那份逐字节相同：
         // 不一致只有两种正解 —— 把新的拷进 flavor，或把落点清掉。两种都得人做一次决定，别让它并存。
         val drift = abis.mapNotNull { abi ->
-            val out = File(repoRoot(), "tangsnow-rs/dist/jniLibs/$abi/libtangsnow_core.so")
-            val ship = File(repoRoot(), "app/src/coreRust/jniLibs/$abi/libtangsnow_core.so")
+            val out = File(TestPaths.repoRoot(), "tangsnow-rs/dist/jniLibs/$abi/libtangsnow_core.so")
+            val ship = File(TestPaths.repoRoot(), "app/src/coreRust/jniLibs/$abi/libtangsnow_core.so")
             when {
                 !out.isFile -> null
                 sha256(out) == sha256(ship) -> null
@@ -190,7 +191,7 @@ class ReleaseGateConsistencyTest {
                 "flavor 的约定目录已经取代它",
             "tangsnow-rs/bridge/CoreNative.kt" to
                 "那份 101 行设计稿与在用的防护网桥不是一份东西，照它拷会把正式实现覆盖掉（外部审查 L4）",
-        ).map { (path, why) -> File(repoRoot(), path) to why }.filter { (f, _) -> f.exists() }
+        ).map { (path, why) -> File(TestPaths.repoRoot(), path) to why }.filter { (f, _) -> f.exists() }
         assertTrue(
             "这些 pre-flavor 残件又出现在仓库里了。要查它们改过什么，去 " +
                 "git 历史，不要放回构建可见的路径：\n" +
@@ -219,7 +220,7 @@ class ReleaseGateConsistencyTest {
      */
     @Test
     fun `重编 so 的脚本仍带着宿主探测 16K 对齐与 profile 拷贝这三处修复`() {
-        val script = File(repoRoot(), "tangsnow-rs/tools/build-android.sh")
+        val script = File(TestPaths.repoRoot(), "tangsnow-rs/tools/build-android.sh")
         assertTrue(
             "tangsnow-rs/tools/build-android.sh 不见了 ⇒ 仓库里再也没有能重建随包 `.so` 的入口" +
                 "（三 ABI 的链接器与 16K 对齐参数只写在这一个脚本里）",
@@ -326,7 +327,7 @@ class ReleaseGateConsistencyTest {
         // README 自己写着「Rust 侧计数没有像 Kotlin 那样被 `TestCountCommentTest` 钉住」⇒ 这里把它钉上。
         // 顺带拦住一类具体事故：新增 `tests/*.rs` 却忘了 `git add` ⇒ 检出树里少一批用例而 README 仍写旧数
         // （`regression_2026_10_17.rs` 此刻正是**未跟踪**状态，靠人提醒不算数）。
-        val rsRoot = File(repoRoot(), "tangsnow-rs")
+        val rsRoot = File(TestPaths.repoRoot(), "tangsnow-rs")
         val readme = File(rsRoot, "README.md").readText()
         val m = Regex("`cargo test` \\*\\*(\\d+)/(\\d+) 通过\\*\\*").find(readme)
             ?: error("tangsnow-rs/README.md 里找不到「`cargo test` **N/N 通过**」那句（改了写法就同步改本测试）")
@@ -374,7 +375,7 @@ class ReleaseGateConsistencyTest {
      */
     @Test
     fun `每个用例都真的有断言`() {
-        val rsRoot = File(repoRoot(), "tangsnow-rs")
+        val rsRoot = File(TestPaths.repoRoot(), "tangsnow-rs")
         val offenders = mutableListOf<String>()
         var total = 0
         rsRoot.walkTopDown()
@@ -385,7 +386,7 @@ class ReleaseGateConsistencyTest {
                 total += bodies.size
                 bodies.forEachIndexed { i, body ->
                     if (ASSERT_MARKERS.none { body.contains(it) }) {
-                        offenders += "${f.relativeTo(repoRoot()).path}：第 ${i + 1} 个 #[test] 只有打印、没有断言"
+                        offenders += "${f.relativeTo(TestPaths.repoRoot()).path}：第 ${i + 1} 个 #[test] 只有打印、没有断言"
                     }
                 }
             }
@@ -476,7 +477,7 @@ class ReleaseGateConsistencyTest {
         val offenders = mutableListOf<String>()
         var gradlewLines = 0
         for (rel in scanned) {
-            val root = File(repoRoot(), rel)
+            val root = File(TestPaths.repoRoot(), rel)
             val files = when {
                 root.isDirectory -> root.walkTopDown()
                     .filter { it.isFile && it.extension.lowercase() in setOf("md", "yml", "yaml") }.toList()
@@ -491,7 +492,7 @@ class ReleaseGateConsistencyTest {
                     if (!line.contains("./gradlew")) return@forEachIndexed
                     gradlewLines++
                     bare.find(line)?.let {
-                        offenders += "  ${file.relativeTo(repoRoot())}:${index + 1} 「${it.value}」不带 flavor"
+                        offenders += "  ${file.relativeTo(TestPaths.repoRoot())}:${index + 1} 「${it.value}」不带 flavor"
                     }
                 }
             }
@@ -516,13 +517,4 @@ class ReleaseGateConsistencyTest {
             m.groupValues[1] to m.groupValues[2].toInt()
         }.also { assertTrue("ABI 表解析结果为空（形状不符）", it.isNotEmpty()) }
 
-    /** 工作目录可能是模块目录也可能是仓库根，故向上找 `settings.gradle.kts`。 */
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 }

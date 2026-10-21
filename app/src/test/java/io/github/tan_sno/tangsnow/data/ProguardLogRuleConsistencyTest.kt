@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,18 +35,9 @@ import java.io.File
  */
 class ProguardLogRuleConsistencyTest {
 
-    /** 定位仓库根：以 `settings.gradle.kts` 为标记向上查找（工作目录可能是模块目录）。 */
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 
     private fun proguardText(): String {
-        val f = File(repoRoot(), "app/proguard-rules.pro")
+        val f = File(TestPaths.repoRoot(), "app/proguard-rules.pro")
         assertTrue("找不到 proguard-rules.pro：${f.absolutePath}", f.isFile)
         return f.readText()
     }
@@ -68,7 +60,7 @@ class ProguardLogRuleConsistencyTest {
      *  而 proguard 的剥离规则对两个 flavor 是同一条。 */
     private fun releaseCallSites(
         level: String,
-        sourceRoot: File = File(repoRoot(), "app/src/main/java"),
+        sourceRoot: File = File(TestPaths.repoRoot(), "app/src/main/java"),
     ): List<String> {
         assertTrue("找不到源码目录：${sourceRoot.absolutePath}", sourceRoot.isDirectory)
         val needle = "Log.$level("
@@ -96,7 +88,7 @@ class ProguardLogRuleConsistencyTest {
 
     /** BuildConfig.DEBUG 门内的调用点（与 [releaseCallSites] 互补；判定口径完全一致） */
     private fun guardedCallSites(level: String): List<String> {
-        val sourceRoot = File(repoRoot(), "app/src/main/java")
+        val sourceRoot = File(TestPaths.repoRoot(), "app/src/main/java")
         assertTrue("找不到主源码目录：${sourceRoot.absolutePath}", sourceRoot.isDirectory)
         val needle = "Log.$level("
         return sourceRoot.walkTopDown()
@@ -152,7 +144,7 @@ class ProguardLogRuleConsistencyTest {
                     "那句是 **coreRust 包**里日志保留量的唯一书面依据 —— 上面那些 ×5 / ×4 只扫 " +
                     "app/src/main/java，看不到 flavor 源集。改了措辞就同步改本测试的正则。",
             )
-        val flavorRoot = File(repoRoot(), "app/src/coreRust/java")
+        val flavorRoot = File(TestPaths.repoRoot(), "app/src/coreRust/java")
         if (!flavorRoot.isDirectory) {
             throw AssertionError(
                 "app/src/coreRust/java 不在了，但 proguard 注释仍写着 coreRust 的另计数字 —— " +

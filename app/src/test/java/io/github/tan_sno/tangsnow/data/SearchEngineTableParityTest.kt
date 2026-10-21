@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,13 +27,13 @@ import java.io.File
 class SearchEngineTableParityTest {
 
     private val kotlinText: String by lazy {
-        val f = File(repoRoot(), "app/src/main/java/io/github/tan_sno/tangsnow/data/SearchEngines.kt")
+        val f = File(TestPaths.repoRoot(), "app/src/main/java/io/github/tan_sno/tangsnow/data/SearchEngines.kt")
         assertTrue("找不到 Kotlin 引擎表：${f.absolutePath}", f.isFile)
         f.readText()
     }
 
     private val rustText: String by lazy {
-        val f = File(repoRoot(), "tangsnow-rs/tangsnow-core/src/search_engines.rs")
+        val f = File(TestPaths.repoRoot(), "tangsnow-rs/tangsnow-core/src/search_engines.rs")
         assertTrue("找不到 Rust 引擎表：${f.absolutePath}", f.isFile)
         f.readText()
     }
@@ -147,12 +148,4 @@ class SearchEngineTableParityTest {
     private fun constOf(regex: Regex, text: String, miss: String): String =
         (regex.find(text) ?: throw AssertionError(miss)).groupValues[1]
 
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 }

@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -38,16 +39,16 @@ class LegalDocsSyncTest {
         "user_agreement_text" to "docs/TERMS.md",
     )
 
-    private val zhStrings: String by lazy { read("app/src/main/res/values/strings.xml") }
-    private val enStrings: String by lazy { read("app/src/main/res/values-en/strings.xml") }
+    private val zhStrings: String by lazy { TestPaths.read("app/src/main/res/values/strings.xml") }
+    private val enStrings: String by lazy { TestPaths.read("app/src/main/res/values-en/strings.xml") }
     private val legalDocs: String by lazy {
-        read("app/src/main/java/io/github/tan_sno/tangsnow/data/LegalDocs.kt")
+        TestPaths.read("app/src/main/java/io/github/tan_sno/tangsnow/data/LegalDocs.kt")
     }
 
     @Test
     fun `导出文档包含应用内的中英文原文`() {
         for ((key, rel) in docs) {
-            val doc = read(rel)
+            val doc = TestPaths.read(rel)
             assertTrue(
                 "$rel 里没有应用内的**中文**原文（改了 strings.xml 忘了重导出？）",
                 doc.contains(extract(zhStrings, key)),
@@ -66,7 +67,7 @@ class LegalDocsSyncTest {
         for ((_, rel) in docs) {
             assertTrue(
                 "$rel 里没有当前政策版本 POLICY_VERSION = $version（改了版本号忘了重导出？）",
-                read(rel).contains("POLICY_VERSION = $version"),
+                TestPaths.read(rel).contains("POLICY_VERSION = $version"),
             )
         }
     }
@@ -77,19 +78,12 @@ class LegalDocsSyncTest {
             val date = firstLineDate(extract(zhStrings, key))
             assertTrue(
                 "$rel 的「最后更新」与文案首行的日期不一致（期望「$date」）",
-                read(rel).contains("最后更新 / Last updated：$date"),
+                TestPaths.read(rel).contains("最后更新 / Last updated：$date"),
             )
         }
     }
 
     // ------------------------------------------------------------------ 取值
-
-    /** 读文件并**归一化换行**：仓库存 LF，但 Windows 上跑导出脚本会落 CRLF（`.gitattributes` 的 eol=lf 只管仓库） */
-    private fun read(name: String): String {
-        val f = File(repoRoot(), name)
-        assertTrue("找不到文件：$name", f.isFile)
-        return f.readText().replace("\r\n", "\n")
-    }
 
     /** 与 `tools/export_legal_docs.py` 的 `extract` 同一口径 */
     private fun extract(text: String, key: String): String {
@@ -122,13 +116,4 @@ class LegalDocsSyncTest {
         return "（见正文）"
     }
 
-    /** 工作目录可能是模块目录也可能是仓库根，故向上找 `settings.gradle.kts` */
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 }

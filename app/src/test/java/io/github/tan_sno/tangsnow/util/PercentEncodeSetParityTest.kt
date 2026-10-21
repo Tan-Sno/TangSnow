@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.util
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -31,13 +32,13 @@ import java.io.File
  */
 class PercentEncodeSetParityTest {
 
-    private val urlUtils: String by lazy { read("app/src/main/java/io/github/tan_sno/tangsnow/util/UrlUtils.kt") }
+    private val urlUtils: String by lazy { TestPaths.read("app/src/main/java/io/github/tan_sno/tangsnow/util/UrlUtils.kt") }
 
     private val coreNative: String by lazy {
-        read("app/src/coreRust/java/io/github/tan_sno/tangsnow/core/CoreNative.kt")
+        TestPaths.read("app/src/coreRust/java/io/github/tan_sno/tangsnow/core/CoreNative.kt")
     }
 
-    private val rust: String by lazy { read("tangsnow-rs/tangsnow-core/src/percent_encode.rs") }
+    private val rust: String by lazy { TestPaths.read("tangsnow-rs/tangsnow-core/src/percent_encode.rs") }
 
     @Test
     fun 三处未保留字符集完全相同() {
@@ -120,18 +121,5 @@ class PercentEncodeSetParityTest {
         return m.groupValues[1]
     }
 
-    private fun read(path: String): String {
-        val f = File(repoRoot(), path)
-        assertTrue("找不到 $path", f.isFile)
-        return f.readText()
-    }
 
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 }

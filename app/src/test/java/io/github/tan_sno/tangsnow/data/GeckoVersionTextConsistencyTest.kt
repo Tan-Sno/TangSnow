@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,15 +27,6 @@ import java.io.File
  */
 class GeckoVersionTextConsistencyTest {
 
-    /** 定位仓库根：以 `settings.gradle.kts` 为标记向上查找（工作目录可能是模块目录）。 */
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 
     /** toml 里 geckoView 声明的主版本号（`"157.0.20260924…"` → `"157"`） */
     private fun geckoMajorVersion(root: File): String {
@@ -54,8 +46,8 @@ class GeckoVersionTextConsistencyTest {
 
     @Test
     fun `中文开源声明写的是实际依赖的引擎主版本`() {
-        val major = geckoMajorVersion(repoRoot())
-        val line = openSourceLine(repoRoot(), "values")
+        val major = geckoMajorVersion(TestPaths.repoRoot())
+        val line = openSourceLine(TestPaths.repoRoot(), "values")
         assertTrue(
             "values/strings.xml 的 open_source_text 仍是旧版本号（应为 GeckoView（v$major））",
             line.contains("GeckoView（v$major）"),
@@ -64,8 +56,8 @@ class GeckoVersionTextConsistencyTest {
 
     @Test
     fun `英文开源声明写的是实际依赖的引擎主版本`() {
-        val major = geckoMajorVersion(repoRoot())
-        val line = openSourceLine(repoRoot(), "values-en")
+        val major = geckoMajorVersion(TestPaths.repoRoot())
+        val line = openSourceLine(TestPaths.repoRoot(), "values-en")
         assertTrue(
             "values-en/strings.xml 的 open_source_text 仍是旧版本号（应为 GeckoView (v$major)）",
             line.contains("GeckoView (v$major)"),
@@ -74,7 +66,7 @@ class GeckoVersionTextConsistencyTest {
 
     @Test
     fun `两个语言侧声明的版本号彼此一致`() {
-        val root = repoRoot()
+        val root = TestPaths.repoRoot()
         val zhNum = Regex("""GeckoView（v(\d+)）""").find(openSourceLine(root, "values"))
             ?.groupValues?.get(1)
             ?: throw AssertionError("values/strings.xml 的 open_source_text 里没有 GeckoView（vN）字样")

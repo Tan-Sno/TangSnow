@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.browser
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,7 +28,7 @@ class ColorSchemeWiringTest {
 
     @Test
     fun `主题三档到内核颜色方案的映射与两处接线都在位`() {
-        val src = File(repoRoot(), SRC_PATH).readText()
+        val src = File(TestPaths.repoRoot(), SRC_PATH).readText()
 
         // 映射：三档逐一对应，不允许漏档或串档
         assertMapping(src, "SYSTEM", "COLOR_SCHEME_SYSTEM")
@@ -69,15 +70,5 @@ class ColorSchemeWiringTest {
     private companion object {
         const val SRC_PATH =
             "app/src/main/java/io/github/tan_sno/tangsnow/browser/SessionManager.kt"
-
-        /** 工作目录可能是模块目录也可能是仓库根，故向上找 `settings.gradle.kts` */
-        fun repoRoot(): File {
-            var dir: File? = File(".").absoluteFile
-            while (dir != null) {
-                if (File(dir, "settings.gradle.kts").isFile) return dir
-                dir = dir.parentFile
-            }
-            throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-        }
     }
 }

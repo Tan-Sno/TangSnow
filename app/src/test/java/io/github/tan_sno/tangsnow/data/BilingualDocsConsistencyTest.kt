@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,18 +39,9 @@ class BilingualDocsConsistencyTest {
         "THIRD_PARTY_NOTICES.md" to "THIRD_PARTY_NOTICES.zh-CN.md",
     )
 
-    /** 工作目录在本地与 CI 上可能不同（模块目录 / 仓库根），以 `settings.gradle.kts` 为标记向上找 */
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 
     private fun read(name: String): String {
-        val f = File(repoRoot(), name)
+        val f = File(TestPaths.repoRoot(), name)
         assertTrue("找不到文档：$name", f.isFile)
         return f.readText()
     }
@@ -64,8 +56,8 @@ class BilingualDocsConsistencyTest {
     @Test
     fun `每份英文文档都有对应的中文版`() {
         for ((en, zh) in pairs) {
-            assertTrue("缺少英文版：$en", File(repoRoot(), en).isFile)
-            assertTrue("缺少中文版：$zh（英文版是 $en）", File(repoRoot(), zh).isFile)
+            assertTrue("缺少英文版：$en", File(TestPaths.repoRoot(), en).isFile)
+            assertTrue("缺少中文版：$zh（英文版是 $en）", File(TestPaths.repoRoot(), zh).isFile)
         }
     }
 
@@ -91,7 +83,7 @@ class BilingualDocsConsistencyTest {
      */
     @Test
     fun `内核版本与依赖目录一致`() {
-        val catalog = File(repoRoot(), "gradle/libs.versions.toml").readText()
+        val catalog = File(TestPaths.repoRoot(), "gradle/libs.versions.toml").readText()
         val version = Regex("^geckoView\\s*=\\s*\"([^\"]+)\"", RegexOption.MULTILINE)
             .find(catalog)?.groupValues?.get(1)
             ?: throw AssertionError("libs.versions.toml 里找不到 geckoView 版本")

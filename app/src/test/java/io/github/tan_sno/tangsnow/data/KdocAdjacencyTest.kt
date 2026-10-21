@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -32,7 +33,7 @@ class KdocAdjacencyTest {
 
     @Test
     fun `主源码里不得出现两个连续的 KDoc 块`() {
-        val root = repoRoot()
+        val root = TestPaths.repoRoot()
         val srcRoot = File(root, "app/src/main/java")
         assertTrue("找不到主源码目录：${srcRoot.absolutePath}", srcRoot.isDirectory)
 
@@ -79,13 +80,4 @@ class KdocAdjacencyTest {
     private fun parenBalance(line: String): Int =
         line.count { it == '(' } - line.count { it == ')' }
 
-    /** 工作目录可能是模块目录也可能是仓库根，故向上找 `settings.gradle.kts` */
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 }

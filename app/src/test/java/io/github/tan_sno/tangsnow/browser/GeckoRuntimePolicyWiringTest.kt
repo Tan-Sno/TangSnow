@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.browser
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -31,7 +32,7 @@ class GeckoRuntimePolicyWiringTest {
 
     @Test
     fun `内核崩溃拉取提示的关闭策略在 runtime 的 Builder 链里`() {
-        val src = File(repoRoot(), SRC_PATH).readText()
+        val src = File(TestPaths.repoRoot(), SRC_PATH).readText()
         assertTrue(
             "runtime() 的 Builder 链里找不到 crashPullNeverShowAgain(true)（G13 策略被删）",
             Regex("""\.crashPullNeverShowAgain\s*\(\s*true\s*\)""").containsMatchIn(src),
@@ -41,15 +42,5 @@ class GeckoRuntimePolicyWiringTest {
     private companion object {
         const val SRC_PATH =
             "app/src/main/java/io/github/tan_sno/tangsnow/browser/SessionManager.kt"
-
-        /** 工作目录可能是模块目录也可能是仓库根，故向上找 `settings.gradle.kts` */
-        fun repoRoot(): File {
-            var dir: File? = File(".").absoluteFile
-            while (dir != null) {
-                if (File(dir, "settings.gradle.kts").isFile) return dir
-                dir = dir.parentFile
-            }
-            throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-        }
     }
 }

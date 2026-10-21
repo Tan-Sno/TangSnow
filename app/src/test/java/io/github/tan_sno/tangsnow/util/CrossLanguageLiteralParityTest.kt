@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.util
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,28 +28,28 @@ import java.io.File
  */
 class CrossLanguageLiteralParityTest {
 
-    private val urlUtils: String by lazy { read("app/src/main/java/io/github/tan_sno/tangsnow/util/UrlUtils.kt") }
+    private val urlUtils: String by lazy { TestPaths.read("app/src/main/java/io/github/tan_sno/tangsnow/util/UrlUtils.kt") }
     private val downloadRepo: String by lazy {
-        read("app/src/main/java/io/github/tan_sno/tangsnow/data/repo/DownloadRepo.kt")
+        TestPaths.read("app/src/main/java/io/github/tan_sno/tangsnow/data/repo/DownloadRepo.kt")
     }
     private val historyRepo: String by lazy {
-        read("app/src/main/java/io/github/tan_sno/tangsnow/data/repo/HistoryRepo.kt")
+        TestPaths.read("app/src/main/java/io/github/tan_sno/tangsnow/data/repo/HistoryRepo.kt")
     }
-    private val rustUrl: String by lazy { read("tangsnow-rs/tangsnow-core/src/url_utils.rs") }
-    private val rustName: String by lazy { read("tangsnow-rs/tangsnow-core/src/download_filename.rs") }
-    private val rustHistory: String by lazy { read("tangsnow-rs/tangsnow-core/src/history.rs") }
+    private val rustUrl: String by lazy { TestPaths.read("tangsnow-rs/tangsnow-core/src/url_utils.rs") }
+    private val rustName: String by lazy { TestPaths.read("tangsnow-rs/tangsnow-core/src/download_filename.rs") }
+    private val rustHistory: String by lazy { TestPaths.read("tangsnow-rs/tangsnow-core/src/history.rs") }
     private val coreNative: String by lazy {
-        read("app/src/coreRust/java/io/github/tan_sno/tangsnow/core/CoreNative.kt")
+        TestPaths.read("app/src/coreRust/java/io/github/tan_sno/tangsnow/core/CoreNative.kt")
     }
     private val ktBookmark: String by lazy {
-        read("app/src/main/java/io/github/tan_sno/tangsnow/data/BookmarkHtml.kt")
+        TestPaths.read("app/src/main/java/io/github/tan_sno/tangsnow/data/BookmarkHtml.kt")
     }
-    private val rustBookmark: String by lazy { read("tangsnow-rs/tangsnow-core/src/bookmark_html.rs") }
+    private val rustBookmark: String by lazy { TestPaths.read("tangsnow-rs/tangsnow-core/src/bookmark_html.rs") }
     private val crashLogger: String by lazy {
-        read("app/src/main/java/io/github/tan_sno/tangsnow/util/CrashLogger.kt")
+        TestPaths.read("app/src/main/java/io/github/tan_sno/tangsnow/util/CrashLogger.kt")
     }
-    private val rustCrash: String by lazy { read("tangsnow-rs/tangsnow-core/src/crash_logger.rs") }
-    private val libRs: String by lazy { read("tangsnow-rs/tangsnow-core/src/lib.rs") }
+    private val rustCrash: String by lazy { TestPaths.read("tangsnow-rs/tangsnow-core/src/crash_logger.rs") }
+    private val libRs: String by lazy { TestPaths.read("tangsnow-rs/tangsnow-core/src/lib.rs") }
 
     @Test
     fun 网页导航白名单两侧一致() {
@@ -373,18 +374,5 @@ class CrossLanguageLiteralParityTest {
         )
     }
 
-    private fun read(path: String): String {
-        val f = File(repoRoot(), path)
-        assertTrue("找不到 $path", f.isFile)
-        return f.readText()
-    }
 
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 }

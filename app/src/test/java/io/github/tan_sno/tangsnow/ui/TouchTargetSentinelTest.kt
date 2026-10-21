@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.ui
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
@@ -82,17 +83,9 @@ class TouchTargetSentinelTest {
 
     // ---------------------------------------------------------------- 定位
 
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 
-    private fun layoutDir(): File = File(File(repoRoot(), "app"), "src/main/res/layout")
-    private fun sourceDir(): File = File(File(repoRoot(), "app"), "src/main/java")
+    private fun layoutDir(): File = File(File(TestPaths.repoRoot(), "app"), "src/main/res/layout")
+    private fun sourceDir(): File = File(File(TestPaths.repoRoot(), "app"), "src/main/java")
 
     // ---------------------------------------------------------------- 豁免表
 
@@ -176,7 +169,7 @@ class TouchTargetSentinelTest {
                     val usesLayoutCallback =
                         window.contains("doOnLayout") || window.contains("addOnLayoutChangeListener")
                     if (usesPost && !usesLayoutCallback) {
-                        offenders += "${f.relativeTo(repoRoot()).path}（setTouchDelegate 之前只有 post {）"
+                        offenders += "${f.relativeTo(TestPaths.repoRoot()).path}（setTouchDelegate 之前只有 post {）"
                     }
                     idx = code.indexOf("setTouchDelegate", idx + 1)
                 }
@@ -282,7 +275,7 @@ class TouchTargetSentinelTest {
 
     /** `values` 目录（及其 night / v26 变体）下 `dimens.xml` 的 name → 字面量；后加载的覆盖先加载的。 */
     private val dimens: Map<String, String> by lazy {
-        val res = File(File(repoRoot(), "app"), "src/main/res")
+        val res = File(File(TestPaths.repoRoot(), "app"), "src/main/res")
         val out = LinkedHashMap<String, String>()
         for (dir in listOf("values", "values-night", "values-v26")) {
             val f = File(res, "$dir/dimens.xml")

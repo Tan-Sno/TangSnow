@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
@@ -80,12 +81,5 @@ object SharedFixtures {
     }
 
     /** 仓库根（工作目录可能是模块目录也可能是仓库根，故向上找 `settings.gradle.kts`） */
-    fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
+    fun repoRoot(): File = TestPaths.repoRoot()
 }

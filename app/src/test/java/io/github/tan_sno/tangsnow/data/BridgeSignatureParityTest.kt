@@ -1,5 +1,6 @@
 package io.github.tan_sno.tangsnow.data
 
+import io.github.tan_sno.tangsnow.TestPaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -30,13 +31,13 @@ import java.io.File
 class BridgeSignatureParityTest {
 
     private val kotlinBridgeText: String by lazy {
-        val f = File(repoRoot(), "app/src/coreRust/java/io/github/tan_sno/tangsnow/core/CoreNative.kt")
+        val f = File(TestPaths.repoRoot(), "app/src/coreRust/java/io/github/tan_sno/tangsnow/core/CoreNative.kt")
         assertTrue("找不到 coreRust flavor 的桥：${f.absolutePath}", f.isFile)
         readText(f)
     }
 
     private val rustBridgeText: String by lazy {
-        val f = File(repoRoot(), "tangsnow-rs/tangsnow-core/src/jni.rs")
+        val f = File(TestPaths.repoRoot(), "tangsnow-rs/tangsnow-core/src/jni.rs")
         assertTrue("找不到 Rust 的 JNI 层：${f.absolutePath}", f.isFile)
         readText(f)
     }
@@ -133,7 +134,7 @@ class BridgeSignatureParityTest {
         assertTrue("Kotlin 桥里一个 external fun 也没解析出来", kotlin.isNotEmpty())
         val expected = kotlin + knownRustOnly
         for (abi in listOf("arm64-v8a", "armeabi-v7a", "x86_64")) {
-            val so = File(repoRoot(), "app/src/coreRust/jniLibs/$abi/libtangsnow_core.so")
+            val so = File(TestPaths.repoRoot(), "app/src/coreRust/jniLibs/$abi/libtangsnow_core.so")
             assertTrue("找不到随包产物：${so.absolutePath}", so.isFile)
             val java = javaSymbols(so)
             assertTrue("$abi：一个 Java_* 符号都没解析出来（ELF 形态变了就同步改本测试）", java.isNotEmpty())
@@ -256,12 +257,4 @@ class BridgeSignatureParityTest {
 
     private fun readText(f: File): String = f.readText()
 
-    private fun repoRoot(): File {
-        var dir: File? = File(".").absoluteFile
-        while (dir != null) {
-            if (File(dir, "settings.gradle.kts").isFile) return dir
-            dir = dir.parentFile
-        }
-        throw AssertionError("定位不到仓库根（没找到 settings.gradle.kts）")
-    }
 }
