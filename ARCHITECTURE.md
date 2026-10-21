@@ -151,9 +151,11 @@
 - **任务名必带 flavor**（`core` 维度后，裸 `lintDebug`/`assembleRelease` 已 ambiguous），**两 flavor 都要跑**。
 - **签名三闸门**（`app/build.gradle.kts`，fail-closed）：文件不存在 / 键缺失或空 / 键仍是占位符 ⇒
   任何 release 任务**直接报错**，绝不静默出 debug 签名包。
-- **发版门禁** `tools/verify_release.py` **11 项**（工作区干净 / 版本声明 / 包名版本 ABI / 权限基准 /
+- **发版门禁** `tools/verify_release.py` **12 项**（工作区干净 / 版本声明 / 包名版本 ABI / 权限基准 /
   证书指纹+v2 / 新鲜度 / 依赖散列 / `libxul.so` 构建号 / `exported` 白名单 / `lib/*.so` 必须 deflate /
-  自家 `.so` `p_align>=16384`）；`--selftest` 22 项自检（不替代真包）。
+  自家 `.so` `p_align>=16384` / **产物内不得含构建机路径或身份信息**——APK 就是发出去的东西，
+  里面留着绝对路径或用户名等于公开编译环境；只扫**自家字节**（GeckoView 的 `.so` 里带的是 Mozilla
+  自己的构建路径，不归我们管））；`--selftest` 25 项自检（不替代真包）。
 - **CI** `.github/workflows/ci.yml`：两 flavor 单测 + 两 flavor lint + 门禁自检；
   **刻意不跑 `assembleRelease`、不引用 secrets**。
 
@@ -164,7 +166,7 @@
 | 共享单测 | `app/src/test`（43 文件） | **287**（coreKotlin）/ **294**（coreRust） |
 | flavor 专有单测 | `app/src/testCoreRust`（2 文件 / 7 例） | 只在 coreRust 编译单元里跑 |
 | Rust 单测 | `tangsnow-rs/tangsnow-core/tests`（15 个 `.rs` + 共享夹具目录） | **207** |
-| 门禁自检 | `verify_release.py --selftest` | 22 |
+| 门禁自检 | `verify_release.py --selftest` | 25 |
 | **仪器测试** | `app/src/androidTestCoreRust`（2 文件 / 12 例） | ⚠️ **只覆盖 coreRust flavor**（coreKotlin 无仪器测试） |
 
 **元测试钉子**（改源码必须同步改它们）：`TestCountCommentTest`（钉 build.gradle 计数注释）、

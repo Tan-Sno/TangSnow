@@ -692,6 +692,71 @@ def so_page_alignment_problems(apks):
                     (bad if name in OWN_LIBS else note).append("%s：p_align=0x%X < 0x4000" % (where, al))
     return bad, note
 
+
+# ⑫ 我们自己产出的字节（要逐条目扫的那些）。
+#
+# ⚠️ 刻意**只查自家产物**：GeckoView 的 .so 里带的是 **Mozilla 自己**的构建路径
+# （如 /Users/<Mozilla 开发者>/.mozbuild/…）—— 那是上游的事，不归我们管，
+# 也不该让这条门禁天天红。真正要拦的是**我们的**编译机路径与身份。
+OWN_ARTIFACT = re.compile(
+    r"^(classes\d*\.dex|resources\.arsc|lib/[^/]+/libtangsnow_core\.so)$"
+)
+
+
+def apk_build_path_leaks(apks, root):
+    """返回产物里出现的「构建机路径 / 身份」清单（空 = 干净）。
+
+    为什么要有这条：APK 是**对外发布**的字节，里面若留着编译机的绝对路径与用户名，
+    等于把构建环境的目录结构公开出去（Rust 线历史上就踩过：产物里嵌了
+    `/home/<user>/.cargo/registry/src/…`，靠 `--remap-path-prefix` 才消掉）。
+    这类东西**不崩、不报错**，只有把包发出去才看得见 ⇒ 放进发布门禁。
+
+    判定口径（fail-closed）：
+      · 仓库根与其上级目录的**绝对路径**（正/反斜杠两种写法都算）；
+      · 任意 Linux/macOS 家目录前缀（`/home/`、`/Users/`）—— 这是**别的**构建机
+        （Linux 交叉编译机）留下的用户名所在处，我们不认得那台机器的用户名，
+        所以按前缀判定；
+      · 家目录的**绝对路径**（Windows 构建机：`C:\\Users\\<name>`）。
+
+    ⚠️ 刻意**不**判「裸用户名」与「`.cargo/registry` 片段」：
+      前者会误伤（仓库若放在 `<workspace>/Android/…`，末段 `Android` 不是用户名，
+      却会命中 dex 里的 `/Android/` 资源路径）；后者已被 `--remap-path-prefix`
+      换成 `~/…`，剩下的是 crate 名与版本（`Cargo.lock` 里本来就有），不是泄漏。
+    """
+    root_abs = os.path.abspath(root)
+    home = os.path.dirname(root_abs)
+    needles = []
+    for base in (root_abs, home):
+        for variant in {base, base.replace("\\", "/"), base.replace("/", "\\")}:
+            if variant:
+                needles.append((variant.encode("utf-8", "replace"), "路径 %s" % variant))
+    for frag in ("/home/", "/Users/"):
+        needles.append((frag.encode("utf-8"), "家目录前缀 %s" % frag))
+
+    leaks = []
+    for apk in apks:
+        try:
+            z = zipfile.ZipFile(apk)
+        except Exception as e:  # 读不了包 ⇒ fail-closed
+            leaks.append("%s：包打不开（%s）" % (os.path.basename(apk), e))
+            continue
+        with z:
+            for name in z.namelist():
+                if not OWN_ARTIFACT.match(name):
+                    continue
+                try:
+                    data = z.read(name)
+                except Exception as e:
+                    leaks.append("%s!%s：读不出内容（%s）" % (os.path.basename(apk), name, e))
+                    continue
+                for needle, label in needles:
+                    if needle in data:
+                        leaks.append(
+                            "%s!%s：出现 %s" % (os.path.basename(apk), name, label)
+                        )
+    return leaks
+
+
 def selftest():
     """发布门禁的自检：**证明它真的会拦，而不是一路绿灯。**
 
@@ -1123,6 +1188,37 @@ def selftest():
             case("⑪ ELF 段对齐：非 ELF ⇒ 必须拦（fail-closed）", ten_elf_align_blocks_unreadable)
             case("⑪ ELF 段对齐：上游库不足 ⇒ 只报告不拦", ten_elf_align_reports_upstream)
 
+            # ---- ⑫ 产物里的构建机路径/身份 ---------------------------------
+            # 两个方向都要过：干净的 dex 放行、带本机路径的 dex 必须拦。
+            # 顺带钉住「只查自家产物」这条边界：Mozilla 自己的构建路径不得变成我们的红灯。
+            def twelve_leak_passes():
+                fp = p("leak-clean", {})
+                with zipfile.ZipFile(fp, "a") as z:
+                    z.writestr("classes.dex", b"nothing to see here")
+                if apk_build_path_leaks([fp], tmp):
+                    raise AssertionError("干净的产物不该被判为含路径")
+
+            def twelve_leak_blocks():
+                fp = p("leak-dirty", {})
+                with zipfile.ZipFile(fp, "a") as z:
+                    z.writestr("classes.dex", b"built at " + tmp.encode("utf-8") + b"/app/src")
+                if not apk_build_path_leaks([fp], tmp):
+                    raise AssertionError("带本机路径的产物必须被拦下")
+
+            def twelve_ignores_upstream_paths():
+                fp = p("leak-upstream", {})
+                with zipfile.ZipFile(fp, "a") as z:
+                    # 上游 Mozilla 的构建路径：原样嵌在 GeckoView 的 .so 里，不归我们管
+                    z.writestr("lib/arm64-v8a/libxul.so", b"/Users/someone/.mozbuild/x")
+                    z.writestr("classes.dex", b"clean")
+                leaks = apk_build_path_leaks([fp], tmp)
+                if leaks:
+                    raise AssertionError("上游库的构建路径不该变成我们的红灯：%s" % leaks)
+
+            case("⑫ 产物路径扫描：干净产物放行", twelve_leak_passes)
+            case("⑫ 产物路径扫描：含本机路径必须拦", twelve_leak_blocks)
+            case("⑫ 产物路径扫描：上游库的路径不拦", twelve_ignores_upstream_paths)
+
         finally:
             for k, v in saved.items():
                 if v is None:
@@ -1374,6 +1470,17 @@ def main():
                        "症状与 ⑩ 的 res=-113 同族，而 ①–⑩ 全绿看不出来）：\n  " + "\n  ".join(bad_align))
         say("  ✅ ⑪ 原生库 ELF 段对齐：我们产的 .so 在 arm64/x86_64 全部 >=16KB" +
             ("（⚠️ 另有非本仓产物不足：\n     " + "\n     ".join(note_align) + "）" if note_align else ""))
+        # ⑫ 产物里不得含构建机路径/身份（2026-10-21 新增）。
+        leaks = apk_build_path_leaks(apks, root)
+        if leaks:
+            raise Fail(
+                "产物里出现了构建机的路径/身份信息 —— APK 是对外发布的字节，等于公开编译机目录结构"
+                "与用户名（这类东西不崩不报错，只有发出去才看得见）：\n      %s\n"
+                "  修法：Kotlin 侧确认 release 的 R8 裁剪生效（产物不带调试信息）；"
+                "Rust 侧确认 build-android.sh 的 --remap-path-prefix 重映射生效（路径被换成 ~）。"
+                % "\n      ".join(leaks[:8])
+            )
+        say("  ✅ ⑫ 产物不含构建机路径/身份信息（dex、资源与自家 .so 逐条目扫过）")
 
 
         print("✅ 校验通过，可以发布。校验和（可直接贴进发布说明）：")

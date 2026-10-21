@@ -174,10 +174,13 @@ shared unit tests run under both flavors.
 - **Three signing gates** (`app/build.gradle.kts`, fail-closed): missing file / missing or empty key /
   key still a placeholder ⇒ any release task **fails immediately**; it never silently produces a debug-signed
   package.
-- **Release gate** `tools/verify_release.py` — **11 checks** (clean tree / version declarations /
+- **Release gate** `tools/verify_release.py` — **12 checks** (clean tree / version declarations /
   package name+version+ABI / permission baseline / certificate fingerprint + v2 / freshness / dependency
   digests / `libxul.so` build id / `exported` whitelist / `lib/*.so` must be deflated / own `.so`
-  `p_align>=16384`); `--selftest` has 22 cases (it does not replace a real package).
+  `p_align>=16384` / **no build-machine path or identity inside the artifacts** — the APK is what
+  you publish, so an absolute build path or username inside it is a disclosure; only *our* bytes
+  are scanned (GeckoView's own `.so` files carry Mozilla's build paths, which are not ours to fix));
+  `--selftest` has 25 cases (it does not replace a real package).
 - **CI** `.github/workflows/ci.yml`: both-flavor unit tests + both-flavor lint + gate self-test;
   it **deliberately** does not run `assembleRelease` and does not reference secrets.
 
@@ -188,7 +191,7 @@ shared unit tests run under both flavors.
 | Shared unit tests | `app/src/test` (43 files) | **287** (coreKotlin) / **294** (coreRust) |
 | Flavor-specific unit tests | `app/src/testCoreRust` (2 files / 7 cases) | runs only in the coreRust compilation unit |
 | Rust unit tests | `tangsnow-rs/tangsnow-core/tests` (15 `.rs` files + a shared fixture dir) | **207** |
-| Gate self-test | `verify_release.py --selftest` | 22 |
+| Gate self-test | `verify_release.py --selftest` | 25 |
 | **Instrumented tests** | `app/src/androidTestCoreRust` (2 files / 12 cases) | ⚠️ **coreRust flavor only** (coreKotlin has none) |
 
 **Meta-test pins** (changing source obliges changing these): `TestCountCommentTest` (pins the count comment in
