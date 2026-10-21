@@ -6,7 +6,7 @@
 //! （B-1 那次「Rust 按码点、Kotlin 按 UTF-16」就是这么活下来的）。
 //! 现在两侧读**同一份** JSON 夹具（`tests/fixtures/*.json`）⇒ 改夹具必然两侧一起红。
 //!
-//! Kotlin 侧的对应物：`app/src/test/java/.../data/SharedFixtures.kt`。
+//! Kotlin 侧的对应物：`app/src/test/java/io/github/tan_sno/tangsnow/data/SharedFixtures.kt`。
 //!
 //! ## 用法
 //! ```ignore

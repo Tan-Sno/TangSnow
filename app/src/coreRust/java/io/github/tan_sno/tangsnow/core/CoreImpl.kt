@@ -24,7 +24,8 @@ import io.github.tan_sno.tangsnow.data.BookmarkHtml
  *    书签 JSON 三件（`bookmarkParse/Sanitize/Export`）、历史入库过滤 1、法律粗体区间 1。
  *    书签那三个在原计划里归 W3（JSON 桥），并入的理由：它们的边界缺陷（CESU-8 / 别名回显 /
  *    描述符 / 数组写回）已在 `.so` 侧重编修复，并有设备侧仪器测试（甲2）钉住前置。
- *    见 `notes-tangsnow/PLAN-2026-10-15-flavor-wiring.md` §二。
+ *    见工作区的 `../notes-tangsnow/PLAN-2026-10-15-flavor-wiring.md` §二
+ *    （**在仓库外**：本仓只进代码，工作笔记不进仓，故路径相对仓库根是 `../notes-tangsnow/…`）。
  *  - **W3（未接）**：数组 / 管道协议族（`bitmap*`、`dt*`、`up*`…）。
  */
 internal object CoreImpl {

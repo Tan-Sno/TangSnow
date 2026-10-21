@@ -94,7 +94,7 @@
 - `src/main` 里 **没有任何一处**引用 `CoreNative`/`CoreBridge` ⇒ **接缝是编译期分派、不是运行时 if**：
   两 flavor 各提供一份同名同签名的 `internal object CoreImpl`，`src/main` 的调用点**一个字不改**
   （继续调 `UrlUtils.resolveInfo` 这类门面），由**编译器**当闸门（少一个 flavor 就是编译失败）。
-- `CoreImpl` 的存在位置：`app/src/coreKotlin/.../CoreImpl.kt` 与 `app/src/coreRust/.../CoreImpl.kt`。
+- `CoreImpl` 的存在位置：`app/src/coreKotlin/java/io/github/tan_sno/tangsnow/core/CoreImpl.kt` 与 `app/src/coreRust/java/io/github/tan_sno/tangsnow/core/CoreImpl.kt`。
 - **已接线的桥共 18 个**：W1 七个单值纯字符串函数（`resolveInfo` / `looksLikeUri` / `schemeOf` /
   `isPortableUrl` / `percentEncode` / `searchUrl` / `displayForUrl`）+ W2 十一个带落盘/隐私/往返语义的
   （下载文件名 4、崩溃日志 2、书签 JSON 三件、历史入库过滤 1、法律粗体区间 1）。
@@ -129,7 +129,7 @@
   无 `//` 的 scheme（`mailto:` / `data:` 等，此前会把完整邮箱或内嵌内容写盘）、
   不构成 URL 的凭据（`token=…` / `password: …` / `Bearer …`）、
   以及 `scheme://…` URL 收敛为 `scheme://host[:port]/…`（userinfo 剥除）；
-  **裸路径刻意保留** —— 它不是 URL，且对排障价值更高（见 `notes-tangsnow/RESEARCH-2026-10-19-crashlogger-redaction-audit.md`）。
+  **裸路径刻意保留** —— 它不是 URL，且对排障价值更高（见工作区的 `../notes-tangsnow/RESEARCH-2026-10-19-crashlogger-redaction-audit.md` —— **在仓库外**，本仓只进代码）。
 
 ## 9. 安全面
 

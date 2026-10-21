@@ -100,7 +100,8 @@ The app has a single product-flavor dimension: `core`.
   name and signature**, call sites in `src/main` **change by not a single character** (they keep
   calling facades like `UrlUtils.resolveInfo`), and the **compiler** is the gate (a missing flavor
   is a compile error — no interface, no DI, no runtime branch).
-- Where `CoreImpl` lives: `app/src/coreKotlin/.../CoreImpl.kt` and `app/src/coreRust/.../CoreImpl.kt`.
+- Where `CoreImpl` lives: `app/src/coreKotlin/java/io/github/tan_sno/tangsnow/core/CoreImpl.kt` and
+  `app/src/coreRust/java/io/github/tan_sno/tangsnow/core/CoreImpl.kt`.
 - **18 bridges are wired**: W1's seven single-value string functions (`resolveInfo` / `looksLikeUri` /
   `schemeOf` / `isPortableUrl` / `percentEncode` / `searchUrl` / `displayForUrl`) plus W2's eleven with
   on-disk / privacy / round-trip semantics (4 download-filename, 2 crash-log, 3 bookmark-JSON,
@@ -147,7 +148,7 @@ shared unit tests run under both flavors.
   e-mail address or embedded content to disk), credentials that do not form a URL
   (`token=…` / `password: …` / `Bearer …`), and `scheme://…` URLs collapsed to `scheme://host[:port]/…`
   (userinfo stripped); **bare paths are deliberately kept** — they are not URLs and are more valuable
-  for triage (see `notes-tangsnow/RESEARCH-2026-10-19-crashlogger-redaction-audit.md`).
+  for triage (see the workspace's `../notes-tangsnow/RESEARCH-2026-10-19-crashlogger-redaction-audit.md` — **outside the repo**, which carries code only).
 
 ## 9. Security surface
 

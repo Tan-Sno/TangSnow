@@ -18,7 +18,8 @@ import org.junit.Test
  *
  * ## 为什么在 `src/testCoreRust` 而不是共享 `src/test`
  * [CoreImpl] / [CoreNative] 是 flavor 专有符号，共享源集一旦引用，coreKotlin 那条通道就编译不过
- * （探针结论见 `notes-tangsnow/PLAN-2026-10-15-flavor-wiring.md` §一）。
+ * （探针结论见工作区的 `../notes-tangsnow/PLAN-2026-10-15-flavor-wiring.md` §一
+ *   —— **在仓库外**：本仓只进代码，工作笔记不进仓）。
  */
 class CoreImplSeamTest {
 
