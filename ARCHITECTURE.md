@@ -11,7 +11,7 @@
 
 ## 1. 一句话定位
 
-**一款以隐私为第一优先、数据纯本地的 Android 浏览器**。渲染内核用 Mozilla GeckoView（157）；
+**一款以隐私为第一优先、数据纯本地的 Android 浏览器**。渲染内核用 Mozilla GeckoView（158）；
 业务逻辑可选走纯 Kotlin 或 Rust（JNI 桥）两条实现，由构建 flavor 选择。
 
 ## 2. 仓库结构
@@ -45,7 +45,7 @@
 ├───────────────────────────────────────────────┤
 │ 扩展/更新  extension/ · update/                │
 ├───────────────────────────────────────────────┤
-│ 内核层  GeckoView 157（libxul.so，独立进程）    │  Mozilla MPL 2.0
+│ 内核层  GeckoView 158（libxul.so，独立进程）    │  Mozilla MPL 2.0
 └───────────────────────────────────────────────┘
         ↑ core flavor 决定业务逻辑的**实现语言**（Kotlin / Rust-JNI）
 ```
@@ -138,7 +138,7 @@
 |---|---|
 | 权限 | 仅 `INTERNET` / `CAMERA`（按需）/ `ACCESS_LOCAL_NETWORK`（API 37+，按需） |
 | `exported=true` | 仅 `ConsentActivity`(LAUNCHER) 与 `MainActivity`(http/https + SEND text/plain) |
-| GeckoView 剪贴板 provider | 合并进来的 `GeckoClipboardContentProvider` 已加 `android.permission.DUMP` 收口 |
+| GeckoView 剪贴板 provider | 157 带进、158 已移除（导出面 4 → 3）；`AndroidManifest.xml` 的合并规则保留 **DUMP** 收口作防御 |
 | FileProvider | `exported=false`；`file_paths.xml` 只放 `Download/` 单一落点（`DownloadRepo.externalizableUri`） |
 | WebView 攻击面 | **无 WebView**（用 GeckoView）⇒ `addJavascriptInterface` 等 0 命中 |
 | 更新链校验 | `UpdateChecker.isTrustedApkTarget`：拒反斜杠 + 严格 `host==github.com`（防 `github.com.evil` 前缀骗过） |

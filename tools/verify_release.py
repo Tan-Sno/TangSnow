@@ -34,8 +34,8 @@
    从 `lib/*/libxul.so` 里找内核构建号，与声明逐字符比对。为什么需要它：依赖声明、
    内核自报、APK 内实物是**三个**不同来源，只前两者一致并不说明打出来的包是对的
    （过期的 AAR / 构建缓存都可能让包里的内核与声明不符，而门禁与单测都看不出来）。
-9. `exported=true` 的组件集合 == 基准：依赖升级会悄悄带进新的导出面（如 GeckoView 157 的
-   剪贴板 provider），而只比权限集合的检查看不见它。
+9. `exported=true` 的组件集合 == 基准：依赖升级会悄悄带进**或带走**新的导出面（GeckoView 157 带进
+   剪贴板 provider、158 又移除 —— 同一道门两次都拦到了），而只比权限集合的检查看不见它。
 10. **包内原生库形态**：`lib/*.so` 必须走 deflate，且条目的 local header extra 不得超阈。
     为什么需要它（2026-10-15 从 Rust 线 10-07 的安装攻坚搬来）：AGP 为 16KB 页设备做 zip 层
     对齐时，会把 ~14KB 的 padding 写进 `.so` 条目的 **local header extra field**，安装器的
@@ -136,14 +136,15 @@ def expected_permissions(package: str) -> set:
 # 而「权限基准」（第 4 项）看不见它。2026-10-03 实证：GeckoView 155→157 带进了
 # `org.mozilla.gecko.GeckoClipboardContentProvider`（exported=true、**无权限保护**，任何应用可查询），
 # 同时 `androidx.profileinstaller` 的 `ProfileInstallReceiver` 也在（受 `android.permission.DUMP` 保护，
-# 只有 shell/系统能触发 ⇒ 无害）。前两个是应用自己的入口，后两个来自依赖 —— 增删都必须是有意的。
+# 只有 shell/系统能触发 ⇒ 无害）。两个 activity 是应用自己的入口，另两个来自依赖 —— 增删都必须是有意的。
 # 每项是 (类型, 组件名, android:permission 或 None)。**把"保护"也写进来**是有意的：
 # 只记名字的话，「有人悄悄把 provider 的权限收口去掉」不会红。
+# 2026-10-22：GeckoView 158 **移除了**上面那个剪贴板 provider（导出面 4 → 3 —— 同一道门的第二次生效）。
+# `AndroidManifest.xml` 里那条 `tools:node="merge"` + DUMP 的规则**保留**作防御：内核哪天真把它放回来，
+# 规则会自动重新收口，而这里会当场红、提醒把这行加回基准。
 EXPECTED_EXPORTED = {
     ("activity", "io.github.tan_sno.tangsnow.ConsentActivity", None),       # LAUNCHER（同意页）
     ("activity", "io.github.tan_sno.tangsnow.MainActivity", None),          # http/https 的 ACTION_VIEW 入口
-    # GeckoView 157 带进的内核剪贴板 provider：本仓在 AndroidManifest.xml 里用合并规则补了 DUMP 收口
-    ("provider", "org.mozilla.gecko.GeckoClipboardContentProvider", "android.permission.DUMP"),
     # androidx 基线配置安装，自带 DUMP 保护（仅 shell/系统可触发）
     ("receiver", "androidx.profileinstaller.ProfileInstallReceiver", "android.permission.DUMP"),
 }

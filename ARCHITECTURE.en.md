@@ -11,7 +11,7 @@
 
 ## 1. One-line positioning
 
-**A privacy-first Android browser with fully local data.** Rendering uses Mozilla GeckoView (157);
+**A privacy-first Android browser with fully local data.** Rendering uses Mozilla GeckoView (158);
 business logic ships as either pure Kotlin or Rust (JNI bridge), selected by build flavor.
 
 ## 2. Repository layout
@@ -45,7 +45,7 @@ release task fails outright when credentials are missing (see §10, the three si
 ├───────────────────────────────────────────────┤
 │ Extensions/update  extension/ · update/        │
 ├───────────────────────────────────────────────┤
-│ Engine layer    GeckoView 157 (libxul.so, separate process)│ Mozilla MPL 2.0
+│ Engine layer    GeckoView 158 (libxul.so, separate process)│ Mozilla MPL 2.0
 └───────────────────────────────────────────────┘
         ↑ the `core` flavor decides the IMPLEMENTATION LANGUAGE of business logic (Kotlin / Rust-JNI)
 ```
@@ -157,7 +157,7 @@ shared unit tests run under both flavors.
 |---|---|
 | Permissions | only `INTERNET` / `CAMERA` (on demand) / `ACCESS_LOCAL_NETWORK` (API 37+, on demand) |
 | `exported=true` | only `ConsentActivity` (LAUNCHER) and `MainActivity` (http/https + SEND text/plain) |
-| GeckoView clipboard provider | merged `GeckoClipboardContentProvider` is protected with `android.permission.DUMP` |
+| GeckoView clipboard provider | added in 157, **removed in 158** (exported surface 4 → 3); the merge rule in `AndroidManifest.xml` keeps the `DUMP` guard as defence |
 | FileProvider | `exported=false`; `file_paths.xml` exposes a single `Download/` location (`DownloadRepo.externalizableUri`) |
 | WebView attack surface | **no WebView** (GeckoView instead) ⇒ zero `addJavascriptInterface` hits |
 | Update-chain validation | `UpdateChecker.isTrustedApkTarget`: rejects backslashes + strict `host==github.com` (so `github.com.evil` cannot slip through) |

@@ -3,9 +3,10 @@ agp = "9.4.1"
 # AGP 9.x 内置 Kotlin 运行时依赖 KGP；显式升 KGP 即可让内置 Kotlin 编译器跟随升级。
 # 原先该版本硬编码在根 buildscript 的 classpath 里，升级要改两处 —— 收口到本文件。
 kotlin = "2.4.10"
-# GeckoView 只跟 **Release 通道**：Mozilla 官方 product-details 显示当前 Release = 157.0
-#（FIREFOX_NIGHTLY=159.0a1、DEVEL/Beta=158.0b1），155 已落后两个 release ⇒ 取 157 的最新构建。
-geckoView = "157.0.20260924084938"
+# GeckoView 只跟 **Release 通道**：Mozilla 官方 product-details 显示当前 Release = 158.0.1
+#（FIREFOX_NIGHTLY=160.0a1、DEVEL/Beta=159.0b5），157 已落后一个 release ⇒ 取 158 的最新构建。
+# 官方性已核：maven.mozilla.org 的 maven-metadata（<release>）+ 公布 sha1/md5 与本地包逐字相同。
+geckoView = "158.0.20261021001945"
 preferenceKtx = "1.2.1"
 coroutinesAndroid = "1.11.0"
 zxingCore = "3.5.4"

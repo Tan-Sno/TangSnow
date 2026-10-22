@@ -457,6 +457,18 @@ android {
         //   `GeckoSession` 时崩。修法：① 移除该注入（Android 上不可用，且即使解析成功也会被
         //   catch-and-ignore、覆盖从不生效）；② `warmUp` 改为如实返回是否成功，失败时在同意页给出
         //   提示而不是带着空运行时进主界面。**versionCode 41（ABI 派生 411/412/413）**。
+        // 2026-10-22 内核升级：GeckoView **157 → 158**（`158.0.20261021001945`）。
+        //   口径与上次一致：Mozilla 官方 product-details 当前 Release = 158.0.1（Beta=159.0b5、
+        //   Nightly=160.0a1）⇒ 取 158 的最新构建。**官方性三层核对**：maven.mozilla.org 的
+        //   maven-metadata 列明该版本；AAR 的 sha1（`96b4899c…`）/md5（`593bc303…`）与公布值逐字相同；
+        //   包内 `libxul.so` 自报构建号 20261021001945 且含 `rv:158`。
+        //   **升级面复核**：`javap -public` 对 23 个实际用到的类只有一处**新增**
+        //   （`GeckoResult<Bitmap> captureFullPage()`），无删除/改签名；157 那五条取证结论逐条仍成立
+        //   （mSession 字段数 2、already-complete 文案、`open` 字节码前缀、assertOnUiThread 42 处，
+        //   两版逐字相同）；omni.ja 的安全浏览 8 条 pref、翻译开关、崩溃上报地址与设置服务主机
+        //   （webextensions.settings.services.mozilla.com）与 157 **完全一致** ⇒ 不构成新的披露
+        //   变化，`POLICY_VERSION` 维持 23。对外声明同步：THIRD_PARTY_NOTICES（中英）、
+        //   `open_source_text`（中英）、README、ARCHITECTURE（中英）。
         versionCode = 41
         versionName = "2.2.0"
         // 仪器测试（2026-10-19 加回）：`app/src/androidTestCoreRust` 下有一道 JNI 边界断言
