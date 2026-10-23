@@ -55,6 +55,13 @@ signing/
 # 管不到 app/release/ —— 而那里躺着 3 个 APK（约 550MB）与 42MB 的 mapping.txt，
 # 一次 `git add .` 就会把它们整个推上去且永久留在历史里，故必须单独忽略。
 /app/release/
+# 新版 Android Studio 的签名向导按 variant 建目录（`app/<flavor>/release/`），不再统一落到
+# `app/release/`。2026-10-23 实测：打两条线后多出 `app/coreKotlin/release/` 与
+# `app/coreRust/release/`（各 3 个 APK + mapping + output-metadata），其中 `output-metadata.json`
+# **不在**下面的 `*.apk` / `mapping.txt` 兜底里 ⇒ 工作区变"不干净"，发布门禁 ① 当场拦下。
+# 这两条按目录整棵忽略（APK 与 mapping 仍由全局规则兜一层）。
+/app/coreKotlin/
+/app/coreRust/
 
 # ============================================================
 # 构建产物全局兜底：APK / AAB / 堆转储不入库。
