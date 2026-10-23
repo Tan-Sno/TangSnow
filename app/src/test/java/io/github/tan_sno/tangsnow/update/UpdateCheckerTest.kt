@@ -155,6 +155,59 @@ class UpdateCheckerTest {
         assertNull(UpdateChecker.pickAsset(listOf("mapping.txt", "notes.md"), listOf("arm64-v8a")))
     }
 
+    // ------------------------------------------------ flavor 维度（2026-10-23）
+
+    /** 2.3.0 起两条线同版本号、可以挂在同一个发布页上时的真实资产形态。 */
+    private val bothLines = listOf(
+        "app-coreKotlin-arm64-v8a-release.apk",
+        "app-coreKotlin-armeabi-v7a-release.apk",
+        "app-coreKotlin-x86_64-release.apk",
+        "app-coreRust-arm64-v8a-release.apk",
+        "app-coreRust-armeabi-v7a-release.apk",
+        "app-coreRust-x86_64-release.apk",
+    )
+
+    @Test
+    fun `同页挂两套包时正式版只挑自己的`() {
+        // 只按 ABI 挑的话这里会命中 app-coreRust-…（两者都含 -arm64-v8a-），
+        // 用户下下来装的是包名带 .rust 的另一个应用 —— 不是升级。
+        assertEquals(
+            "app-coreKotlin-arm64-v8a-release.apk",
+            UpdateChecker.pickAsset(bothLines, listOf("arm64-v8a", "armeabi-v7a"), "coreKotlin"),
+        )
+        assertEquals(
+            "app-coreKotlin-armeabi-v7a-release.apk",
+            UpdateChecker.pickAsset(bothLines, listOf("armeabi-v7a"), "coreKotlin"),
+        )
+    }
+
+    @Test
+    fun `同页挂两套包时 Rust 版只挑自己的`() {
+        assertEquals(
+            "app-coreRust-arm64-v8a-release.apk",
+            UpdateChecker.pickAsset(bothLines, listOf("arm64-v8a"), "coreRust"),
+        )
+    }
+
+    @Test
+    fun `本 flavor 没有包时返回 null，不下另一条线的包`() {
+        val kotlinOnly = bothLines.filter { it.contains("coreKotlin") }
+        assertNull(
+            "只有正式包的发布页上，Rust 版必须让用户去发布页自己选，而不是擅自下 Kotlin 包",
+            UpdateChecker.pickAsset(kotlinOnly, listOf("arm64-v8a"), "coreRust"),
+        )
+    }
+
+    @Test
+    fun `旧式无 flavor 前缀的资产名仍能挑到`() {
+        // ≤2.2.0 的发布页是 app-<abi>-release.apk，没有 flavor 段：这一档必须保持旧行为，
+        // 否则从 2.2.0 升级的用户在旧发布页上会拿不到链接。
+        assertEquals(
+            "app-arm64-v8a-release.apk",
+            UpdateChecker.pickAsset(realAssets, listOf("arm64-v8a"), "coreKotlin"),
+        )
+    }
+
     // ---------------------------------------------------------------- channelOf
 
     @Test

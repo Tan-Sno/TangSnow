@@ -190,7 +190,7 @@ shared unit tests run under both flavors.
 
 | Layer | Location | Size |
 |---|---|---|
-| Shared unit tests | `app/src/test` (45 files) | **248** (coreKotlin) / **255** (coreRust) |
+| Shared unit tests | `app/src/test` (45 files) | **252** (coreKotlin) / **259** (coreRust) |
 | Flavor-specific unit tests | `app/src/testCoreRust` (2 files / 7 cases) | runs only in the coreRust compilation unit |
 | Rust unit tests | `tangsnow-rs/tangsnow-core/tests` (15 `.rs` files + 10 shared fixtures) | **169** |
 | Gate self-test | `verify_release.py --selftest` | 25 |

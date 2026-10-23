@@ -1,6 +1,7 @@
 package io.github.tan_sno.tangsnow.update
 
 import android.content.Context
+import io.github.tan_sno.tangsnow.BuildConfig
 import io.github.tan_sno.tangsnow.data.AppHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -106,7 +107,9 @@ object UpdateChecker {
                         if (name.isNotEmpty() && url.isNotEmpty()) byName[name] = url
                     }
                 }
-                val picked = pickAsset(byName.keys.toList(), supportedAbis)
+                // 带上本 flavor：同一发布页可能同时挂着 coreKotlin 与 coreRust 两套包，
+                // 只按 ABI 挑会让正式版用户下到 `.rust` 那个应用（见 pickAsset 的说明）。
+                val picked = pickAsset(byName.keys.toList(), supportedAbis, BuildConfig.FLAVOR_NAME)
 
                 Release(
                     versionName = version,
@@ -208,7 +211,7 @@ object UpdateChecker {
     }
 
     /**
-     * 从资产名里挑出与本机 ABI 匹配的 APK。
+     * 从资产名里挑出与本机 ABI 匹配、且**属于本 flavor** 的 APK。
      *
      * 按 [supportedAbis] 的**优先级**取第一个命中项（`Build.SUPPORTED_ABIS` 已按首选
      * 架构排好序），故 64 位设备会优先拿到 arm64 包，而不是让它退回 32 位。
@@ -217,18 +220,53 @@ object UpdateChecker {
      * ⚠️ 匹配时**用分隔符卡住边界**（`-<abi>-`），而不是直接子串匹配 —— 这样 ABI 串
      * 出现在无关资产名（如 `my-arm64-v8a-notes.txt` 之类）里时不会误命中。
      *
+     * ## 为什么需要 [flavor]（2026-10-23）
+     * 2.3.0 起两条构建线**同版本号**，可以挂在同一个发布页上，资产名是
+     * `app-<flavor>-<abi>-release.apk`。只按 ABI 挑的话，`app-coreRust-arm64-v8a-release.apk`
+     * 也会命中 `-arm64-v8a-` ⇒ 正式版用户被引导去下载 **包名带 `.rust` 的另一个应用**
+     * （不是升级，是凭空多装一个 app）。
+     *
+     * 因此口径是三级：
+     *  1. 有本 flavor 的包 ⇒ **只在这些包里挑**；
+     *  2. 一个都没有 ⇒ 退回「无 flavor 前缀的旧命名」（≤2.2.0 的资产，形如 `app-<abi>-release.apk`）；
+     *  3. 两者都无 ⇒ `null`（宁可不给下载链接，也不给错包）。
+     *
+     * [flavor] 传 null（或空）时保持旧行为，只按 ABI 挑 —— 现有单测与旧调用点走这一档。
+     *
      * 已知边界：仅报告 `armeabi` 的设备仍会命中 `app-armeabi-v7a-…` —— 因为 `armeabi`
      * 恰好是 `armeabi-v7a` 的前缀且后面紧跟连字符，**单靠文件名无法区分**。这不成问题：
      * 该类设备早于 minSdk 26，应用本来就装不上。故匹配顺序**必须**沿用
      * `Build.SUPPORTED_ABIS` 的「首选优先」，不要自行按长度重排（那会把 64 位设备
      * 误导向 32 位包）。
      */
-    internal fun pickAsset(assetNames: List<String>, supportedAbis: List<String>): String? {
+    internal fun pickAsset(
+        assetNames: List<String>,
+        supportedAbis: List<String>,
+        flavor: String? = null,
+    ): String? {
         val apks = assetNames.filter { it.endsWith(ASSET_SUFFIX, ignoreCase = true) }
         if (apks.isEmpty()) return null
+        val own = if (flavor.isNullOrBlank()) {
+            emptyList()
+        } else {
+            apks.filter { it.startsWith("app-$flavor-", ignoreCase = true) }
+        }
+        // 旧命名 = `app-<abi>-release.apk`：`app-` 之后直接是 ABI 串。
+        // 注意 `app-coreKotlin-arm64-v8a-…` 不会命中这一支（`app-` 之后是 flavor 名）。
+        val legacy = apks.filter { name ->
+            supportedAbis.any { abi ->
+                abi.isNotBlank() && name.startsWith("app-$abi-", ignoreCase = true)
+            }
+        }
+        val candidates = when {
+            own.isNotEmpty() -> own
+            flavor.isNullOrBlank() -> apks
+            else -> legacy
+        }
+        if (candidates.isEmpty()) return null
         for (abi in supportedAbis) {
             if (abi.isBlank()) continue
-            apks.firstOrNull { it.contains("-$abi-", ignoreCase = true) }?.let { return it }
+            candidates.firstOrNull { it.contains("-$abi-", ignoreCase = true) }?.let { return it }
         }
         return null
     }

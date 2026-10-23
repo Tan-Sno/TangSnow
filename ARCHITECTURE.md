@@ -164,7 +164,7 @@
 
 | 层 | 位置 | 规模 |
 |---|---|---|
-| 共享单测 | `app/src/test`（45 文件） | **248**（coreKotlin）/ **255**（coreRust） |
+| 共享单测 | `app/src/test`（45 文件） | **252**（coreKotlin）/ **259**（coreRust） |
 | flavor 专有单测 | `app/src/testCoreRust`（2 文件 / 7 例） | 只在 coreRust 编译单元里跑 |
 | Rust 单测 | `tangsnow-rs/tangsnow-core/tests`（15 个 `.rs` + 10 份共享夹具） | **169** |
 | 门禁自检 | `verify_release.py --selftest` | 25 |

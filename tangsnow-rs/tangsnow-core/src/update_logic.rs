@@ -127,6 +127,14 @@ pub fn is_trusted_target(
 ///  1. 先滤出以 `.apk` 结尾（忽略大小写）的资产；
 ///  2. 按 `abis` **给定顺序**找第一个 `contains("-<abi>-", ignoreCase)` 的命中；
 ///  3. 全部落空返回 None。
+///
+/// ## ⚠️ 接线时必须补 flavor 维度（2026-10-23）
+/// Kotlin 侧的 `UpdateChecker.pickAsset` 已加第三个参数 `flavor`：正式版只挑
+/// `app-coreKotlin-…`、Rust 版只挑 `app-coreRust-…`，因为 2.3.0 起两条线**同版本号**、
+/// 可以挂在同一个发布页上，而两者都含 `-arm64-v8a-` 这类 ABI 段。
+/// 本函数仍是 **ABI-only** —— 目前安全：W3 未接线，coreRust 走的也是 Kotlin 实现。
+/// 将来把更新检查接到这里时**必须同时加 flavor 段**，否则 `app-coreRust-*` 会被正式版用户
+/// 命中，下下来装成包名带 `.rust` 的**另一个应用**（不是升级）。
 pub fn pick_asset(assets_joined: &str, abis_joined: &str) -> Option<String> {
     let apks: Vec<&str> = assets_joined
         .split('\n')

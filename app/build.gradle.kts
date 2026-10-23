@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **248**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **252**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -437,7 +437,7 @@ android {
         //   `UrlUtilsTest`（30→3）、`SchemeGateTest`（6→2）、`PercentEncodeTest`（10→2，
         //   搜索模板那 5 条镜像并入 `search_engines` 夹具）、`BookmarkHtmlTest`（24→11）、
         //   `BitmapsCoverRectTest`（6→3）⇒ 合计 −39，
-        //   合计 **248**。
+        //   合计 **252**。
         //   （上一版这里被我写成 274 —— `TestCountCommentTest` 当场把这句注释本身钉红了，钉子有效。）
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则两个 flavor 的单测任务
         //   （`:app:testCoreKotlinDebugUnitTest` / `:app:testCoreRustDebugUnitTest`）都直接红。
@@ -473,7 +473,7 @@ android {
         //   ① 内核 157 → 158（见上一条，官方性四重核对）；② 文本与口径修正 —— 对外文档的
         //   ABI 派生号（411/412/413 → 421/422/423）、下载表 APK 文件名补 flavor 前缀
         //   （`app-coreKotlin-<abi>-release.apk`，2.2.0 发布时还没有 flavor 维度，旧名对不上
-        //   本版产物）、ARCHITECTURE 测试规模对齐实测（248/255 · 169 · 25）。
+        //   本版产物）、ARCHITECTURE 测试规模对齐实测（当版 248/255 · 169 · 25）。
         //   2.2.0 之后合入的 69 笔里还含：审查报告 002 的 11 条修复、门禁第 ⑫ 项（产物不得含
         //   构建机路径）、C-14 镜像差分夹具化、SessionManager 弹窗委托拆解、Rust 侧夹具
         //   mtime 陈旧导致的假红取证。**versionCode 42（ABI 派生 421/422/423）**。
@@ -575,11 +575,16 @@ android {
     productFlavors {
         create("coreKotlin") {
             dimension = "core"
+            // 更新检查按 flavor 挑资产（见 `UpdateChecker.pickAsset`）：2.3.0 起两条线同版本号、
+            // 可以同页发布，资产名是 `app-<flavor>-<abi>-release.apk`。只按 ABI 挑会把
+            // `app-coreRust-…` 下给正式版用户（装成包名带 .rust 的另一个应用）。
+            buildConfigField("String", "FLAVOR_NAME", "\"coreKotlin\"")
         }
         create("coreRust") {
             dimension = "core"
             // A1：Rust 独立应用身份 —— 与 Kotlin 包同机共存、数据隔离（namespace 不变）
             applicationIdSuffix = ".rust"
+            buildConfigField("String", "FLAVOR_NAME", "\"coreRust\"")
         }
     }
 
