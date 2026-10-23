@@ -479,6 +479,12 @@ android {
         //   mtime 陈旧导致的假红取证。**versionCode 42（ABI 派生 421/422/423）**。
         //   `POLICY_VERSION` 维持 23：内核升级未改变出网对象与披露面（omni.ja 安全浏览 pref
         //   与主机两版逐字一致，已实测），文本修正不涉及政策条款。
+        //   **两条线同号（有意）**：coreKotlin 与 coreRust 共用这一套 versionCode / versionName
+        //   （applicationId 不同 ⇒ 两个独立应用、互不干扰，各自比较版本），首发 Rust 线也是 2.3.0。
+        //   发布时靠身份与 tag 区分：正式版 `v2.3.0`、Rust 线 `v2.3.0-rust-preview`，且 Rust 的
+        //   GitHub release **必须标 prerelease** —— 应用内更新检查取 `/releases/latest`，而资产
+        //   挑选只按 `-<abi>-` 匹配、不看 flavor：Rust 包一旦成为 latest，停在旧版的正式版用户
+        //   会被告知「有新版本」，下到的却是包名带 `.rust` 的另一个应用。
         versionCode = 42
         versionName = "2.3.0"
         // 仪器测试（2026-10-19 加回）：`app/src/androidTestCoreRust` 下有一道 JNI 边界断言

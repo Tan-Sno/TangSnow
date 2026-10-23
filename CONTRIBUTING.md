@@ -73,7 +73,10 @@ Release artifacts are one flavor at a time on purpose: both flavors derive from 
 `versionCode` base, so a mixed publication would silently swap the engine under a user. (Since A1
 they are also **separate app identities** — `coreKotlin` is `io.github.tan_sno.tangsnow`,
 `coreRust` is `io.github.tan_sno.tangsnow.rust` — so they can coexist on one device; the Rust
-line ships under its own `v<ver>-rust-preview` tag.)
+line ships under its own `v<ver>-rust-preview` tag — and that release must be marked
+**pre-release**. The in-app updater reads `/releases/latest` and picks assets by ABI alone (it does
+not look at the flavor), so a regular release of the Rust build would be offered to users of the
+stable line as an "update" — and they would end up installing a different app with a `.rust` suffix.)
 
 Make sure all of the commands above pass before submitting, and that lint stays at **zero issues**.
 Note that `checkAllWarnings` is enabled (`app/build.gradle.kts`), so **warnings are reported too** —

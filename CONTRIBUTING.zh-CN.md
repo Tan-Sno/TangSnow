@@ -65,7 +65,9 @@ debug 证书、仍不可分发或上架。正式包**一次只发一个 flavor**
 派生相同（基准 42 ⇒ 421/422/423），混发会在用户没选过的两份实现之间来回升降。
 不过自 A1 起两者已是**两个独立应用身份**（`coreKotlin` = `io.github.tan_sno.tangsnow`，
 `coreRust` = `io.github.tan_sno.tangsnow.rust`），可同机并存、数据隔离；Rust 线用独立的
-`v<ver>-rust-preview` tag 发布。
+`v<ver>-rust-preview` tag 发布，且该 release **必须标 prerelease**：应用内更新检查读的是
+`/releases/latest`，而资产挑选只按 ABI 匹配、不看 flavor —— Rust 包若作为正式 release 发出，
+会被正式版用户当成「有新版本」，下到的却是包名带 `.rust` 的另一个应用。
 
 提交前请确保上面几条命令均通过，且 lint 保持**零问题**。
 注意本项目已开启 `checkAllWarnings`（`app/build.gradle.kts`），**warning 级问题同样会被报出** ——
