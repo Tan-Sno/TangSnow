@@ -46,9 +46,9 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
     `regression_2026_10_17`（7 例单侧回归批）、`properties_fuzz` / `modified_utf8`（单侧性质）。
     这几类**刻意只有一侧**：它们钉的是「源码必须长什么样」或「某条性质」，不是「同一输入两侧同输出」。
 - **IDNA 差分 15 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
-  `IDN.toASCII` 的**实测行为**上（57 条同口径语料在共享夹具里），并把 **11 类实测分歧**逐条单列冻结
-  （含 2026-10-22 新量出的 3 类：ASCII 大小写折叠、全角/半角句点造成的空标签、标签超长），
-  详见本文件「已知口径差异」表；
+  `IDN.toASCII` 的**实测行为**上（57 条同口径语料在共享夹具里），并把 **9 类实测分歧**逐条单列冻结
+  （2026-10-22 新量出的 ASCII 大小写折叠仍在表里；同批量出的「全角/半角句点造成的空标签」与
+  「标签超长」已于 2026-10-23 修掉、两侧一致，不再是分歧），详见本文件「已知口径差异」表；
 - 书签那一对：54 条逐点期望值在共享夹具里，另有 9 例**性质**用例（复杂度哨兵 ×2、上限 ×2、码点截断、
   emoji 不劈代理、导出→导入往返、**500 例固定种子随机语料差分**）；
 - **复杂度哨兵**：2MB 对抗输入（`<a >` 重复 / 无 `>` 收尾）毫秒级完成，
@@ -158,12 +158,12 @@ bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core
 
 | 点 | Kotlin | Rust | 影响 |
 |---|---|---|---|
-| IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | **11 类实测分歧 + 1 类已修**，逐条见下表 |
+| IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | **9 类实测分歧 + 3 类已修**，逐条见下表 |
 | 字母判定 | `isLetterOrDigit`（L*+Nl+Nd） | `is_alphabetic/is_numeric`（含 No） | 仅影响 scheme 合法性判定中的罕见 Unicode 数字；实测例：`a²://x` ⇒ Kotlin 判「无 scheme」（当搜索词），Rust 判「`a²` 是合法 scheme」 |
 | 标题截断 | `take(200)` 按**码点**（2026-10-20 修正，原按 UTF-16 单元） | 按 char（码点） | **已抹平**：两侧同为 200 个码点；原先「Kotlin 侧切断代理对留下孤立代理、且两侧最多差一倍」的差异随修正消失 |
 | nbsp 处理 | `Character.isWhitespace(nbsp)=false` | 已用 `java_is_whitespace` 对齐 | 已抹平；正则 `\S` 类已按 Java ASCII 口径改写 |
 
-### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」。2026-10-22 把两侧放进**共享夹具**（`tests/fixtures/url_idna_cases.json`，57 条同口径语料）时又量出 3 条新分歧，追加为 ⑨⑩⑪）
+### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」。2026-10-22 把两侧放进**共享夹具**（`tests/fixtures/url_idna_cases.json`，57 条同口径语料）时又量出 3 条新分歧，追加为 ⑨⑩⑪；其中 **⑩⑪ 已于 2026-10-23 修掉**，现为 9 条）
 
 | # | 输入 | 主线 (Java) | Rust | 性质 |
 |---|---|---|---|---|
@@ -176,10 +176,10 @@ bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core
 | 7 | `.`（单点） | `.` | `<None>` | 退化输入，Rust 拒 |
 | 8 | `\u{0378}.com`（未分配码位） | `xn--zva.com`（`ALLOW_UNASSIGNED` 放行） | `<None>` | 原表那句"未分配码位判定不同"指的就是这类，罕见但确实不同 |
 | 9 | `EXAMPLE.COM` | `EXAMPLE.COM` | `example.com` | Java 的 `IDN.toASCII` 对**纯 ASCII 标签**走快路径、**不做大小写折叠**（`examPLe.com` 同样原样保留）；UTS46 折叠 ⇒ 两侧转出的主机大小写不同（键相等性受影响） |
-| 10 | `．.com`（U+FF0E 全角句点）、`｡.com`（U+FF61 半角句点） | `<None>` | `..com` | UTS46 把全角/半角句点当**标签分隔符**，映射后才出现的空标签**漏检** ⇒ Rust 转出了首标签为空的**非法主机**；Java 侧映射后判空标签 → 拒。⚠️ 这是 Rust 侧更宽松的一处，建议单独排期修 |
-| 11 | 标签 64 / 128 字符 | `<None>`（超 63 字符抛异常） | 原样放行 | Java 强制标签 ≤ 63 字符；Rust 的 idna 默认 `verify_dns_length=false` ⇒ Rust 放行 **DNS 非法**标签。⚠️ 同上，Rust 侧更宽松 |
 
 **已修**：空标签（`a..b.com`、`.example.com`、`a...b`、`..`）此前 Rust **放过**，比浏览器和主线都宽松 —— 结果是同一条输入主线当搜索词、Rust flavor 当网址导航。现两侧一致拒，而**尾点**（`example.com.`）两边都保留。
+
+**已修（2026-10-23）**：IDN 分歧 ⑩ 与 ⑪ —— `．.com` / `｡.com`（全角/半角句点在映射后才产生的空标签，Rust 曾转出 `..com` 这种非法主机）与标签 64/128 字符（Rust 曾放行 DNS 非法标签）现都改为**映射后复检**：空标签一律拒、每个标签 ≤ 63 字符。判据与 Java 侧 `IDN.toASCII` 对齐，`tests/url_idna_parity.rs` 里那两条「冻结现值」的断言已改写为「与主线一致拒」，并补了 63 字符的边界放行（别把上限一起关掉）。
 
 `display_for_url` 用 WHATWG `url` crate 替代 `android.net.Uri`：对 http/https
 结果页的 host 与查询参数解码语义一致（`+`→空格、取首个同名参数）。

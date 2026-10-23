@@ -243,26 +243,28 @@ fn 有意分歧_冻结现值_ascii大小写不折叠() {
 }
 
 #[test]
-fn 有意分歧_冻结现值_全角句点造成空标签() {
-    // 全角/半角句点在 UTS46 里是**标签分隔符**；Java 侧映射后仍是合法标签（a.b.com），
-    // Rust 侧的空标签预检跑在**映射之前** ⇒ 映射后才出现的空标签漏检，
-    // 于是转出 "..com" 这种**非法主机**（首标签为空）。
-    assert_eq!(to_ascii_url("\u{ff0e}.com"), Some("..com".into()));
-    assert_eq!(to_ascii_url("\u{ff61}.com"), Some("..com".into()));
+fn 映射后出现的空标签与主线一致拒() {
+    // 全角/半角句点在 UTS46 里是**标签分隔符**：Java 侧映射后判空标签 ⇒ 抛异常 ⇒ null。
+    // Rust 侧 2026-10-23 之前只在映射**前**查空标签 ⇒ 漏检，转出 `..com`（首标签为空的
+    // 非法主机），于是同一条输入主线当搜索词、Rust 当网址。现在映射后复检，两侧一致拒。
+    assert_eq!(to_ascii_url("\u{ff0e}.com"), None);
+    assert_eq!(to_ascii_url("\u{ff61}.com"), None);
+    // 正常用法不受影响：映射后没有空标签的仍然放行（与共享夹具 `a．b.com` 同口径）
+    assert_eq!(to_ascii_url("a\u{ff0e}b.com"), Some("a.b.com".into()));
 }
 
 #[test]
-fn 有意分歧_冻结现值_标签超长() {
+fn 标签超长与主线一致拒() {
     // Java 侧 `IDN.toASCII` 强制标签 ≤ 63 字符（超了抛异常 → null），
-    // Rust 侧 idna 默认不校验 DNS 长度 ⇒ 原样放行。
+    // Rust 侧 idna 默认不校验 DNS 长度 ⇒ 2026-10-23 之前原样放行（DNS 非法标签）；现在对齐。
     let long64 = "a".repeat(64);
-    assert_eq!(
-        to_ascii_url(&format!("{long64}.com")),
-        Some(format!("{long64}.com"))
-    );
+    assert_eq!(to_ascii_url(&format!("{long64}.com")), None);
     let long128 = "a".repeat(128);
+    assert_eq!(to_ascii_url(&format!("{long128}.com")), None);
+    // 63 恰好在上限内，必须仍然放行 —— 别把边界一起关掉（共享夹具里已有同一条）
+    let long63 = "a".repeat(63);
     assert_eq!(
-        to_ascii_url(&format!("{long128}.com")),
-        Some(format!("{long128}.com"))
+        to_ascii_url(&format!("{long63}.com")),
+        Some(format!("{long63}.com"))
     );
 }

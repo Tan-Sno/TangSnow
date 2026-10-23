@@ -71,17 +71,21 @@ object ClearDataUseCase {
      * 这里把结果留在进程级，由设置页下一次 `onResume` 取走并如实提示：**结果不因界面重建而丢**。
      *
      * ⚠️ 只保留最后一次（清除是幂等操作，旧结果没有提示价值）。
+     *
+     * 用 `AtomicReference` 而非 `@Volatile var` + 读后置空：后者的「读 → 清」不是一步完成的，
+     * 两处并发取会都拿到同一个结果（重复提示）。当前调用点都在主线程（SettingsFragment 的
+     * onResume 与协程回调），线上从未出问题；但「取即清」是本类对外的契约，交给 `getAndSet`
+     * 表达才不必依赖"调用方一定在主线程"这个隐含前提。
      */
-    @Volatile
-    private var pendingOutcome: Result? = null
+    private val pendingOutcome = java.util.concurrent.atomic.AtomicReference<Result?>(null)
 
     /** 存放待提示的结果（覆盖旧的） */
     internal fun rememberOutcome(result: Result) {
-        pendingOutcome = result
+        pendingOutcome.set(result)
     }
 
     /** 取走并清空待提示的结果（取即清 ⇒ 只提示一次） */
-    internal fun takeOutcome(): Result? = pendingOutcome.also { pendingOutcome = null }
+    internal fun takeOutcome(): Result? = pendingOutcome.getAndSet(null)
 
     suspend fun clear(context: Context, options: Options): Result {
         var kernelOk = true

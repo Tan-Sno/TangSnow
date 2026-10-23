@@ -114,6 +114,20 @@ pub fn to_ascii_url(input: &str) -> Option<String> {
     if !ascii.contains('.') || ascii.chars().any(|c| java_is_whitespace(c) || (c as u32) < 0x20) {
         return None;
     }
+    // **映射后复检**（2026-10-23）：UTS46 把全角/半角句点（U+FF0E / U+FF61）当**标签分隔符**，
+    // 这类空标签只会在映射**之后**才出现 —— 上面那段预检跑在映射前，拦不住它，于是会转出
+    // `..com` 这种非法主机（首标签为空）。Java 侧 `IDN.toASCII` 是映射后判空标签、抛异常 ⇒ null，
+    // 因此两侧此前在 `．.com` / `｡.com` 上分歧：主线当搜索词、Rust 当网址。
+    // 同一处顺带对齐 DNS 长度：Java 强制每个标签 ≤ 63 字符（超了抛异常），而 `idna` 默认
+    // `verify_dns_length=false` ⇒ 此前 64 / 128 字符的标签被原样放行（DNS 非法）。
+    // 尾点（`example.com.`）两侧都保留，故只剥一个再分段。
+    let ascii_body = ascii.strip_suffix('.').unwrap_or(&ascii);
+    if ascii_body
+        .split('.')
+        .any(|label| label.is_empty() || label.len() > 63)
+    {
+        return None;
+    }
     Some(format!("{ascii}{port}{rest}"))
 }
 
