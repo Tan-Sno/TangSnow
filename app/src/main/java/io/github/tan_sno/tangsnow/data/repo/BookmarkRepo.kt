@@ -42,7 +42,7 @@ object BookmarkRepo {
      * **两条路径**（N7 保留两段式；2026-10-20 审查报告 A-3 修正非 ASCII 那条）：
      *  - **纯 ASCII 关键词** → SQL 侧 `lower() + LIKE`（[BrowserDb.searchBookmarks]）：SQLite 的
      *    lower/LIKE 只折叠 ASCII，而关键词里没有会被漏折叠的字符 ⇒ 与内存态语义一致，
-     *    且保住 a89333c「不全表进内存」的收益。
+     *    且保住 1813e94「不全表进内存」的收益。
      *  - **含非 ASCII 关键词**（中文等本 app 的主语言）→ SQL 侧**预筛** + 应用侧**精确过滤**
      *    （[BrowserDb.searchBookmarksPrefiltered]）。为什么不直接把关键词下推给 SQL：SQLite 无 ICU，
      *    `lower()` 对非 ASCII **不折叠**（实测 `lower('CAFÉ')='CAFÉ'`），下推会把「CAFÉ Store」

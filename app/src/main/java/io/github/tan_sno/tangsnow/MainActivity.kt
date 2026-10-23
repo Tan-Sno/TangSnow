@@ -767,7 +767,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         super.onNewIntent(intent)
         // 同步当前 intent，后续任何地方再读 getIntent() 拿到的都是最新值
         setIntent(intent)
-        // 与 onStart/onResume 同一款结构性守卫（f7dd7dd 的标准）：同意门禁实例没有
+        // 与 onStart/onResume 同一款结构性守卫（6dc0961 的标准）：同意门禁实例没有
         // 会话管理器，handleIntent 里的导航全要摸它。今天该路径靠「finishing 的实例
         // 不再收到 onNewIntent」这一框架行为兜着，这里把不变量写成显式的。
         if (!::sessionManager.isInitialized || !::binding.isInitialized) return

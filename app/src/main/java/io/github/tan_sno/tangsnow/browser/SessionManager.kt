@@ -1493,7 +1493,7 @@ class BrowserSessionManager private constructor(
      * 为什么不能用「后写者赢」的单布尔：被压实例的 `onStop` 系统性**晚于**压上实例的
      * `onStart/onResume`（下方 [hasOtherHost] 的时序依据是同一事实）⇒ 后写者恒是**离开者**，
      * 双实例每交接一次就把可见性写成 false 并卡死整个前台周期——网页弹窗被自动 dismiss、
-     * 权限被静默拒（2026-10-02 外部审查 N1，60a58b6 引入）。按计数推导则与书写顺序无关。
+     * 权限被静默拒（2026-10-02 外部审查 N1，e220afe 引入）。按计数推导则与书写顺序无关。
      */
     @Volatile
     private var hostVisible = true

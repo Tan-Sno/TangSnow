@@ -359,7 +359,7 @@ class PreferenceStore(context: Context) {
             val arr = JSONArray(json)
             (0 until arr.length()).mapNotNull { i ->
                 val o = arr.optJSONObject(i) ?: return@mapNotNull null
-                // ⚠️ 这里**不做** isHttpTemplate 复检（2026-10-02 N9 修正 91438ae 的写法）：
+                // ⚠️ 这里**不做** isHttpTemplate 复检（2026-10-02 N9 修正 1e186c9 的写法）：
                 // 在这一步剔除坏条目会让 custom_N 下标整体前移，已保存的 searchEngineId
                 // 悄悄指到另一个引擎。安全边界改由 [SearchEngines.all] 在 **id 分配之后**
                 // 按模板过滤实现——导航目标拦得住，id 又保持位置稳定。

@@ -6,7 +6,7 @@ import org.junit.Test
 /**
  * [CrashLogger.displayStamp] —— 崩溃日志文件名 → 展示时间戳。
  *
- * 背景：文件名自 2212d96 起精确到毫秒（`crash-yyyyMMdd-HHmmss-SSS.txt`），展示解析曾滞后
+ * 背景：文件名自 994ba0f 起精确到毫秒（`crash-yyyyMMdd-HHmmss-SSS.txt`），展示解析曾滞后
  * 失配（新日志显示成裸 `20261001-121500-123`）。写名与读名同源由本测试钉住两代格式。
  */
 class CrashLoggerDisplayTest {
