@@ -59,6 +59,11 @@ Get the APK from **[Releases](https://github.com/Tan-Sno/TangSnow/releases/lates
 (the other flavor, `coreRust`, is preview-only and published separately). Since 2.3.0 the
 artefacts carry it; releases up to 2.2.0 were named `app-<abi>-release.apk`.
 
+The Rust preview line is published on the same Releases page as a separate **Pre-release**. It is a
+different app — package `io.github.tan_sno.tangsnow.rust` — so it installs **alongside** this one
+rather than replacing it, and the two do not share data. It exists to validate the JNI seam, not to
+run faster; see that release's notes for what it does and does not cover.
+
 The three files are identical apart from the CPU architecture. If you are unsure, take `arm64-v8a`.
 
 Requires Android 8.0 (API 26) or later. Allow "install unknown apps" in your system settings before installing.
