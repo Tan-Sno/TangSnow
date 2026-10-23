@@ -51,9 +51,13 @@ Get the APK from **[Releases](https://github.com/Tan-Sno/TangSnow/releases/lates
 
 | File | Device |
 |---|---|
-| `app-arm64-v8a-release.apk` | Modern phones — the vast majority of devices (**recommended**) |
-| `app-armeabi-v7a-release.apk` | Older 32-bit devices |
-| `app-x86_64-release.apk` | Emulators and the few x86 devices |
+| `app-coreKotlin-arm64-v8a-release.apk` | Modern phones — the vast majority of devices (**recommended**) |
+| `app-coreKotlin-armeabi-v7a-release.apk` | Older 32-bit devices |
+| `app-coreKotlin-x86_64-release.apk` | Emulators and the few x86 devices |
+
+`coreKotlin` in the name is the flavor — the pure-Kotlin engine, which is the line that ships
+(the other flavor, `coreRust`, is preview-only and published separately). Since 2.3.0 the
+artefacts carry it; releases up to 2.2.0 were named `app-<abi>-release.apk`.
 
 The three files are identical apart from the CPU architecture. If you are unsure, take `arm64-v8a`.
 

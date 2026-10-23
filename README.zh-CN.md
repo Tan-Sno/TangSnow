@@ -47,9 +47,13 @@
 
 | 文件 | 适用设备 |
 |---|---|
-| `app-arm64-v8a-release.apk` | 现代手机（绝大多数设备，**推荐**） |
-| `app-armeabi-v7a-release.apk` | 较老的 32 位设备 |
-| `app-x86_64-release.apk` | 模拟器 / 少数 x86 设备 |
+| `app-coreKotlin-arm64-v8a-release.apk` | 现代手机（绝大多数设备，**推荐**） |
+| `app-coreKotlin-armeabi-v7a-release.apk` | 较老的 32 位设备 |
+| `app-coreKotlin-x86_64-release.apk` | 模拟器 / 少数 x86 设备 |
+
+文件名里的 `coreKotlin` 是 flavor 名 —— 纯 Kotlin 内核那条线，也就是实际发布的一条
+（另一条 `coreRust` 仍是预览线、单独发布）。2.3.0 起产物带该前缀；2.2.0 及更早叫
+`app-<abi>-release.apk`。
 
 三个文件内容相同，仅 CPU 架构不同；不确定选哪个就下载 `arm64-v8a`。
 
@@ -109,8 +113,8 @@
 
 正式包同样必须点名 flavor：`:app:assembleCoreKotlinRelease`。不带 flavor 的 `assembleRelease`
 会把**两套**（6 个 APK）一起打进 `app/release/`，而发版校验按"一次只发一个 flavor"判，多出来的
-会报"预期之外的 APK"。这条限制是有原因的：两个 flavor 的 `versionCode` 派生相同（基准 41 ⇒
-411/412/413），混发会让用户在没选过的两份实现之间来回升降。不过自 A1 起两者已是**两个独立应用身份**
+会报"预期之外的 APK"。这条限制是有原因的：两个 flavor 的 `versionCode` 派生相同（基准 42 ⇒
+421/422/423），混发会让用户在没选过的两份实现之间来回升降。不过自 A1 起两者已是**两个独立应用身份**
 （`coreKotlin` = `io.github.tan_sno.tangsnow`，`coreRust` = `io.github.tan_sno.tangsnow.rust`），
 可同机并存、数据隔离、各自升级；Rust 线用独立的 `v<ver>-rust-preview` tag 发布。
 GeckoView 原生库（`libxul.so` 等 `.so`，

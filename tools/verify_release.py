@@ -43,6 +43,14 @@
     aapt2 / apksigner / Java `ZipFile` 全读得动 —— ①–⑨ 因此可以**全绿却装不上**。
     修复项是 `useLegacyPackaging = true`（.so 走 deflate、安装时解压），所以这里两道都查：
     「是不是 deflate」= 修复有没有生效，「padding 多长」= 就算没对齐也别漏。
+11. **原生库 ELF 段对齐**：自家 `libtangsnow_core.so` 在 arm64-v8a / x86_64 上 `p_align` 必须
+    ≥ 16384（`ALIGN_16K`）。第 ⑩ 项查的是 **APK 层**（zip 压缩方式与 local header padding），
+    这项查 **ELF 层**的段对齐 —— 两层是两回事，而 16KB 页设备上的拒收由后者决定；
+    上游 GeckoView 的库与 32 位 ABI 不参评（否则会因别人的产物永久红）。
+12. **产物里不得含构建机路径/身份**（`D:/...`、`C:/Users/...`、真实用户名等）：APK 是对外
+    发布的字节，等于公开编译机的目录结构与用户名 —— 这类东西不崩不报错，只有发出去才看得见。
+    修法在两侧：Kotlin release 靠 R8 裁掉调试信息，Rust 侧靠 `build-android.sh` 的
+    `--remap-path-prefix` 重映射。
 
 依赖：Python 3 标准库 + 本机 Android SDK 的 `apksigner` / `aapt2`。
 """

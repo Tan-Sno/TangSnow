@@ -188,8 +188,8 @@
    发布出去的行为仍是旧的。2026-10-21 已用本机 NDK r30 重编三 ABI（`p_align` 全 `0x4000`）。
 3. **两 flavor 是两个独立应用身份**：`coreKotlin` = `io.github.tan_sno.tangsnow`，
    `coreRust` = `io.github.tan_sno.tangsnow.rust`（`applicationIdSuffix = ".rust"`）
-   ⇒ 可同机并存、数据隔离、各自升级；**但共用同一套 versionCode 基准**（41 ⇒ ABI 派生
-   411/412/413），发布纪律仍是**一次只发一个 flavor**（门禁把另一个 flavor 的包判为
+   ⇒ 可同机并存、数据隔离、各自升级；**但共用同一套 versionCode 基准**（本版 42 ⇒ ABI 派生
+   421/422/423），发布纪律仍是**一次只发一个 flavor**（门禁把另一个 flavor 的包判为
    「预期之外的 APK」）。
 
 ## 13. 事实来源

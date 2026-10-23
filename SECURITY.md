@@ -8,8 +8,8 @@ Security updates are provided for the latest release only. If you are on an olde
 
 | Version | Security updates |
 |---|---|
-| 2.1.x | ✅ |
-| < 2.1 | ❌ |
+| 2.3.x | ✅ |
+| < 2.3 | ❌ |
 
 > **Note for 2.0.x users:** since 2.1.0 the application ID (`applicationId`) changed from
 > `com.tangsnow.tangsnow` to `io.github.tan_sno.tangsnow`, so **2.1.x cannot be installed over 2.0.x**.
@@ -49,7 +49,7 @@ To avoid misunderstandings, the following are **not** security vulnerabilities u
 
 - **Vulnerabilities in third-party components** (GeckoView, OkHttp, AndroidX and so on) — please report those to the upstream project. We follow up with upgrades as soon as the upstream fix ships.
 - Issues that require the device to be **rooted, debugging-enabled, or already compromised** by an attacker with local code execution.
-- **Privacy behaviours this app deliberately chooses**, such as collecting no telemetry, disabling the engine's remote Safe Browsing lookups, or bundling no ad-blocking extension. These are product trade-offs; see the [README](README.md) and the [privacy policy](docs/PRIVACY.md).
+- **Privacy behaviors this app deliberately chooses**, such as collecting no telemetry, disabling the engine's remote Safe Browsing lookups, or bundling no ad-blocking extension. These are product trade-offs; see the [README](README.md) and the [privacy policy](docs/PRIVACY.md).
 
 ## User agreement and privacy
 

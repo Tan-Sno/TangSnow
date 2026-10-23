@@ -469,8 +469,18 @@ android {
         //   （webextensions.settings.services.mozilla.com）与 157 **完全一致** ⇒ 不构成新的披露
         //   变化，`POLICY_VERSION` 维持 23。对外声明同步：THIRD_PARTY_NOTICES（中英）、
         //   `open_source_text`（中英）、README、ARCHITECTURE（中英）。
-        versionCode = 41
-        versionName = "2.2.0"
+        // 2.3.0（2026-10-23）：**自 2.2.0 以来的累积版本**，无新增功能面，两处实质变化：
+        //   ① 内核 157 → 158（见上一条，官方性四重核对）；② 文本与口径修正 —— 对外文档的
+        //   ABI 派生号（411/412/413 → 421/422/423）、下载表 APK 文件名补 flavor 前缀
+        //   （`app-coreKotlin-<abi>-release.apk`，2.2.0 发布时还没有 flavor 维度，旧名对不上
+        //   本版产物）、ARCHITECTURE 测试规模对齐实测（248/255 · 169 · 25）。
+        //   2.2.0 之后合入的 69 笔里还含：审查报告 002 的 11 条修复、门禁第 ⑫ 项（产物不得含
+        //   构建机路径）、C-14 镜像差分夹具化、SessionManager 弹窗委托拆解、Rust 侧夹具
+        //   mtime 陈旧导致的假红取证。**versionCode 42（ABI 派生 421/422/423）**。
+        //   `POLICY_VERSION` 维持 23：内核升级未改变出网对象与披露面（omni.ja 安全浏览 pref
+        //   与主机两版逐字一致，已实测），文本修正不涉及政策条款。
+        versionCode = 42
+        versionName = "2.3.0"
         // 仪器测试（2026-10-19 加回）：`app/src/androidTestCoreRust` 下有一道 JNI 边界断言
         // （`libtangsnow_core.so` 是否真的加载 + 7 个 W1 函数是否绑定到**当前**签名）。
         // 它只在**设备**上跑，是「Rust 接管」在真机上唯一的硬证据 —— JVM 单测里

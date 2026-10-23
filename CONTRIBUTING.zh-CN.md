@@ -62,7 +62,7 @@
 debug 签名包。Android Studio 的「生成签名式 App Bundle / APK」向导自带凭据，闸门认得、会放行。
 仅本地验证打包链路时，可显式加 `-Ptangsnow.allowDebugSignedRelease` 跳过该闸门 —— 产物仍用
 debug 证书、仍不可分发或上架。正式包**一次只发一个 flavor**：两个 flavor 的 `versionCode`
-派生相同（基准 41 ⇒ 411/412/413），混发会在用户没选过的两份实现之间来回升降。
+派生相同（基准 42 ⇒ 421/422/423），混发会在用户没选过的两份实现之间来回升降。
 不过自 A1 起两者已是**两个独立应用身份**（`coreKotlin` = `io.github.tan_sno.tangsnow`，
 `coreRust` = `io.github.tan_sno.tangsnow.rust`），可同机并存、数据隔离；Rust 线用独立的
 `v<ver>-rust-preview` tag 发布。

@@ -35,7 +35,7 @@ distribution):
 - This application has **not modified** GeckoView's source (it only calls its public APIs as a
   dependency), so no Modifications exist in the sense of MPL section 3.1. The application's own code
   is a Larger Work under the Apache License 2.0 and is not subject to the MPL 2.0 copyleft terms.
-- The licence and copyright notices inside GeckoView's source (MPL 2.0 §3.4) have not been removed or
+- The license and copyright notices inside GeckoView's source (MPL 2.0 §3.4) have not been removed or
   altered.
 - Full Apache License 2.0 text: https://www.apache.org/licenses/LICENSE-2.0
 

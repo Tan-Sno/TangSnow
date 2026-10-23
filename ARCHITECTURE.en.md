@@ -123,7 +123,7 @@ shared unit tests run under both flavors.
 - **Exports**: 34 `Java_io_github_tan_1sno_tangsnow_core_CoreNative_*` symbols (3 are known orphans; any new
   one outside the whitelist turns the gate red).
 - **Tests**: 15 `tests/*.rs` (14 test binaries + the shared reader `common/mod.rs`), including per-module
-  `*_parity.rs` (Kotlin↔Rust behaviour alignment), `jni_boundary_parity`, `properties_fuzz`.
+  `*_parity.rs` (Kotlin↔Rust behavior alignment), `jni_boundary_parity`, `properties_fuzz`.
   `cargo test --offline` = **169 cases**. **Ten pairs** now read a **JSON fixture shared by both sides**
   (`tests/fixtures/`, the Kotlin side reads the very same files ⇒ changing a fixture turns both sides
   red); the rest are deliberately **one-sided** cases (source-level sentinels, properties, regression
@@ -209,21 +209,21 @@ lint `checkAllWarnings=true` is a hard gate.
 
 1. **Instrumented tests cover coreRust only**: `app/src/androidTestCoreRust` holds 12 cases
    (W2's nine bridges, W1's two, plus a real round-trip), but **coreKotlin — the line that
-   actually ships — has none**, so UI/on-device behaviour still has no automated coverage.
+   actually ships — has none**, so UI/on-device behavior still has no automated coverage.
    Those 12 cases also **have not run on this machine**: the 16KB AVD boots, but the APK
    carrying GeckoView's native libraries does not install (`adb install` times out, then the
    shell stops answering) ⇒ a device that can install that package is required.
 2. **The packaged `.so` must be rebuilt whenever the Rust sources change**: the shipped `.so`
    and `tangsnow-rs/` are **two sources of truth** (`ReleaseGateConsistencyTest` only checks that
    `dist/` and the flavor copy are byte-identical). Change Rust without rebuilding ⇒ the
-   published behaviour is still the old one. Rebuilt for all three ABIs with the local NDK r30
+   published behavior is still the old one. Rebuilt for all three ABIs with the local NDK r30
    on 2026-10-21 (`p_align` = `0x4000` throughout).
 3. **The two flavors are two independent app identities**: `coreKotlin` =
    `io.github.tan_sno.tangsnow`, `coreRust` = `io.github.tan_sno.tangsnow.rust`
    (`applicationIdSuffix = ".rust"`) ⇒ they can coexist on one device with isolated data and
-   independent upgrades; but they still **derive from the same versionCode base** (41 ⇒
-   411/412/413 per ABI), and the release discipline stays **one flavor at a time** (the gate
-   rejects the other flavor's APKs as "unexpected artifacts").
+   independent upgrades; but they still **derive from the same versionCode base** (42 ⇒
+   421/422/423 per ABI in this version), and the release discipline stays **one flavor at a
+   time** (the gate rejects the other flavor's APKs as "unexpected artifacts").
 
 ## 13. Sources
 

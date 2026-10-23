@@ -55,7 +55,7 @@ the privacy impact.
 
 The `app` module has a `core` product-flavor dimension (`coreKotlin` — the shipped pure-Kotlin
 engine; `coreRust` — the same logic behind a JNI bridge, still preview-only). With a flavor
-dimension the unflavoured names are **gone**: `:app:lintDebug` and `:app:testDebugUnitTest` now
+dimension the unflavored names are **gone**: `:app:lintDebug` and `:app:testDebugUnitTest` now
 fail as ambiguous task names, so always name the flavor — and run **both**, because checking only
 one lets the other flavor's compile errors, lint findings and tests reach `main` unnoticed (that
 is what CI does).
@@ -96,7 +96,7 @@ shape of `JClass` all live in that layer). And it still only covers the type lev
 ## Code conventions
 
 - Language and UI framework: Kotlin + the Android View system (no Compose)
-- **Colours** always use semantic names (`@color/…` or `?attr/colorXxx`) — never hard-code a colour value
+- **Colors** always use semantic names (`@color/…` or `?attr/colorXxx`) — never hard-code a color value
 - **Dimensions** (dp/sp) move into `values/dimens.xml` only when the same semantic value repeats in
   several places or has already drifted; a value used once stays in its layout. The same number often
   means different things in different places (a 40dp touch target versus a 40dp margin), and merging
