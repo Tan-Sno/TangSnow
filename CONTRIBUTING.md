@@ -44,7 +44,7 @@ the privacy impact.
 
 - **JDK 25** — the Gradle daemon pins this version through `gradle/gradle-daemon-jvm.properties` and
   downloads it automatically if it is missing. The produced bytecode targets Java 17.
-- Android SDK `platforms;android-37` (API 37, minor level 2)
+- Android SDK `platforms;android-37.2` (API 37.2; minor-level SDKs are separate package ids)
 - Android Studio 2026.1 or later (only for GUI development; command-line builds do not need it)
 
 ```bash
@@ -74,9 +74,10 @@ Release artifacts are one flavor at a time on purpose: both flavors derive from 
 they are also **separate app identities** — `coreKotlin` is `io.github.tan_sno.tangsnow`,
 `coreRust` is `io.github.tan_sno.tangsnow.rust` — so they can coexist on one device; the Rust
 line ships under its own `v<ver>-rust-preview` tag — and that release must be marked
-**pre-release**. The in-app updater reads `/releases/latest` and picks assets by ABI alone (it does
-not look at the flavor), so a regular release of the Rust build would be offered to users of the
-stable line as an "update" — and they would end up installing a different app with a `.rust` suffix.)
+**pre-release**. The in-app updater reads `/releases/latest` and matches assets by flavor first, then by ABI
+(since 2026-10-23 `UpdateChecker.pickAsset` filters on the `app-<flavor>-` prefix), so a Rust asset is
+never offered to the stable line. The `-rust-preview` tag + pre-release discipline is kept so the
+two implementation lines stay visibly separate in the releases list.)
 
 Make sure all of the commands above pass before submitting, and that lint stays at **zero issues**.
 Note that `checkAllWarnings` is enabled (`app/build.gradle.kts`), so **warnings are reported too** —

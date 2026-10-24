@@ -99,7 +99,7 @@ The full text is in the [privacy policy](docs/PRIVACY.md) and the [user agreemen
 Requirements:
 
 - **JDK 25** — the Gradle daemon pins this version through `gradle/gradle-daemon-jvm.properties` and downloads it automatically if it is missing. The produced bytecode targets Java 17.
-- Android SDK `platforms;android-37` (API 37, minor level 2)
+- Android SDK `platforms;android-37.2` (API 37.2; minor-level SDKs are separate package ids)
 
 ```bash
 ./gradlew :app:assembleCoreKotlinDebug        # build one flavor's debug APKs (per ABI)
@@ -114,7 +114,7 @@ exists — they became ambiguous, so always name the flavor, and run both: check
 the other flavor's compile errors, lint findings and tests slip in unseen (CI does exactly this).
 
 Release builds must also name one flavor: `:app:assembleCoreKotlinRelease`. A bare
-`assembleRelease` produces both flavors (six APKs) into `app/release/`, which the pre-release
+`assembleRelease` produces both flavors (six APKs) into `app/build/outputs/apk/<flavor>/release/`, which the pre-release
 gate then rejects as unexpected artifacts — publishing is deliberately one-flavor-at-a-time.
 (The two flavors are **separate app identities** since A1 — `coreKotlin` is
 `io.github.tan_sno.tangsnow`, `coreRust` is `io.github.tan_sno.tangsnow.rust` — so they can

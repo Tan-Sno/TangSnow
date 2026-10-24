@@ -41,7 +41,7 @@
 
 - **JDK 25** —— Gradle 守护进程按 `gradle/gradle-daemon-jvm.properties` 固定使用该版本；
   本机若未安装，Gradle 会自动下载。产物字节码目标为 Java 17。
-- Android SDK `platforms;android-37`（API 37，minor level 2）
+- Android SDK `platforms;android-37.2`（API 37.2；minor 级 SDK 各占独立包 id）
 - Android Studio 2026.1 或更高版本（仅图形界面开发需要，命令行构建不需要）
 
 ```bash
@@ -66,8 +66,8 @@ debug 证书、仍不可分发或上架。正式包**一次只发一个 flavor**
 不过自 A1 起两者已是**两个独立应用身份**（`coreKotlin` = `io.github.tan_sno.tangsnow`，
 `coreRust` = `io.github.tan_sno.tangsnow.rust`），可同机并存、数据隔离；Rust 线用独立的
 `v<ver>-rust-preview` tag 发布，且该 release **必须标 prerelease**：应用内更新检查读的是
-`/releases/latest`，而资产挑选只按 ABI 匹配、不看 flavor —— Rust 包若作为正式 release 发出，
-会被正式版用户当成「有新版本」，下到的却是包名带 `.rust` 的另一个应用。
+`/releases/latest`，资产挑选**先按 flavor**（`app-<flavor>-` 前缀，2026-10-23 起）、再按 ABI 匹配 ——
+Rust 资产不会被正式版用户看到。保留 `-rust-preview` tag + prerelease 纪律，是为了两条实现线在 release 列表里始终清晰可分。
 
 提交前请确保上面几条命令均通过，且 lint 保持**零问题**。
 注意本项目已开启 `checkAllWarnings`（`app/build.gradle.kts`），**warning 级问题同样会被报出** ——

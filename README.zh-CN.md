@@ -102,7 +102,7 @@ Rust 预览线在同一个 Releases 页上，单独标记为 **Pre-release**。�
 
 - **JDK 25** —— Gradle 守护进程按 `gradle/gradle-daemon-jvm.properties` 固定使用该版本；
   本机若未安装，Gradle 会自动下载。产物字节码目标为 Java 17。
-- Android SDK `platforms;android-37`（API 37，minor level 2）
+- Android SDK `platforms;android-37.2`（API 37.2；minor 级 SDK 各占独立包 id）
 
 ```bash
 ./gradlew :app:assembleCoreKotlinDebug        # 构建单个 flavor 的 debug 包（按 ABI 分包）
@@ -116,13 +116,13 @@ Rust 预览线在同一个 Releases 页上，单独标记为 **Pre-release**。�
 并且**两个 flavor 都要跑**：只跑一个，另一个的编译错误、lint 警告与单测都能悄悄进主线（CI 就是这么配的）。
 
 正式包同样必须点名 flavor：`:app:assembleCoreKotlinRelease`。不带 flavor 的 `assembleRelease`
-会把**两套**（6 个 APK）一起打进 `app/release/`，而发版校验按"一次只发一个 flavor"判，多出来的
+会把**两套**（6 个 APK）一起打进 `app/build/outputs/apk/<flavor>/release/`，而发版校验按"一次只发一个 flavor"判，多出来的
 会报"预期之外的 APK"。这条限制是有原因的：两个 flavor 的 `versionCode` 派生相同（基准 42 ⇒
 421/422/423），混发会让用户在没选过的两份实现之间来回升降。不过自 A1 起两者已是**两个独立应用身份**
 （`coreKotlin` = `io.github.tan_sno.tangsnow`，`coreRust` = `io.github.tan_sno.tangsnow.rust`），
 可同机并存、数据隔离、各自升级；Rust 线用独立的 `v<ver>-rust-preview` tag 发布。
-GeckoView 原生库（`libxul.so` 等 `.so`，
-未压缩存储）约占包体 86%，因此按 ABI 独立分包（`arm64-v8a` / `armeabi-v7a` / `x86_64`），
+GeckoView 原生库（`libxul.so` 等 `.so`，以 deflate 压缩存储 ——
+`useLegacyPackaging`，安装时解压提取，与发版门禁⑩同口径）约占包体 86%，因此按 ABI 独立分包（`arm64-v8a` / `armeabi-v7a` / `x86_64`），
 不产出 universal APK；各包 `versionCode` 互不相同，以便在同一设备上切换架构安装。
 签名凭据不放仓库，而**任何** release 打包任务（`assemble`/`bundle`/`package`/`install` 开头且名含
 `Release`）在没有凭据时都会**直接报错** —— 三道闸门分别管"文件不存在""键缺失或为空"

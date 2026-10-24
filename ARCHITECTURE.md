@@ -52,15 +52,15 @@
 
 **依赖方向单向向下**：UI → 浏览器层 → 数据/工具层；内核层由浏览器层独占持有，其它层不直接引用 GeckoView 类型。
 
-## 4. 包清单与职责（55 文件 / 8 包）
+## 4. 包清单与职责（57 文件 / 8 包）
 
 | 包 | 文件 | 职责 | 代表类 |
 |---|---|---|---|
 | `tangsnow`（根） | 17 | 各 Activity + 顶层控制器 | `MainActivity`(3085 行)、`SettingsFragment`、`SuggestionsController`、`FindBarController`、`TangSnowApplication` |
-| `tangsnow.browser` | 1 | **浏览器层唯一文件**：会话/标签/权限/内容委托 | `SessionManager`(1966 行，含 `TabEvents`/`PromptHandler`/`PermissionHandler`/`SelectionHandler` 四个接口) |
-| `tangsnow.data` | 11 | 持久化与全局状态 | `PreferenceStore`、`BrowserDb`、`SessionStore`、`Theme`、`SearchEngines`、`LegalDocs`、`AppHttp` |
+| `tangsnow.browser` | 1 | **浏览器层唯一文件**：会话/标签/权限/内容委托 | `SessionManager`(2038 行，含 `TabEvents`/`PromptHandler`/`PermissionHandler`/`SelectionHandler` 四个接口) |
+| `tangsnow.data` | 12 | 持久化与全局状态 | `PreferenceStore`、`BrowserDb`、`SessionStore`、`Theme`、`SearchEngines`、`LegalDocs`、`AppHttp` |
 | `tangsnow.data.repo` | 4 | 三个仓 + 应用作用域 | `BookmarkRepo`、`HistoryRepo`、`DownloadRepo`、`ApplicationScope` |
-| `tangsnow.util` | 10 | 无状态工具 | `UrlUtils`、`Bitmaps`、`CrashLogger`、`GeckoResultExt`、`SecureScreen` |
+| `tangsnow.util` | 11 | 无状态工具 | `UrlUtils`、`Bitmaps`、`CrashLogger`、`GeckoResultExt`、`SecureScreen` |
 | `tangsnow.ui` | 8 | 可复用 UI 片段 | `Adapters`、`SheetBuilders`、`WebPrompts`、`HomeTiles`、`ScanImageActivity` |
 | `tangsnow.extension` | 3 | AMO 扩展目录与安装 | `ExtensionCatalog`、`ExtInstallCoordinator`、`ExtensionPrompts` |
 | `tangsnow.update` | 1 | 应用内更新检查（GitHub Releases） | `UpdateChecker` |
@@ -78,7 +78,7 @@
 - **运行时级设置**只在一处构造（`SessionManager.runtime()`）：内容拦截档位、GPC 信号、指纹保护，
   其余 40 余项走 GeckoView 默认值。
 - **内核安全浏览远程查询已关闭**（该能力需连 Mozilla/Google，见 `buildContentBlocking` 内注释）；
-  `libxul.so` 未压缩存储、按 ABI 分包。
+  `libxul.so` 以 deflate 压缩存储（`useLegacyPackaging`，与 §10 门禁⑩一致）、按 ABI 分包。
 
 ## 6. `core` flavor 与 JNI 接缝（**已接线**：W1 7 桥 + W2 11 桥 = 18 桥）
 

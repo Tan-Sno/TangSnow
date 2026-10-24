@@ -53,15 +53,15 @@ release task fails outright when credentials are missing (see §10, the three si
 **Dependencies point one way, downward**: UI → browser → data/util. The engine layer is owned exclusively
 by the browser layer; no other layer references GeckoView types.
 
-## 4. Packages and responsibilities (55 Kotlin files / 8 packages)
+## 4. Packages and responsibilities (57 Kotlin files / 8 packages)
 
 | Package | Files | Responsibility | Representative classes |
 |---|---|---|---|
 | `tangsnow` (root) | 17 | Activities + top-level controllers | `MainActivity`(3085 lines), `SettingsFragment`, `SuggestionsController`, `FindBarController`, `TangSnowApplication` |
-| `tangsnow.browser` | 1 | **The single browser-layer file**: session/tab/permission/content delegates | `SessionManager`(1966 lines; `TabEvents`/`PromptHandler`/`PermissionHandler`/`SelectionHandler`) |
-| `tangsnow.data` | 11 | Persistence and global state | `PreferenceStore`, `BrowserDb`, `SessionStore`, `Theme`, `SearchEngines`, `LegalDocs`, `AppHttp` |
+| `tangsnow.browser` | 1 | **The single browser-layer file**: session/tab/permission/content delegates | `SessionManager`(2038 lines; `TabEvents`/`PromptHandler`/`PermissionHandler`/`SelectionHandler`) |
+| `tangsnow.data` | 12 | Persistence and global state | `PreferenceStore`, `BrowserDb`, `SessionStore`, `Theme`, `SearchEngines`, `LegalDocs`, `AppHttp` |
 | `tangsnow.data.repo` | 4 | Three repositories + app scope | `BookmarkRepo`, `HistoryRepo`, `DownloadRepo`, `ApplicationScope` |
-| `tangsnow.util` | 10 | Stateless utilities | `UrlUtils`, `Bitmaps`, `CrashLogger`, `GeckoResultExt`, `SecureScreen` |
+| `tangsnow.util` | 11 | Stateless utilities | `UrlUtils`, `Bitmaps`, `CrashLogger`, `GeckoResultExt`, `SecureScreen` |
 | `tangsnow.ui` | 8 | Reusable UI fragments | `Adapters`, `SheetBuilders`, `WebPrompts`, `HomeTiles`, `ScanImageActivity` |
 | `tangsnow.extension` | 3 | AMO extension catalog and installation | `ExtensionCatalog`, `ExtInstallCoordinator`, `ExtensionPrompts` |
 | `tangsnow.update` | 1 | In-app update check (GitHub Releases) | `UpdateChecker` |
@@ -81,7 +81,7 @@ by the browser layer; no other layer references GeckoView types.
 - **Runtime-level settings are configured in exactly one place** (`SessionManager.runtime()`): content-blocking
   tier, the GPC signal, and fingerprinting protection; the remaining 40-odd options use GeckoView defaults.
 - **Safe-browsing remote lookups are disabled** (that capability requires talking to Mozilla/Google — see the
-  comment inside `buildContentBlocking`); `libxul.so` is stored uncompressed and split per ABI.
+  comment inside `buildContentBlocking`); `libxul.so` is deflate-compressed (`useLegacyPackaging`, matching release gate ⑩) and split per ABI.
 
 ## 6. The `core` flavor and the JNI seam (**wired**: W1's 7 bridges + W2's 11 = 18)
 
