@@ -79,7 +79,7 @@ Each release page documents that version's changes and installation requirements
 ## Privacy
 
 - No account and no cloud account; uninstalling the app deletes your data.
-- Apart from the sites you visit, the app contacts only three external services, each for a single purpose:
+- Apart from the sites you visit, the app's own network stack contacts only three external services, each for a single purpose (the GeckoView engine ships Mozilla remote-settings hosts of its own, and update downloads are fetched by the system browser/downloader, not by the app):
   - `addons.mozilla.org` — the extension catalogue, metadata and signed packages (official Mozilla source).
   - Mozilla's official remote settings service (`firefox.settings.services.mozilla.com`) — updates the tracking-protection lists on your device.
   - `api.github.com` — **only when you tap "Settings → Check for updates"** — reads public version information (version number and release notes). That request reads public data only, carries no device identifier, account or browsing record, and is **never issued automatically in the background**.

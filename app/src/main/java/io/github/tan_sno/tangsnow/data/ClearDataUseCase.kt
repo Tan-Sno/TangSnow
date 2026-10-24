@@ -144,8 +144,7 @@ object ClearDataUseCase {
             CrashLogger.clearHost()
         }
         if (options.sessionSnapshot) locally {
-            // ⚠️ 必须**先置位、再删除**（与 MainActivity.performExit 的退出路径同序，见其 :2944-2948
-            // 注释与 2026-10-02 外部审查 P3-8）：置位期间 saveState 一律跳过 ⇒ 删除完成后不会有任何
+            // ⚠️ 必须**先置位、再删除**（与 MainActivity.performExit 的退出路径同序，见其「清快照之前先置位」注释与 2026-10-02 外部审查 P3-8）：置位期间 saveState 一律跳过 ⇒ 删除完成后不会有任何
             // 写把快照写回来。
             //
             // 顺序反了会怎样（2026-10-20 审查 A-1）：删除完成到置位生效之间存在窗口，而

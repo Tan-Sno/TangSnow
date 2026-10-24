@@ -272,31 +272,12 @@ android {
         //     资料库页签与搜索词的重建恢复、语言初选页重建后保留已选语言、取色对话框回填与
         //     无障碍描述、硬编码失败原因改资源串、崩溃日志过滤口径、对话框内边距 px→dp。
         //   ABI 分包 versionCode 随之派生为 381 / 382 / 383。
-        // 2.1.7：**第三方审查报告 6 的收口**。无新功能、无新对外端点、政策文本未变 ⇒
-        //   `POLICY_VERSION` **保持 23**（不动）。修的都是"编译通过、测试全绿也发现不了"那一类：
-        //   ① 【P1】`exiting` 在「**不清除**」退出分支不复位 ⇒ `finishAffinity()` 不杀进程，同进程内
-        //      「从桌面重开 → 再退出」会被早退挡成空操作：开着「退出即清除」也不清、零提示（承诺为假 +
-        //      无反馈），同时跳过 `saveState()`、且 onDestroy 的关停判据恒假 ⇒ 内核再也不关停；
-        //   ② 扩展安装的总超时 `onFailure` 在「超时与宿主销毁竞态」下会丢投递（**普适超时路径本身
-        //      不丢**——`withTimeout` 只取消自己的子 TimeoutCoroutine，外层协程仍活跃，
-        //      `withContext(Dispatchers.Main)` 照常执行；丢投递只发生在 TCE 触发后、主线程投递
-        //      执行前，宿主 destroy 的 `cancelAll()` 恰好取消作业的那一刻）⇒ 投递套
-        //      `NonCancellable` 并补 `runCatching` 堵住该竞态；同时把"带一次性投递闸"那句
-        //      **失实的 KDoc 改成真话**（该措辞曾声称"总超时已取消本协程、投递曾永不发生"，前提错误，
-        //      2026-10-02 复核更正——见 ExtInstallCoordinator 内同位置的注释）；
-        //   ③ 删除自定义搜索引擎按**显示位置**算下标 ⇒ `all()` 在 id 分配后才过滤坏条目，位置会前移
-        //      ⇒ 有坏条目时会**删错引擎**；改为从 `engine.id` 反解存储下标；
-        //   ④ 崩溃日志「分享」失败复用了"当前没有可分享的页面"⇒ 归因错，新增 `about_crash_share_failed`；
-        //   ⑤ 手动进入 PiP 不再传空参数（此前把 `updatePipParams` 刚设好的 autoEnter / 源矩形丢掉）；
-        //      下载确认队列的销毁判据补 `hasOtherHost()`（不再被另一个实例的 onDestroy 整队放弃）。
-        //   ABI 分包 versionCode 随之派生为 401 / 402 / 403。
-        //   versionCode = 41（本文件的版本历史按这个风格记，`tools/verify_release.py` 也会去核对声明与制品一致）。
         // 2.1.6：**政策 §4 措辞与实发对齐 + 第三方全盘报告的核实与修复收口**（8 文件 + 3 个新测试类 /
         //   +387 −47）。无新功能、无新对外端点；但 §4 原写「不携带任何设备标识、账号或浏览记录」，
         //   而实发还带应用版本号（User-Agent）与设备语言偏好（Accept-Language）—— 二者都不是设备
         //   标识符，原措辞不算不实，但可能被读得比实际更宽 ⇒ 如实列出并明确「除此之外不发送其它
         //   信息」⇒ **`POLICY_VERSION` 22 → 23**（`1ff089a`，2026-09-30；docs 已重导出）。
-        //   ⚠️ 此前这里写的是「政策文本未变 ⇒ 保持 22」，与 `:308` 引用的 23 自相矛盾，且让版本史
+        //   ⚠️ 此前这里写的是「政策文本未变 ⇒ 保持 22」，与版本史里另一处引用的 23 自相矛盾，且让版本史
         //   漏记了这次 bump（2026-10-02 第三方全量审查 P2 指出、我方回 git 取证后校正：`1ff089a`
         //   在 v2.1.5 之前、在 v2.1.6 之内）。六条都是「回代码取证」后的结论：
         //  ① 【P1】双实例 MainActivity 互相关停：`singleTop` 下从外部深链 / 分享进来会压出第二个实例，
@@ -353,7 +334,7 @@ android {
         //   同日再加 `BridgeSignatureParityTest`（3 例：每个 Kotlin `external fun` 都有同名同形参数
         //   个数的 Rust 导出、白名单之外的新孤儿、重名与 `tan_1sno` 转义及 `#[no_mangle]` 配对）⇒ +3。
         //   ⚠️ 本行只数**共享源集** `app/src/test`：coreRust 专有的 `app/src/testCoreRust`
-        //   （`CoreBridgeDecodeTest`，4 例）不在其内 —— 那些用例引用只存在于一个 flavor 的符号，
+        //   （`CoreBridgeDecodeTest` 4 例 + `CoreImplSeamTest` 3 例，共 7 例）不在其内 —— 那些用例引用只存在于一个 flavor 的符号，
         //   在 coreKotlin 里根本编译不出来，把它们计入会让这个哨兵自己变成假话。
         //   同日整理轮再加 3 例：`ReleaseGateConsistencyTest` 2 例（随包 `.so` 只有一份真相 —— flavor
         //   三颗在位 + `tangsnow-rs/.gitignore` 的 `/dist/jniLibs/` 规则在位 + 落点若有产物必须与
@@ -439,7 +420,9 @@ android {
         //   `UrlUtilsTest`（30→3）、`SchemeGateTest`（6→2）、`PercentEncodeTest`（10→2，
         //   搜索模板那 5 条镜像并入 `search_engines` 夹具）、`BookmarkHtmlTest`（24→11）、
         //   `BitmapsCoverRectTest`（6→3）⇒ 合计 −39，
-        //   合计 **252**。
+        //   合计 **248**（287 − 39；与 2.3.0 段记的「当版 248/255」吻合。此后 10-24 复核轮 +3 等，
+        //   现行 **255** —— 以被 `TestCountCommentTest` 钉住的下一行「测试 181 → 255」为唯一权威；
+        //   本运行合计链是手工累加、无门禁，个别中间增量核对不上时以钉住行为准）。
         //   （上一版这里被我写成 274 —— `TestCountCommentTest` 当场把这句注释本身钉红了，钉子有效。）
         //   ⚠️ 本行数字由 `TestCountCommentTest` 钉住：改测试数量必须同步这里，否则两个 flavor 的单测任务
         //   （`:app:testCoreKotlinDebugUnitTest` / `:app:testCoreRustDebugUnitTest`）都直接红。
@@ -449,6 +432,26 @@ android {
         //   `AndroidGradlePluginVersion` Warning（wrapper 9.6.0 → 9.8.0 的升级提示）——wrapper
         //   刻意不升（见上方版本史），该提示已在 lint.xml 按检查项豁免并写明理由；除此之外仍
         //   `No issues found`。门禁口径据此为「零错误 + 零未豁免警告」。
+        // 2.1.7：**第三方审查报告 6 的收口**。无新功能、无新对外端点、政策文本未变 ⇒
+        //   `POLICY_VERSION` **保持 23**（不动）。修的都是"编译通过、测试全绿也发现不了"那一类：
+        //   ① 【P1】`exiting` 在「**不清除**」退出分支不复位 ⇒ `finishAffinity()` 不杀进程，同进程内
+        //      「从桌面重开 → 再退出」会被早退挡成空操作：开着「退出即清除」也不清、零提示（承诺为假 +
+        //      无反馈），同时跳过 `saveState()`、且 onDestroy 的关停判据恒假 ⇒ 内核再也不关停；
+        //   ② 扩展安装的总超时 `onFailure` 在「超时与宿主销毁竞态」下会丢投递（**普适超时路径本身
+        //      不丢**——`withTimeout` 只取消自己的子 TimeoutCoroutine，外层协程仍活跃，
+        //      `withContext(Dispatchers.Main)` 照常执行；丢投递只发生在 TCE 触发后、主线程投递
+        //      执行前，宿主 destroy 的 `cancelAll()` 恰好取消作业的那一刻）⇒ 投递套
+        //      `NonCancellable` 并补 `runCatching` 堵住该竞态；同时把"带一次性投递闸"那句
+        //      **失实的 KDoc 改成真话**（该措辞曾声称"总超时已取消本协程、投递曾永不发生"，前提错误，
+        //      2026-10-02 复核更正——见 ExtInstallCoordinator 内同位置的注释）；
+        //   ③ 删除自定义搜索引擎按**显示位置**算下标 ⇒ `all()` 在 id 分配后才过滤坏条目，位置会前移
+        //      ⇒ 有坏条目时会**删错引擎**；改为从 `engine.id` 反解存储下标；
+        //   ④ 崩溃日志「分享」失败复用了"当前没有可分享的页面"⇒ 归因错，新增 `about_crash_share_failed`；
+        //   ⑤ 手动进入 PiP 不再传空参数（此前把 `updatePipParams` 刚设好的 autoEnter / 源矩形丢掉）；
+        //      下载确认队列的销毁判据补 `hasOtherHost()`（不再被另一个实例的 onDestroy 整队放弃）。
+        //   ABI 分包 versionCode 随之派生为 401 / 402 / 403。
+        //   versionCode = 40（本文件的版本历史按这个风格记，`tools/verify_release.py` 也会去核对声明与
+        //   制品一致。⚠️ 此处曾被误写成 41 —— 那是 2.2.0 的基准；v2.1.7 tag 的本文件可证当时为 40）。
         // 2.2.0：**修「点同意即闪退」** —— 2.1.6/2.1.7 的致命回归（用户报告：两版都在同意页点
         //   「同意」即闪退，2.1.5 正常）。根因已定位到具体机制：为关闭内核未披露出网而新加的
         //   `GeckoRuntimeSettings.Builder.configFilePath(...)` 在 Android 上**必然失败** —— GeckoView 157 的
@@ -655,10 +658,17 @@ androidComponents {
 // 看起来一切正常（2026-10-22 实测撞到过：夹具被改成另一个值，Gradle 直接跳过，绿得毫无意义）。
 // 声明成 test input 之后，改夹具必然重跑。
 // Rust 侧不受这条影响：`include_str!` 已登记依赖，cargo 按 mtime 判新鲜度。
+//
+// ⚠️ 随包 `.so` 是**同款盲区**（2026-10-24 实撞）：`ReleaseGateConsistencyTest` 直接解析
+// `app/src/coreRust/jniLibs` 三颗 ELF 的导出符号并与 `dist/` 副本逐字节比对，`.so` 换了而测试任务
+// 判 UP-TO-DATE 就是静默假绿 —— 同样必须显式登记为输入（只登记内容，路径无关）。
 tasks.withType<Test>().configureEach {
     inputs.dir(file("../tangsnow-rs/tangsnow-core/tests/fixtures"))
         .withPropertyName("tangsnowSharedFixtures")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(fileTree("src/coreRust/jniLibs") { include("**/libtangsnow_core.so") })
+        .withPropertyName("tangsnowCoreSo")
+        .withPathSensitivity(PathSensitivity.NONE)
 }
 
 // 第三道签名闸门：keystore.properties **整个缺失**时 release 静默回退 debug 证书

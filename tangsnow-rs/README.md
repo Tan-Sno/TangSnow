@@ -46,7 +46,7 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
     `regression_2026_10_17`（7 例单侧回归批）、`properties_fuzz` / `modified_utf8`（单侧性质）。
     这几类**刻意只有一侧**：它们钉的是「源码必须长什么样」或「某条性质」，不是「同一输入两侧同输出」。
 - **IDNA 差分 15 例**（`tests/url_idna_parity.rs`）：把「裸主机是否判为网址」的口径钉在主线
-  `IDN.toASCII` 的**实测行为**上（57 条同口径语料在共享夹具里），并把 **9 类实测分歧**逐条单列冻结
+  `IDN.toASCII` 的**实测行为**上（58 条同口径语料在共享夹具里），并把 **12 类实测分歧**逐条单列冻结
   （2026-10-22 新量出的 ASCII 大小写折叠仍在表里；同批量出的「全角/半角句点造成的空标签」与
   「标签超长」已于 2026-10-23 修掉、两侧一致，不再是分歧），详见本文件「已知口径差异」表；
 - 书签那一对：54 条逐点期望值在共享夹具里，另有 9 例**性质**用例（复杂度哨兵 ×2、上限 ×2、码点截断、
@@ -105,8 +105,9 @@ armeabi-v7a 1.4M / x86_64 2.4M，opt-level=z + LTO + strip + panic=abort，**34*
 tangsnow-rs/
 ├── Cargo.toml                # workspace（release: opt-level=z + LTO + panic=abort）
 ├── tangsnow-core/            # 核心库（host 测试全绿，**计数只在上方「验证结果」维护一处**；默认不编译 jni.rs）
-│   ├── src/                  # percent_encode / url_utils / search_engines /
-│   │                         # bookmark_html / history / jni(feature="jni")
+│   ├── src/                  # percent_encode / url_utils / search_engines / bookmark_html /
+│   │                         # history / bitmaps / crash_logger / download_filename / dt_prompts /
+│   │                         # legal_text / update_logic / jni(feature="jni")
 │   └── tests/                # 与 JVM 单测同源的差分测试
 │       ├── fixtures/         # **两侧共享的期望值夹具**（Kotlin 侧读同一批 JSON）
 │       └── common/mod.rs     # 夹具读取器（Kotlin 侧对应 data/SharedFixtures.kt）
@@ -159,12 +160,12 @@ bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core
 
 | 点 | Kotlin | Rust | 影响 |
 |---|---|---|---|
-| IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | **9 类实测分歧 + 3 类已修**，逐条见下表 |
+| IDN | `IDN.toASCII(ALLOW_UNASSIGNED)`（IDNA2003） | `idna` crate（UTS46/IDNA2008） | 累计 **12 类实测分歧、已修 4 类、现存 8 条**，逐条见下表 |
 | 字母判定 | `isLetterOrDigit`（L*+Nl+Nd） | `is_alphabetic/is_numeric`（含 No） | 仅影响 scheme 合法性判定中的罕见 Unicode 数字；实测例：`a²://x` ⇒ Kotlin 判「无 scheme」（当搜索词），Rust 判「`a²` 是合法 scheme」 |
 | 标题截断 | `take(200)` 按**码点**（2026-10-20 修正，原按 UTF-16 单元） | 按 char（码点） | **已抹平**：两侧同为 200 个码点；原先「Kotlin 侧切断代理对留下孤立代理、且两侧最多差一倍」的差异随修正消失 |
 | nbsp 处理 | `Character.isWhitespace(nbsp)=false` | 已用 `java_is_whitespace` 对齐 | 已抹平；正则 `\S` 类已按 Java ASCII 口径改写 |
 
-### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」。2026-10-22 把两侧放进**共享夹具**（`tests/fixtures/url_idna_cases.json`，57 条同口径语料）时又量出 3 条新分歧，追加为 ⑨⑩⑪；其中 **⑩⑪ 已于 2026-10-23 修掉**，**⑦（退化输入 `.`）已于 2026-10-24 修掉**（Kotlin 侧补上剥尾点后的空标签复检，两侧同拒），现为 8 条）
+### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」。2026-10-22 把两侧放进**共享夹具**（`tests/fixtures/url_idna_cases.json`，58 条同口径语料）时又量出 3 条新分歧，追加为 ⑨⑩⑪；其中 **⑩⑪ 已于 2026-10-23 修掉**，**⑦（退化输入 `.`）已于 2026-10-24 修掉**（Kotlin 侧补上剥尾点后的空标签复检，两侧同拒；该笔修复同时把 `.` 用例补进夹具，语料 57 → 58），现为 8 条）
 
 | # | 输入 | 主线 (Java) | Rust | 性质 |
 |---|---|---|---|---|

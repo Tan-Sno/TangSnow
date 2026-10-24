@@ -57,8 +57,8 @@ by the browser layer; no other layer references GeckoView types.
 
 | Package | Files | Responsibility | Representative classes |
 |---|---|---|---|
-| `tangsnow` (root) | 17 | Activities + top-level controllers | `MainActivity`(3085 lines), `SettingsFragment`, `SuggestionsController`, `FindBarController`, `TangSnowApplication` |
-| `tangsnow.browser` | 1 | **The single browser-layer file**: session/tab/permission/content delegates | `SessionManager`(2038 lines; `TabEvents`/`PromptHandler`/`PermissionHandler`/`SelectionHandler`) |
+| `tangsnow` (root) | 17 | Activities + top-level controllers | `MainActivity`(3155 lines), `SettingsFragment`, `SuggestionsController`, `FindBarController`, `TangSnowApplication` |
+| `tangsnow.browser` | 1 | **The single browser-layer file**: session/tab/permission/content delegates | `SessionManager`(2030 lines; `TabEvents`/`PromptHandler`/`PermissionHandler`/`SelectionHandler`) |
 | `tangsnow.data` | 12 | Persistence and global state | `PreferenceStore`, `BrowserDb`, `SessionStore`, `Theme`, `SearchEngines`, `LegalDocs`, `AppHttp` |
 | `tangsnow.data.repo` | 4 | Three repositories + app scope | `BookmarkRepo`, `HistoryRepo`, `DownloadRepo`, `ApplicationScope` |
 | `tangsnow.util` | 11 | Stateless utilities | `UrlUtils`, `Bitmaps`, `CrashLogger`, `GeckoResultExt`, `SecureScreen` |
@@ -94,7 +94,7 @@ The app has a single product-flavor dimension: `core`.
 
 **Verified facts (contrary to a common assumption)**:
 - `coreKotlin` has **no** dedicated source set (its logic is just `src/main`); `coreRust` **only adds**
-  2 Kotlin files + 3 `.so` files.
+  3 Kotlin files (`CoreNative`/`CoreBridge`/`CoreImpl`) + 3 `.so` files.
 - **Nothing in `src/main` references** `CoreNative`/`CoreBridge` ⇒ the seam is a **compile-time
   dispatch, not a runtime `if`**: each flavor provides one `internal object CoreImpl` of the **same
   name and signature**, call sites in `src/main` **change by not a single character** (they keep
@@ -135,15 +135,18 @@ shared unit tests run under both flavors.
 
 - **Fully local**: bookmarks/history/download records/home customization/site-permission decisions all live on
   device (Room + SharedPreferences); no account, no analytics, no tracking SDK.
-- **Exactly three outbound endpoints** (each single-purpose):
+- **Exactly three outbound endpoints for the app's own network stack** (each single-purpose; the GeckoView
+  engine ships Mozilla remote-settings hosts of its own — e.g. `webextensions.settings.services.mozilla.com`
+  used by the extension system — which are not part of this enumeration; the update download links point at
+  `github.com` and are fetched by the system browser/downloader, not by the app):
   `addons.mozilla.org` (extension catalog/metadata/xpi), `firefox.settings.services.mozilla.com`
   (on-device update of the tracking-protection list), `api.github.com` (**only** when the user taps
   "check for updates" — never in the background).
 - **Cleartext prohibition**: `res/xml/network_security_config.xml` has `cleartextTrafficPermitted="false"` —
   ⚠️ this binds the app's **own OkHttp only** and has **no effect on GeckoView** (the engine ships its own
   network stack and must be able to open http sites).
-- **DNS is plaintext** (no TRR/DoH configured): DoH would add an outbound endpoint, conflicting with the
-  "exactly three endpoints" promise, so it is deliberately unused.
+- **DNS is plaintext** (no TRR/DoH configured): DoH would add an outbound endpoint for the app's own
+  network, conflicting with the "three endpoints for the app's own stack" rule, so it is deliberately unused.
 - **Crash logs** are written locally only, viewable and deletable; `CrashLogger` runs **three redaction
   layers** before writing: schemeless forms (`mailto:` / `data:` etc., which previously wrote a full
   e-mail address or embedded content to disk), credentials that do not form a URL
@@ -190,7 +193,7 @@ shared unit tests run under both flavors.
 
 | Layer | Location | Size |
 |---|---|---|
-| Shared unit tests | `app/src/test` (45 files) | **252** (coreKotlin) / **259** (coreRust) |
+| Shared unit tests | `app/src/test` (45 files) | **255** (coreKotlin) / **262** (coreRust) |
 | Flavor-specific unit tests | `app/src/testCoreRust` (2 files / 7 cases) | runs only in the coreRust compilation unit |
 | Rust unit tests | `tangsnow-rs/tangsnow-core/tests` (15 `.rs` files + 10 shared fixtures) | **169** |
 | Gate self-test | `verify_release.py --selftest` | 25 |

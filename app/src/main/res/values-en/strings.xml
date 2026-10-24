@@ -41,7 +41,7 @@
     <string name="toast_page_crashed">The page crashed. Trying to recover…</string>
     <string name="toast_external_opening">Opening with another app…</string>
     <string name="extension_popup_close">Close extension panel</string>
-    <string name="more_scan_image">Scan QR from image</string>
+    <string name="more_scan_image">Scan QR from gallery</string>
 
     <string name="scan_no_qr_found">No QR code found in this image</string>
     <string name="scan_image_too_large">This image is too large to decode. Please try a smaller one</string>
@@ -53,7 +53,7 @@
     <string name="toast_share_empty">Nothing to share on this page</string>
     <string name="toast_open_file_failed">Cannot open this file</string>
     <string name="toast_share_file_failed">Cannot share this file</string>
-    <string name="toast_file_not_ready">This file hasn\'t finished downloading yet</string>
+    <string name="toast_file_not_ready">This file hasn\'t finished downloading yet; you can open it once it has</string>
     <string name="toast_file_download_failed">This download didn\'t succeed, so there\'s no file to open</string>
     <string name="toast_file_missing">The file no longer exists — it may have been deleted or cleaned up</string>
     <string name="toast_local_network_denied">Opening a local network address needs the “Nearby devices” permission; you can turn it on in system settings</string>
@@ -81,7 +81,7 @@
     <string name="more_downloads">Downloads</string>
     <string name="more_customize_home">Customize home</string>
     <string name="more_settings">Settings</string>
-    <string name="more_exit">Exit</string>
+    <string name="more_exit">Exit browser</string>
     <string name="more_refresh">Reload</string>
     <string name="more_find">Find in page</string>
     <string name="find_hint">Find text on page</string>
@@ -110,7 +110,7 @@
     <!-- Failure reason handed back to the system print framework (shown by its UI; see PrintPdfAdapter) -->
     <string name="print_write_no_stream">The print framework did not provide an output stream</string>
     <string name="dlg_exit_title">Exit TangSnow</string>
-    <string name="dlg_exit_message">Are you sure to exit the browser?</string>
+    <string name="dlg_exit_message">Are you sure you want to exit the browser?</string>
     <string name="toast_exit_again">Press back again to exit</string>
 
     <!-- Tabs panel -->
@@ -141,7 +141,7 @@
         <item quantity="one">Up to %1$d custom search engine</item>
         <item quantity="other">Up to %1$d custom search engines</item>
     </plurals>
-    <string name="engine_delete_confirm">Delete \"%1$s\"? You\'ll need to add it again.</string>
+    <string name="engine_delete_confirm">Delete “%1$s”? You\'ll need to add it again.</string>
     <string name="engine_manage">Manage search engines</string>
     <string name="engine_custom_suffix_format">%1$s (custom)</string>
     <string name="engine_bing_cn">Bing China</string>
@@ -199,7 +199,7 @@
     <string name="extension_list_empty">No installed extensions yet\nPick one in “Installable”</string>
     <string name="extension_custom_install">Custom install</string>
     <string name="extension_custom_url">Install from an official link</string>
-    <string name="extension_official_store">Official add-on store</string>
+    <string name="extension_official_store">Go to the official extension store</string>
 
     <!-- Descriptions of installable extensions (mirrors descRes in ExtensionCatalog.kt) -->
     <string name="extension_desc_privacy_badger">Learns and blocks hidden trackers automatically (by the EFF)</string>
@@ -214,7 +214,7 @@
     <string name="extension_url_install">Install</string>
     <string name="extension_url_invalid">Please enter an https://addons.mozilla.org install URL (Mozilla official source only)</string>
     <string name="extension_import_file">Import a local .xpi file</string>
-    <string name="extension_import_hint">Only Mozilla-signed .xpi packages are accepted (same kernel signature check as web installs)</string>
+    <string name="extension_import_hint">Only Mozilla-signed .xpi packages are accepted (same engine signature check as web installs)</string>
     <string name="extension_importing">Importing…</string>
     <string name="extension_import_invalid">Cannot read this file: please choose a valid .xpi package</string>
     <string name="extension_import_failed_message">File import failed: %1$s</string>
@@ -228,7 +228,7 @@
     <string name="extension_error_network">Network error — cannot reach the official source</string>
     <string name="extension_error_domain">The official installer rejected this URL</string>
     <string name="extension_error_signature">Missing Mozilla official signature</string>
-    <string name="extension_error_corrupt">Official package check failed, please retry</string>
+    <string name="extension_error_corrupt">Official package check failed, please retry.</string>
     <string name="extension_error_blocklisted">This extension is blocked by Mozilla</string>
     <string name="extension_error_engine_no_response">The install request was handed to the engine, but the engine did not respond within the time limit — usually the install confirmation dialog never appeared or was hidden behind another screen, or the official source is unresponsive on this network. Please retry.</string>
     <string name="extension_error_code">Official error code %1$d</string>
@@ -353,13 +353,13 @@
     <string name="pref_clear_data_title">Clear browsing data</string>
     <string name="pref_clear_data_summary">Clear cookies, cache and site data</string>
     <string name="pref_exit_clear_title">Clear browsing data on exit</string>
-    <string name="pref_exit_clear_summary">When you exit within the app (More → Exit browser, or pressing back twice on Home), the app closes immediately and cookies and site data, cache, history and the tab snapshot are cleared in the background (the result is reported when done); bookmarks and downloads are kept. \"Restore last tabs\" stops taking effect</string>
+    <string name="pref_exit_clear_summary">When you exit within the app (More → Exit browser, or pressing back twice on Home), the app closes immediately and cookies and site data, cache, history and the tab snapshot are cleared in the background (the result is reported when done); bookmarks and downloads are kept. “Restore previous tabs” stops taking effect</string>
 
     <string name="pref_version_title">Version</string>
     <string name="pref_about_title">About TangSnow</string>
-    <string name="pref_about_summary">Privacy summary · Full privacy · User agreement</string>
+    <string name="pref_about_summary">Privacy summary · Full privacy policy · User agreement</string>
     <string name="pref_open_source_title">Open source licenses</string>
-    <string name="pref_open_source_summary">Licences, source availability and trademark notices for GeckoView (MPL 2.0), OkHttp, ZXing and others</string>
+    <string name="pref_open_source_summary">Licenses, source availability and trademark notices for GeckoView (MPL 2.0), OkHttp, ZXing and others</string>
 
     <!-- Consent (cold start / policy update) -->
     <string name="consent_welcome">Welcome to TangSnow</string>
@@ -585,7 +585,7 @@ Some vector icons are based on Google Material Icons (Apache License 2.0, https:
 
     <!-- ==== Executable download warning (S3): not affected by "don't ask again" ==== -->
     <string name="dl_executable_title">This is an installer or executable file</string>
-    <string name="dl_executable_message">"%1$s" may be an installer or program that can modify your device once installed or run. Continue only if you fully trust the source.</string>
+    <string name="dl_executable_message">“%1$s” may be an installer or program that can modify your device once installed or run. Continue only if you fully trust the source.</string>
     <string name="dl_executable_continue">I understand the risk, continue</string>
 
     <!-- ==== Download confirmations dropped while in background (honest count) ==== -->

@@ -43,10 +43,9 @@ import java.io.File
  *  - 已实现 WebExtensionController.PromptDelegate：从官方网页发起的安装/权限请求
  *    会弹出确认框，不会被静默拒绝；
  *  - 下载阶段：首选把官方直链交给内核；内核这一步没出结果才回退「应用自建 OkHttp 流式
- *    下载」，回退期间 UI 实时显示「下载中 n%」；全链路 170s 总时长兜底
- *    （与 `ExtInstallCoordinator.TOTAL_TIMEOUT_MS` 一致 —— 只写数字会漂移，改这里前先对一眼常量）
- *    （ExtInstallCoordinator 的 TOTAL_TIMEOUT_MS），失败/超时 100% 通过看门狗反馈，
- *    绝不卡在「安装中」。
+ *    下载」，回退期间 UI 实时显示「下载中 n%」；全链路总时长兜底（290s，分阶段记账见
+ *    `ExtInstallCoordinator.TOTAL_TIMEOUT_MS` 的 KDoc —— 只写数字会漂移，改这里前先对一眼常量），
+ *    失败/超时 100% 通过看门狗反馈，绝不卡在「安装中」。
  */
 class ExtensionsActivity : AppCompatActivity() {
 
@@ -147,7 +146,7 @@ class ExtensionsActivity : AppCompatActivity() {
         importingFile = false
         urlInstalling = false
         // 只删缓存里的**陈旧**导入残包（与 copyImportedXpi 同款时间筛），失败无碍
-        // 此前无条件删所有 import- 包，会误删内核正在读取的在途包（见 copyImportedXpi:581-585 注释）
+        // 此前无条件删所有 import- 包，会误删内核正在读取的在途包（见 copyImportedXpi 的「只清陈旧残包」注释）
         val extsCacheDir = File(cacheDir, "exts")
         val staleBefore = System.currentTimeMillis() - STALE_IMPORT_MS
         Thread({
@@ -560,9 +559,9 @@ class ExtensionsActivity : AppCompatActivity() {
 
                 override fun onFailure(source: ExtInstallCoordinator.Source, err: Throwable?) {
                     urlInstalling = false
-                    // 失败后把地址回填：安装最长可能等 170s 才失败，用户早已找不到当初粘的那串链接
-                    //（此前失败时输入框已是空的，只能重新去别处复制一遍）。仅在用户没重新输入时回填，
-                    //不覆盖他刚敲进去的内容。
+                    // 失败后把地址回填：安装最长可能等满总预算（290s，见 TOTAL_TIMEOUT_MS）才失败，
+                    // 用户早已找不到当初粘的那串链接（此前失败时输入框已是空的，只能重新去别处复制一遍）。
+                    // 仅在用户没重新输入时回填，不覆盖他刚敲进去的内容。
                     if (binding.urlInput.text.toString().isBlank()) binding.urlInput.setText(url)
                     toast(describeInstallError(err))
                 }
@@ -810,7 +809,6 @@ class ExtensionsActivity : AppCompatActivity() {
         installedRows.clear()
         installedRows.addAll(rows)
         installedAdapter.notifyDataSetChanged()
-        // 名称集合在此一次性算好交给目录适配器，避免每次绑定都重建（滚动路径上的重复计算）
         // 已安装 slug 集合在此一次性算好交给目录适配器，避免每次绑定都重建（滚动路径上的重复计算）；
         // 按 slug（解析自 AMO 列表页地址）精确匹配，杜绝同名扩展被误判为「已安装」
         catalogAdapter.setInstalledSlugs(rows.mapNotNull { ExtensionCatalog.slugOf(it.ext) }.toSet())
@@ -1078,9 +1076,10 @@ class ExtensionsActivity : AppCompatActivity() {
     inner class CatalogAdapter : RecyclerView.Adapter<CatalogAdapter.VH>() {
 
         /**
-         * 已安装扩展名集合：由 [renderInstalled] 一次性算好后注入。
-         * 早期在 onBindViewHolder 内每次 `installedRows.map { it.name }.toSet()`，
-         * 列表滚动时是 O(条目数 × 已安装数) 的重复计算。
+         * 已安装 slug 集合：由 [renderInstalled] 一次性算好后注入。
+         * 早期在 onBindViewHolder 内每次对**扩展名**建集（`installedRows.map { it.name }.toSet()`），
+         * 列表滚动时是 O(条目数 × 已安装数) 的重复计算；且同名扩展会误判为「已安装」，
+         * 后改为按 slug 精确匹配。
          */
         private var installedSlugs: Set<String> = emptySet()
 
@@ -1207,7 +1206,10 @@ class ExtensionsActivity : AppCompatActivity() {
         const val STALE_IMPORT_MS = 30L * 60 * 1000
         /** 单个扩展包体积上限（约 200MB）：远超任何合法 AMO 扩展，纯为防滥用 */
         const val MAX_XPI_BYTES = 200L * 1024 * 1024
-        /** 孤儿安装态自愈阈值（须大于协调器的总超时，留足余量） */
+        /** 孤儿安装态自愈阈值。历史上要求大于协调器总超时；2026-10-24 起总预算 290s 已超过本值，
+         *  但 `activeJobs` 是进程级表、[ExtInstallCoordinator.isWorking] 会先兜住在途作业，
+         *  本阈值只作为 `installStartedAt` 有记录而作业已不在表时的**最终**兜底判据，不再承担
+         *  「大于总超时」的不变式（改总时长时无需同步这里）。 */
         const val STALE_PRUNE_MS = 200_000L
     }
 }

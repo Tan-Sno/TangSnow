@@ -213,8 +213,8 @@ class LibraryActivity : AppCompatActivity() {
             // 在内存里过滤即可；改仓库层的 SQL LIKE 还要连带改测试，收益不成比例。
             // ⚠️ 下载页签的 sub 是**本地化状态文案**（「已完成 100%」）而非网址：拿它过滤会
             // 出现搜「完」全表命中的噪音（2026-10-24 审查 P3）。下载行改搜原始 Item 的
-            // 文件名（title）与本地 URI（localUri；原始下载 URL 刻意不落记录，见 DownloadRepo），
-            // 历史/书签行维持「标题 + 网址」。
+            // 文件名（title）与本地 URI（localUri；原始下载 URL 本就不在 Item 上 —— DownloadRepo
+            // 刻意不落来源 URL，只留本地落点），历史/书签行维持「标题 + 网址」。
             val shown = if (query.isEmpty()) {
                 rows
             } else {

@@ -143,7 +143,7 @@ pub fn pick_asset(assets_joined: &str, abis_joined: &str) -> Option<String> {
         return None;
     }
     for abi in abis_joined.split('\n') {
-        // Kotlin 侧是 `abi.isBlank()`（UpdateChecker.kt:214）—— 空白项也要跳过；
+        // Kotlin 侧是 `abi.isBlank()`（UpdateChecker 的 ABI 过滤循环）—— 空白项也要跳过；
         // 判空白用的是 java_is_whitespace（= Java isWhitespace ∪ isSpaceChar），与主包同口径。
         if abi.is_empty() || abi.chars().all(crate::java_is_whitespace) {
             continue;
@@ -294,7 +294,7 @@ mod tests {
         assert_eq!(pick_asset("notes.txt", "arm64-v8a"), None);
         assert_eq!(pick_asset("x.apk", "x86"), None);
         assert_eq!(pick_asset("", "arm64-v8a"), None);
-        // 空白 ABI 项不参与匹配 —— Kotlin 侧是 `abi.isBlank()`（UpdateChecker.kt:214）。
+        // 空白 ABI 项不参与匹配 —— Kotlin 侧是 `abi.isBlank()`（UpdateChecker 的 ABI 过滤循环）。
         assert_eq!(pick_asset("app- -release.apk", " "), None);
         assert_eq!(pick_asset("app-\u{00A0}-release.apk", "\u{00A0}"), None);  // U+00A0：Java isSpaceChar ⇒ 同样算空白
     }

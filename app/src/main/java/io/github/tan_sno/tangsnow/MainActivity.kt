@@ -466,7 +466,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             if (!sessionManager.isAlive(tab)) return
             if (!url.isNullOrBlank()) {
                 // 供本地崩溃日志记录“最近访问站点”（仅域名），便于复现定位；不上传。
-                // ⚠️ 口径必须与下方写历史那一处（:363）**完全一致**：两条通道都属「浏览痕迹」，
+                // ⚠️ 口径必须与下方 onHistoryStateChange 的写历史处**完全一致**：两条通道都属「浏览痕迹」，
                 // 一处守卫一处不守卫，就等于把无痕会话的域名留在了崩溃日志里（见 CrashLogger.clearHost）。
                 if (!prefs.privateMode && !tab.isPrivate) {
                     io.github.tan_sno.tangsnow.util.CrashLogger.noteVisit(url)
@@ -758,7 +758,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         //    该字段的注释原文即 "any pending new intents for single-top mode"）
         //    → `ActivityTaskSupervisor.realStartActivityLocked` 把它与 `r.getSavedState()`
         //    **一起**塞进 `LaunchActivityItem` → `ActivityThread.performResumeActivity` 里
-        //    `deliverNewIntents` → `onNewIntent`（本类 :529 即 setIntent + handleIntent）。
+        //    `deliverNewIntents` → `onNewIntent`（本类 onNewIntent 即 setIntent + handleIntent）。
         //    记录若已从任务中移除，则是**新记录**（`mIcicle` 只由 `activityStopped` 写入）
         //    ⇒ `savedInstanceState == null` ⇒ handleIntent 照跑。两条路都会处理入口，
         //    不存在「既复用记录、又把新 intent 丢掉」的第三种，故这里的判据够用。
@@ -812,9 +812,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 将来若门禁挪位、多加一条 early-return、或有人手工调 onResume，就会变成首装崩。
         // 这里把不变量写成结构性的：没绑上视图就没什么可 resume 的。
         if (!::binding.isInitialized || !::sessionManager.isInitialized) return
-        // 内核不可用实例：下面十几行里 applyLiveSettings / applyDesktopModeIfChanged /
-        // attachExtensionPromptDelegate 都会经 runtime() 重建内核或建会话（见 [kernelUnavailable]），
-        // 早退，让用户面对的是那个对话框而不是第二次崩溃。
+        // 内核不可用实例：onNewIntent 一路的导航（handleIntent → 建会话 → runtime()）与 onResume 的
+        // 生命周期调用都会触达内核重建（见 [kernelUnavailable]），一律早退，让用户面对的是那个
+        // 对话框而不是第二次崩溃；applyLiveSettings 另有 runtime==null 整体早退兜底。
         if (kernelUnavailable) return
         // 无条件夺回处理器（幂等）：本实例可能刚被另一个实例压在栈下又恢复前台
         bindSessionHandlers()
@@ -1306,10 +1306,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 // 失效（含「无异常但拿不到位图」= 该 URI 不是图片）：清配置并回退极简。
                 // 直接重跑 applyHomeStyle()，让品牌区显隐与瓦片标签底色一并回到极简的一致状态
                 // （此前只改背景色，品牌区仍按 onImage 隐藏着，属另一处不一致）。
-                // ⚠️ 解码在协程上跑、耗时秒级，期间用户可能已换风格或换图（下方成功路径 :1322
-                // 有同款复核，失败路径此前没有）：仅当「仍是图片风格、选的仍是这一张」才清配置
-                // 回退，否则会把用户刚做的选择静默覆盖掉（2026-10-24 审查 P3）。换图场景下旧
-                // 副本由定制页的选图流程负责删除（seq 复核），这里不动。
+                // ⚠️ 解码在协程上跑、耗时秒级，期间用户可能已换风格或换图（下方成功路径的
+                // 「异步返回期间用户可能已切到其它风格」复核，失败路径此前没有）：仅当「仍是图片风格、
+                // 选的仍是这一张」才清配置回退，否则会把用户刚做的选择静默覆盖掉（2026-10-24 审查 P3）。
+                // 换图场景下旧副本由定制页的选图流程负责删除（seq 复核），这里不动。
                 val stale = prefs.homeImageUri
                 if (prefs.homeStyle == PreferenceStore.STYLE_IMAGE && stale == uriString) {
                     prefs.homeImageUri = null
@@ -3000,7 +3000,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             sessionManager.shutdown()
             // ⚠️ 本条流程**同步**做完了全部收尾 ⇒ 必须在这里就复位**进程级**标志（2026-10-02 外部审查 P1）。
             // 不复位的后果（都已逐行复核）：① `exiting` 停在 true ⇒ 同进程内「从桌面重开 → 再退出」
-            // 会被上面 :2890 的早退挡成空操作 ⇒ 开着「退出即清除」也不清、**零提示**（本仓最不允许的
+            // 会被上面 performExit 开头的 exiting 早退挡成空操作 ⇒ 开着「退出即清除」也不清、**零提示**（本仓最不允许的
             // 「承诺为假 + 无反馈」）；② `exitClearSettled` 停在 false ⇒ onDestroy 的关停判据
             // `(!exiting || exitClearSettled)` **恒为假** ⇒ 此后任何销毁都不再 shutdown()，新起的
             // GeckoRuntime 在无界面的进程里常驻。必须在 `finishAffinity()` **之前**置位 —— onDestroy 是它触发的。

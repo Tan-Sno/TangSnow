@@ -10,7 +10,8 @@ import io.github.tan_sno.tangsnow.browser.Tab
  *
  * ## 为什么走 `GeckoView.capturePixels()` 而不是 `session.acquireDisplay()`
  *
- * `GeckoView.setSession()` **内部就已经 acquire 了该会话的 display**（GeckoView 157 字节码实测：
+ * `GeckoView.setSession()` **内部就已经 acquire 了该会话的 display**（GeckoView 157 字节码实测，
+ * 158 升级轮已复核逐字相同：
  * `setSession` → `invokevirtual GeckoSession.acquireDisplay()`），而 `GeckoSession.acquireDisplay()`
  * 的第一条指令是 `assertOnUiThread()`、紧接着 `if (mDisplay != null) throw
  * IllegalStateException("Display already acquired")`。

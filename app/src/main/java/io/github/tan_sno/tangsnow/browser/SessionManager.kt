@@ -473,7 +473,7 @@ class BrowserSessionManager private constructor(
             stateCache.remove(it.id)
             releasePreview(it)
             // shutDown 之后内核运行时已关，close 打向已销毁的会话 —— 只是日志噪音，但口径要与
-            // closeSessionLater（:1690 那处判了 shutDown）一致：关停后不再排队任何内核动作。
+            // closeSessionLater（那处判了 shutDown）一致：关停后不再排队任何内核动作。
             post { if (!shutDown) runCatching { it.session.close() } }
         }
         tabs.clear()
@@ -493,7 +493,7 @@ class BrowserSessionManager private constructor(
             stateCache.remove(it.id)
             releasePreview(it)
             // shutDown 之后内核运行时已关，close 打向已销毁的会话 —— 只是日志噪音，但口径要与
-            // closeSessionLater（:1690 那处判了 shutDown）一致：关停后不再排队任何内核动作。
+            // closeSessionLater（那处判了 shutDown）一致：关停后不再排队任何内核动作。
             post { if (!shutDown) runCatching { it.session.close() } }
         }
         tabs.clear()
@@ -529,7 +529,7 @@ class BrowserSessionManager private constructor(
             stateCache.remove(it.id)
             releasePreview(it)
             // shutDown 之后内核运行时已关，close 打向已销毁的会话 —— 只是日志噪音，但口径要与
-            // closeSessionLater（:1690 那处判了 shutDown）一致：关停后不再排队任何内核动作。
+            // closeSessionLater（那处判了 shutDown）一致：关停后不再排队任何内核动作。
             post { if (!shutDown) runCatching { it.session.close() } }
         }
         if (active?.isPrivate == true) {
@@ -1925,7 +1925,8 @@ class BrowserSessionManager private constructor(
         saveTask = null
         // 已关停（正在退出）：一律不再落盘。
         //
-        // 退出路径是 performExit 里的「先 saveState() 存真实快照 → markPurged() → shutdown()」，
+        // 退出路径是 performExit 里的「先 saveState() 存真实快照 → shutdown()」（markPurged 刻意
+        // 不置位，见 performExit 非清除分支的注释），
         // 而 shutdown() 会 closeAll() 清空 tabs —— 紧随其后的 onPause → saveState 若继续走到
         // 下方「无普通标签 → 清空快照」分支，就会把刚存的那份删掉（表现：开着「恢复上次的
         // 标签页」，一次正常退出就丢掉全部标签）。

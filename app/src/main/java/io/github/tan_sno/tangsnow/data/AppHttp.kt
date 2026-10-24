@@ -22,7 +22,7 @@ object AppHttp {
             // 的注释记录过这个失效模式（那里是给下载显式加了 callTimeout），这里是给**默认**
             // 客户端补上，堵住其余两条路径（AMO 元数据 / GitHub 版本查询）。
             // 取值 45s：刻意**大于** readTimeout，正常快响应完全不受影响，只在「整通调用迟迟不结束」
-            // 时兜底；同时与本仓安装链每一步的 45s 预算取齐，全仓口径一致。
+            // 时兜底；与安装链各步的超时上限（下载步 45s 等）同量级，全仓口径一致。
             // 已知覆盖关系：ExtInstallCoordinator 用 `newBuilder().callTimeout(45s)` 显式再设一次
             // （语义相同，那里是为了不依赖默认值而写的）。
             .callTimeout(45, TimeUnit.SECONDS)

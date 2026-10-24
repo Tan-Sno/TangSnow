@@ -56,8 +56,8 @@
 
 | 包 | 文件 | 职责 | 代表类 |
 |---|---|---|---|
-| `tangsnow`（根） | 17 | 各 Activity + 顶层控制器 | `MainActivity`(3085 行)、`SettingsFragment`、`SuggestionsController`、`FindBarController`、`TangSnowApplication` |
-| `tangsnow.browser` | 1 | **浏览器层唯一文件**：会话/标签/权限/内容委托 | `SessionManager`(2038 行，含 `TabEvents`/`PromptHandler`/`PermissionHandler`/`SelectionHandler` 四个接口) |
+| `tangsnow`（根） | 17 | 各 Activity + 顶层控制器 | `MainActivity`(3155 行)、`SettingsFragment`、`SuggestionsController`、`FindBarController`、`TangSnowApplication` |
+| `tangsnow.browser` | 1 | **浏览器层唯一文件**：会话/标签/权限/内容委托 | `SessionManager`(2030 行，含 `TabEvents`/`PromptHandler`/`PermissionHandler`/`SelectionHandler` 四个接口) |
 | `tangsnow.data` | 12 | 持久化与全局状态 | `PreferenceStore`、`BrowserDb`、`SessionStore`、`Theme`、`SearchEngines`、`LegalDocs`、`AppHttp` |
 | `tangsnow.data.repo` | 4 | 三个仓 + 应用作用域 | `BookmarkRepo`、`HistoryRepo`、`DownloadRepo`、`ApplicationScope` |
 | `tangsnow.util` | 11 | 无状态工具 | `UrlUtils`、`Bitmaps`、`CrashLogger`、`GeckoResultExt`、`SecureScreen` |
@@ -90,7 +90,7 @@
 | `coreRust` | **预览**（同一批逻辑走 JNI） | `src/coreRust/`：`CoreNative.kt` + `CoreBridge.kt` + `jniLibs/{arm64-v8a,armeabi-v7a,x86_64}/libtangsnow_core.so` |
 
 **已核实的关键事实（与常见误解相反）**：
-- `coreKotlin` **没有**专属 source set（逻辑就在 `src/main`）；`coreRust` **只新增** 2 个 Kotlin 文件 + 3 颗 `.so`。
+- `coreKotlin` **没有**专属 source set（逻辑就在 `src/main`）；`coreRust` **只新增** 3 个 Kotlin 文件（`CoreNative`/`CoreBridge`/`CoreImpl`）+ 3 颗 `.so`。
 - `src/main` 里 **没有任何一处**引用 `CoreNative`/`CoreBridge` ⇒ **接缝是编译期分派、不是运行时 if**：
   两 flavor 各提供一份同名同签名的 `internal object CoreImpl`，`src/main` 的调用点**一个字不改**
   （继续调 `UrlUtils.resolveInfo` 这类门面），由**编译器**当闸门（少一个 flavor 就是编译失败）。
@@ -120,12 +120,14 @@
 ## 8. 数据与隐私边界
 
 - **全本地**：书签/历史/下载记录/主页定制/站点权限决定都在本机（Room + SharedPreferences）；无账号、无统计、无追踪 SDK。
-- **三个对外端点**（均单一用途）：
+- **应用自身网络的对外端点共三个**（均单一用途；内核 GeckoView 自带的 Mozilla 远程设置主机
+  —— 如扩展系统使用的 `webextensions.settings.services.mozilla.com` —— 随内核分发、不在本枚举内，
+  另「检查更新」给出的下载直链指向 `github.com`，由系统浏览器/下载器接手访问）：
   `addons.mozilla.org`（扩展目录/元数据/xpi）、`firefox.settings.services.mozilla.com`（跟踪保护名单本机更新）、
   `api.github.com`（**仅点「检查更新」时**读版本信息，绝不后台自检）。
 - **明文禁令**：`res/xml/network_security_config.xml` 的 `cleartextTrafficPermitted="false"`
   ⚠️ 只约束**应用自身 OkHttp**，对 GeckoView 无效（内核自带网络栈，必须能开 http 站点）。
-- **DNS 为明文**（未配置 TRR/DoH）：DoH 会新增对外端点，与"仅三个端点"承诺冲突，故刻意不用。
+- **DNS 为明文**（未配置 TRR/DoH）：DoH 会为应用自身网络新增对外端点，与"应用自身仅三个端点"的口径冲突，故刻意不用。
 - **崩溃日志**只写本机、可查看/删除；`CrashLogger` 落盘前经**三层脱敏**：
   无 `//` 的 scheme（`mailto:` / `data:` 等，此前会把完整邮箱或内嵌内容写盘）、
   不构成 URL 的凭据（`token=…` / `password: …` / `Bearer …`）、
@@ -164,7 +166,7 @@
 
 | 层 | 位置 | 规模 |
 |---|---|---|
-| 共享单测 | `app/src/test`（45 文件） | **252**（coreKotlin）/ **259**（coreRust） |
+| 共享单测 | `app/src/test`（45 文件） | **255**（coreKotlin）/ **262**（coreRust） |
 | flavor 专有单测 | `app/src/testCoreRust`（2 文件 / 7 例） | 只在 coreRust 编译单元里跑 |
 | Rust 单测 | `tangsnow-rs/tangsnow-core/tests`（15 个 `.rs` + 10 份共享夹具） | **169** |
 | 门禁自检 | `verify_release.py --selftest` | 25 |
