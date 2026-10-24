@@ -108,6 +108,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         private set
     /** 画中画（PiP）进行中：隐藏框架只留网页画面，退出自动恢复 */
     private var pipActive = false
+
+    /**
+     * 内核不可用（onCreate 的 `warmUp` 失败，见 [showKernelUnavailable]）：本实例此后只活着
+     * 展示那个对话框，一切会碰会话/内核的路径（onResume 的 applyLiveSettings、onNewIntent 的
+     * 导航）都必须早退 —— 否则 `runtime()` 会再建一次内核，失败若是确定性的（warmUp 失败的
+     * 同一成因），异常就从生命周期回调逃逸成崩溃，「如实告知」兜底被同源崩溃击穿
+     * （2026-10-24 审查 P1）。对话框 OK 即 finish，标志随实例同灭，无跨配置变更状态。
+     */
+    private var kernelUnavailable = false
     /**
      * 本实例的窗口是否**在屏幕上** —— 由 `onStart..onStop` 维护。
      *
@@ -777,6 +786,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 会话管理器，handleIntent 里的导航全要摸它。今天该路径靠「finishing 的实例
         // 不再收到 onNewIntent」这一框架行为兜着，这里把不变量写成显式的。
         if (!::sessionManager.isInitialized || !::binding.isInitialized) return
+        // 内核不可用实例（见 [kernelUnavailable]）：导航要建会话，同样不得继续。
+        if (kernelUnavailable) return
         handleIntent(intent)
     }
 
@@ -801,6 +812,10 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 将来若门禁挪位、多加一条 early-return、或有人手工调 onResume，就会变成首装崩。
         // 这里把不变量写成结构性的：没绑上视图就没什么可 resume 的。
         if (!::binding.isInitialized || !::sessionManager.isInitialized) return
+        // 内核不可用实例：下面十几行里 applyLiveSettings / applyDesktopModeIfChanged /
+        // attachExtensionPromptDelegate 都会经 runtime() 重建内核或建会话（见 [kernelUnavailable]），
+        // 早退，让用户面对的是那个对话框而不是第二次崩溃。
+        if (kernelUnavailable) return
         // 无条件夺回处理器（幂等）：本实例可能刚被另一个实例压在栈下又恢复前台
         bindSessionHandlers()
         // 同一件事的另一半：后创建的实例会把活动会话挂到它自己的 GeckoView 上，本实例恢复前台时
@@ -1291,14 +1306,20 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
                 // 失效（含「无异常但拿不到位图」= 该 URI 不是图片）：清配置并回退极简。
                 // 直接重跑 applyHomeStyle()，让品牌区显隐与瓦片标签底色一并回到极简的一致状态
                 // （此前只改背景色，品牌区仍按 onImage 隐藏着，属另一处不一致）。
+                // ⚠️ 解码在协程上跑、耗时秒级，期间用户可能已换风格或换图（下方成功路径 :1322
+                // 有同款复核，失败路径此前没有）：仅当「仍是图片风格、选的仍是这一张」才清配置
+                // 回退，否则会把用户刚做的选择静默覆盖掉（2026-10-24 审查 P3）。换图场景下旧
+                // 副本由定制页的选图流程负责删除（seq 复核），这里不动。
                 val stale = prefs.homeImageUri
-                prefs.homeImageUri = null
-                prefs.homeStyle = PreferenceStore.STYLE_PLAIN
-                applyHomeStyle()
-                // 副本也要删：只清偏好会把文件永久留在 filesDir/home_bg（用户以为已经没了）。
-                // 走与定制页**同一个**出口 —— 否则归属守卫会出现第二份实现，迟早漏一处。
-                HomeImageFile.deleteOnBackgroundThread(this@MainActivity, stale)
-                toast(R.string.home_image_unavailable)
+                if (prefs.homeStyle == PreferenceStore.STYLE_IMAGE && stale == uriString) {
+                    prefs.homeImageUri = null
+                    prefs.homeStyle = PreferenceStore.STYLE_PLAIN
+                    applyHomeStyle()
+                    // 副本也要删：只清偏好会把文件永久留在 filesDir/home_bg（用户以为已经没了）。
+                    // 走与定制页**同一个**出口 —— 否则归属守卫会出现第二份实现，迟早漏一处。
+                    HomeImageFile.deleteOnBackgroundThread(this@MainActivity, stale)
+                    toast(R.string.home_image_unavailable)
+                }
                 return@launch
             }
             homeImageCache = cover
@@ -1334,7 +1355,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      *  3. 其它纯文本 → 直接展示 + 可复制。
      */
     private fun handleScanResult(content: String) {
+        // ⚠️ Uri.parse 会把「host:port」冒号前的整段当 scheme（`192.168.1.1:8080` → scheme=
+        // "192.168.1.1"），内容被误判成「不支持的 scheme」只能复制；而地址栏输入同一内容
+        // 走 UrlUtils 判定为网址可正常打开 —— 路由器 / NAS / 打印机印的恰是这种二维码
+        // （2026-10-24 审查 P3）。故对「无 :// 且 looksLikeUri 认可」的内容不采信 Uri.parse
+        // 的 scheme，按无 scheme（网页）走导航；其余（mailto:/tel:/intent: 等真 scheme）
+        // 维持原判 —— file:/javascript: 等仍落到下方「不支持」分支（含 a498ea7 的 file: 出口）。
         val scheme = runCatching { Uri.parse(content).scheme?.lowercase() }.getOrNull()
+            ?.takeIf { content.contains("://") || !UrlUtils.looksLikeUri(content) }
         val isWeb = scheme == null || scheme == "http" || scheme == "https"
         if (isWeb && UrlUtils.looksLikeUri(content)) {
             val engine = SearchEngines.current(prefs)
@@ -1870,9 +1898,11 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     /**
      * 统一的「返回」判定 —— 系统返回键与底栏后退格**共用同一实现**。
      *
-     * 顺序即优先级：先收最上层的覆盖层，再处理首页退出，最后才是网页历史与回首页。
+     * 顺序即优先级：先收最上层的覆盖层，再退网页全屏，然后处理首页退出，最后才是网页历史与回首页。
      * ⚠️ 「覆盖层」这份清单**必须完整** —— 漏掉任何一档，返回键就会**穿透**到下一档：
      *  · 查找条漏了 → 直接去走网页历史 / 回首页，条子与页内高亮都留着；
+     *  · 全屏档漏了 → 有历史时一按返回整页离开，无历史时带着全屏态落到首页（双栏与系统栏
+     *    全被 refreshChrome 藏掉，主页成了死端）；
      *  · 首页联想面板漏了 → 落到 `homeVisible` 档，一次误按提示「再按一次退出」，
      *    连按两下就把应用退掉（连输入法的候选都没收掉）。
      * 之所以抽成一个函数：两处入口若各写一份判定，只要有一处忘记同步，就会出现
@@ -1885,6 +1915,15 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             // 下面两档必须排在 homeVisible **之前**，否则首页上的联想态会直接走双击退出
             findBarController.isOpen -> findBarController.close()
             suggestionsController.isShowing -> suggestionsController.hide()
+            // 网页全屏（视频）时先退全屏：主流浏览器（Chrome/Firefox）的返回键都不直接离开
+            // 全屏页。此前没有这一档：有历史时一按返回就 goBack() 整页离开；无历史时落到
+            // showHome()，而 refreshChrome 仍按 fullScreen=true 隐藏双栏与系统栏 ⇒ 出现
+            // 「无地址栏、无工具栏、无系统栏」的主页死端。exitFullScreen 让内核发
+            // ExitFullScreen，经 onFullScreen(false) 复位 tab.fullScreen 并触发 refreshChrome()
+            // 恢复框架；若恰处于上述死端（首页可见 + 全屏标志残留），同样由这一档解开
+            // （2026-10-24 审查 P1）。
+            sessionManager.activeTab?.fullScreen == true ->
+                sessionManager.activeTab?.session?.exitFullScreen()
             // 首页返回键：连续两下才退出（业界惯例），避免误触直接退出
             homeVisible -> confirmExitByDoubleBack()
             // 对齐主流浏览器：网页内先回退历史，无历史再回主页
@@ -3069,6 +3108,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
      * 外部链接、分享进来、配置变更重建……）。两处都宁可少走一步，也不带着空运行时继续建会话。
      */
     private fun showKernelUnavailable() {
+        // 先立标志再弹窗：onResume / onNewIntent 见它即早退（kernelUnavailable 的 KDoc）。
+        kernelUnavailable = true
         AlertDialog.Builder(this)
             .setTitle(R.string.kernel_unavailable_title)
             .setMessage(R.string.kernel_unavailable_message)

@@ -277,8 +277,12 @@ object CoreNative {
     fun dlIsExecutableName(fileName: String): Boolean =
         guard("dlIsExecutableName", true) { dlIsExecutableNameImpl(fileName) }
 
+    /** null 是**合法业务结果**（无 MIME / 只有参数 / 空串，见 DownloadRepo.bareMimeType 的注释），
+     *  非「不接管才返回 null」⇒ 必须传 nullIsResult，否则每次系统未报告 MIME 的下载/打开意图
+     *  都刷一条 ERROR 留痕（2026-10-24 审查 P3；同文件 resolveInfo / dlParseFileName 等同形态
+     *  函数均已传）。 */
     fun dlBareMimeType(raw: String?): String? =
-        guard("dlBareMimeType", null) { dlBareMimeTypeImpl(raw) }
+        guard("dlBareMimeType", null, nullIsResult = true) { dlBareMimeTypeImpl(raw) }
 
     // ---------------------------------------------------------------- 法律文本
 

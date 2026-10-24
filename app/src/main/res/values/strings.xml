@@ -224,6 +224,7 @@
     <string name="extension_install_failed_message">「%1$s」安装失败：%2$s。\n可打开官方扩展页查看，或稍后重试。</string>
     <string name="extension_open_official">打开官方扩展页</string>
     <string name="extension_retry">重试</string>
+    <string name="extension_error_user_canceled">安装已取消</string>
     <string name="extension_error_network">网络错误，无法从官方源下载</string>
     <string name="extension_error_domain">官方安装通道拒绝了该地址</string>
     <string name="extension_error_signature">该扩展缺少 Mozilla 官方签名</string>
@@ -296,6 +297,9 @@
     <string name="shortcut_url_hint">网址（如 bilibili.com）</string>
     <string name="shortcut_max">最多添加 8 个快捷方式</string>
     <string name="shortcut_invalid">名称或网址无效（网址需含域名）</string>
+    <string name="shortcut_name_empty">请填写快捷方式名称</string>
+    <string name="shortcut_url_invalid">网址无效（需为 http(s) 或含域名的地址）</string>
+    <string name="shortcut_duplicated">该网址已存在快捷方式</string>
 
     <!-- 设置 -->
     <string name="settings_title">设置</string>

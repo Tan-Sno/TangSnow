@@ -1,6 +1,7 @@
 package io.github.tan_sno.tangsnow.extension
 
 import android.content.Context
+import android.os.SystemClock
 import io.github.tan_sno.tangsnow.data.AppHttp
 import io.github.tan_sno.tangsnow.util.awaitResult
 import kotlinx.coroutines.CancellationException
@@ -9,7 +10,10 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -31,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * ## 现行链路（由真机实测决定，不是猜的）
  * 1. **首选**：把官方直链交给内核 `install(url, INSTALLATION_METHOD_MANAGER)`，
- *    本步受 [KERNEL_STEP_MS] 单独封顶；
+ *    「确认框出现前」受 [KERNEL_STEP_MS] 封顶；确认框出现后的作答段见 performInstall（仍受总预算约束）；
  * 2. **兜底**：本步未出结果时，用 [AppHttp] 自建下载官方 xpi 到 `cacheDir/exts/`
  *    （按 [Source.candidateUrls] 逐候选尝试，每个 `callTimeout(45s)`），
  *    再 `install(file://, INSTALLATION_METHOD_FROM_FILE)`（Mozilla 签名仍由内核校验，合规不变）。
@@ -394,11 +398,15 @@ class ExtInstallCoordinator(
      *  ① 本地包：直接 `file://` + FROM_FILE；
      *  ② 远端包：**首选把官方直链交给内核** `install(url, MANAGER)` —— 用户实测
      *     「从官方链接安装」这条通道可用；最简单，且不多下一次下载。
-     *     本步受 [KERNEL_STEP_MS] 单独封顶，超时即视为"这一步没走通"；
+     *     「确认框出现前」受 [KERNEL_STEP_MS] 封顶（超时即视为"这一步没走通"）；
+     *     确认框出现后的**作答段不再设独立上限** —— 上限只封内核下载/校验，不封用户阅读，
+     *     否则用户读慢一点就转兜底，会叠出第二个确认框、拒绝也会被再问一次
+     *     （2026-10-24 审查 P3）；作答段同样受 [TOTAL_TIMEOUT_MS] 约束（记账见 [ANSWER_BUDGET_MS]）；
      *  ③ ①/② 失败才用应用自建网络栈下载（按 [Source.candidateUrls] 逐候选试），
-     *     再走 `file://` + FROM_FILE。
+     *     再走 `file://` + FROM_FILE。用户在确认框上**明确取消**（ERROR_USER_CANCELED）
+     *     属如实失败，**不进入** ③。
      *
-     * 每一步都有独立上限、且三段之和小于 [TOTAL_TIMEOUT_MS]，保证兜底链一定跑得完。
+     * 每一段都有独立上限、且各段之和小于 [TOTAL_TIMEOUT_MS]，保证兜底链一定跑得完。
      *
      * 进度上报：**只有第 ③ 步（自建下载）有百分比** —— 内核通道不暴露进度。
      * [Callback.onProgress] 即在该步按已读字节数回调，供界面把「安装中…」换成「下载中 n%」。
@@ -415,22 +423,58 @@ class ExtInstallCoordinator(
         }
         val url = source.remoteUrl
         if (url != null) {
-            // ⚠️ 必须用 withTimeoutOrNull 给**这一步**单独设上限，不能用 withTimeout：
-            // 内核这一步实测可能零回应（内核自己的下载器就是用户看到"自带的下载失败"的那一环），
-            // 若让它无上限地跑，它会吃光总超时预算，导致下方**已验证可用**的自建下载兜底
-            // 根本没机会执行 —— 用户等满总时长后拿到失败，而其实明明能装上。
-            // 本步超时只代表"这一步没走通"，必须继续往下走；只有**外层总超时**或宿主销毁
-            // 才允许终止整条链（外部取消会原样抛出，不被 withTimeoutOrNull 吞掉）。
-            val ext = try {
-                withTimeoutOrNull(KERNEL_STEP_MS) {
+            // ⚠️ 内核直链步的封顶必须**只封「内核下载/校验」**，不能把「用户阅读确认框并作答」
+            // 的时间也封进去（2026-10-24 审查 P3）：此前 withTimeoutOrNull 直接套在 install() 的
+            // GeckoResult 上，而那个 result 要等用户作答后才结算 —— 用户读超 45s 就被判「本步
+            // 未走通」转兜底下载，屏幕上叠出第二个确认框；用户对第一框的「拒绝」还会被兜底链
+            // 再问一次。现拆成两段：
+            //   · 阶段一（≤[KERNEL_STEP_MS]）：等**确认框出现**（内核下载/校验已走通的标志）或
+            //     结果先行结算（下载失败等同步失败）。两者都不出现 = 内核零回应，才转兜底；
+            //   · 阶段二（不设独立上限，仍受外层 [TOTAL_TIMEOUT_MS] 约束）：确认框已出现 ⇒
+            //     内核是活的、在等用户作答，交由用户掌握节奏。此时用户**明确拒绝**
+            //     （ERROR_USER_CANCELED）如实失败，**不再**走兜底重问。
+            val startedAt = SystemClock.elapsedRealtime()
+            val ext = supervisorScope {
+                val kernelInstall = async {
                     controller
                         .install(url, WebExtensionController.INSTALLATION_METHOD_MANAGER)
                         .awaitResult()
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                null
+                val promptSeen = try {
+                    withTimeoutOrNull(KERNEL_STEP_MS) {
+                        while (ExtensionPrompts.lastInstallPromptShownAt < startedAt &&
+                            !kernelInstall.isCompleted
+                        ) {
+                            delay(PROMPT_POLL_MS)
+                        }
+                        ExtensionPrompts.lastInstallPromptShownAt >= startedAt
+                    } == true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    false
+                }
+                if (promptSeen || kernelInstall.isCompleted) {
+                    try {
+                        kernelInstall.await()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: WebExtension.InstallException) {
+                        if (e.code == WebExtension.InstallException.ErrorCodes.ERROR_USER_CANCELED) {
+                            // 用户在确认框上点了取消/拒绝：如实失败（走 install() 的 onFailure，
+                            // 归因「安装已取消」），绝不转入兜底再弹一次框。
+                            throw e
+                        }
+                        null
+                    } catch (e: Throwable) {
+                        null
+                    }
+                } else {
+                    // 45s 内既无确认框也无结果 ⇒ 内核零回应：取消本步，转自建下载兜底
+                    //（与修复前同语义；kernelInstall 是本作用域子作业，cancel 即收敛）。
+                    kernelInstall.cancel()
+                    null
+                }
             }
             if (ext != null) return ext
         }
@@ -549,14 +593,20 @@ class ExtInstallCoordinator(
         private const val STALE_TMP_MS = 30L * 60 * 1000
 
         /**
-         * 「内核直链安装」这一步的独立上限。
+         * 「内核直链安装」**阶段一**（等确认框出现）的独立上限。
          *
          * 存在的理由：内核内置下载器在某些网络下对下载地址零回应（既不返回也不断开），
          * 而它**没有自己的超时**。若不给这一步封顶，它会把整条链的总预算吃光，
          * 让后面已验证可用的「自建下载 → file:// 安装」兜底永远轮不到 —— 正是
          * "等满时长才失败、但其实能装上"的成因。
+         *
+         * ⚠️ 只封「内核下载/校验」段：确认框一旦出现即转入不设独立上限的作答段
+         * （performInstall 内注释），**不得**把用户阅读/作答时间也封进这个数。
          */
         private const val KERNEL_STEP_MS = 45_000L
+
+        /** 阶段一「确认框出现」的轮询间隔（毫秒）。轮询而非挂起回调：信号是单字段时间戳，精度足够 */
+        private const val PROMPT_POLL_MS = 100L
 
         /**
          * 单个候选地址的**硬性**下载超时。
@@ -575,15 +625,22 @@ class ExtInstallCoordinator(
         private const val FILE_INSTALL_MS = 30_000L
 
         /**
-         * 全链路总超时：覆盖「内核直链安装（≤[KERNEL_STEP_MS]）」+「自建下载（最多两个候选、
-         * 每个 [DOWNLOAD_TIMEOUT_MS]）」+「file:// 安装（≤[FILE_INSTALL_MS]）」。
+         * 全链路总超时：覆盖「内核直链安装（阶段一 ≤[KERNEL_STEP_MS] + 作答段 ≤[ANSWER_BUDGET_MS]）」
+         * +「自建下载（最多两个候选、每个 [DOWNLOAD_TIMEOUT_MS]）」+「file:// 安装（≤[FILE_INSTALL_MS]）」。
          *
-         * 取 170s：45 + 45×2 + 30 = 165，留 5s 余量。**每一环都有独立上限、且三段之和确实塞得进
-         * 总时长**，于是总超时退回纯兜底 —— 一旦触发就说明某一步的上限没兜住。
-         * （此前是 150s：那时 file:// 那步没有上限，「三段之和」根本无从谈起；补上它的 30s 之后
-         * 必须相应放宽总时长，否则总超时会先于某一段触发、把归因又搞乱。）
+         * 取 290s：45 + 120 + 45×2 + 30 = 285，留 5s 余量。**每一环都有独立上限、且各段之和确实
+         * 塞得进总时长**，于是总超时退回纯兜底 —— 一旦触发就说明某一段的上限没兜住。
+         * （此前是 170s = 45+45×2+30+5：那时确认框出现前的下载段与用户作答合用一个 45s，
+         * 修复「作答被 45s 连坐」后必须为作答单列 [ANSWER_BUDGET_MS] 并同步放宽总时长。）
          */
-        private const val TOTAL_TIMEOUT_MS = 170_000L
+        private const val TOTAL_TIMEOUT_MS = 290_000L
+
+        /**
+         * 确认框出现后**留给用户作答**的预算（不设独立计时 —— 见 performInstall 阶段二，
+         * 这里只是总预算的记账口径）：阅读权限说明对普通用户是分钟级操作，45s 连坐正是
+         * 2026-10-24 审查 P3 的成因。超预算由 [TOTAL_TIMEOUT_MS] 兜底，归因「总预算耗尽」。
+         */
+        private const val ANSWER_BUDGET_MS = 120_000L
     }
 
     /**

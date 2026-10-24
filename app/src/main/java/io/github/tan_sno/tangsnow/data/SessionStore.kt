@@ -120,6 +120,15 @@ object SessionStore {
     fun write(context: Context, snapshot: Snapshot) {
         val dir = context.applicationContext.filesDir
         io.execute {
+            // ⚠️ 写侧自检（2026-10-24 审查）：调用方（saveState）的 shouldSkipSave 检查与本入队
+            // 之间隔着整段主线程拼快照，并非原子 —— 清除协程若恰在窗口内 markPurged() 并把
+            // clearTask 提交进同一条串行队列，本写任务会排在**删除之后**执行，把清除前的快照
+            // 整份写回磁盘，下次冷启动「复活」已清除的会话（违背 ClearDataUseCase 承诺的
+            // 「删除完成后不会有任何写把快照写回来」）。在此复查即可闭合：markPurged 先于
+            // clearTask 入队（ClearDataUseCase / performExit 均同序），volatile 写对排在其后
+            // 执行的队列任务必可见。对既有路径无行为改变：清除前的在途写本就会被紧随的删除
+            // 抹掉，跳过只是省一次无谓落盘；非清除退出的 save（刻意不 markPurged）照常写入。
+            if (purgePending) return@execute
             runCatching {
                 val json = buildJson(snapshot)
                 val target = File(dir, FILE_NAME)

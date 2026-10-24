@@ -469,6 +469,9 @@ class ExtensionsActivity : AppCompatActivity() {
             return getString(R.string.extension_error_download)
         }
         return when (err.code) {
+            WebExtension.InstallException.ErrorCodes.ERROR_USER_CANCELED ->
+                // 用户在确认框上点了取消/拒绝（performInstall 对该码如实失败、不转兜底重问）
+                getString(R.string.extension_error_user_canceled)
             WebExtension.InstallException.ErrorCodes.ERROR_NETWORK_FAILURE ->
                 getString(R.string.extension_error_network)
             WebExtension.InstallException.ErrorCodes.ERROR_INVALID_DOMAIN ->

@@ -224,6 +224,7 @@
     <string name="extension_install_failed_message">“%1$s” failed to install: %2$s.\nOpen the official page or retry later.</string>
     <string name="extension_open_official">Open official page</string>
     <string name="extension_retry">Retry</string>
+    <string name="extension_error_user_canceled">Install cancelled</string>
     <string name="extension_error_network">Network error — cannot reach the official source</string>
     <string name="extension_error_domain">The official installer rejected this URL</string>
     <string name="extension_error_signature">Missing Mozilla official signature</string>
@@ -296,6 +297,9 @@
     <string name="shortcut_url_hint">URL (e.g. bilibili.com)</string>
     <string name="shortcut_max">Up to 8 shortcuts</string>
     <string name="shortcut_invalid">Invalid name or URL (URL must contain a domain)</string>
+    <string name="shortcut_name_empty">Enter a name for the shortcut</string>
+    <string name="shortcut_url_invalid">Invalid URL (use http(s) or an address with a domain)</string>
+    <string name="shortcut_duplicated">A shortcut for this URL already exists</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>

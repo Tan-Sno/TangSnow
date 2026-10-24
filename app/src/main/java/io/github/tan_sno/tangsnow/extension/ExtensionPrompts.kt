@@ -72,6 +72,20 @@ object ExtensionPrompts {
     }
 
     /**
+     * 最近一次**安装确认框**实际弹出的时刻（[android.os.SystemClock.elapsedRealtime()]）。
+     *
+     * 供 [ExtInstallCoordinator] 区分「内核零回应」（确认框从未出现 → 45s 后转自建下载兜底）
+     * 与「内核在等用户作答」（确认框已出现 → 作答段不再限时）：把封顶范围从整个 install()
+     * GeckoResult 收窄到「确认框出现前」，用户阅读/作答时间不再被 45s 连坐
+     * （2026-10-24 审查 P3）。只在 [onInstallPromptRequest] 里写；进程级单值，
+     * 并发多安装时读到「任一安装的框已出现」即可（误判的代价只是少一次提前转兜底，
+     * 总预算仍兜底），不需要逐安装归属。
+     */
+    @Volatile
+    var lastInstallPromptShownAt: Long = 0L
+        private set
+
+    /**
      * 一次性应答闸：用户点击、「销毁兜底取消」、以及**内核自己**都可能结算同一个 GeckoResult，
      * 而它只允许完成一次，故统一经此收口。
      *
@@ -117,6 +131,7 @@ object ExtensionPrompts {
                         once.complete(denied)
                         return@runOnUiThread
                     }
+                    lastInstallPromptShownAt = android.os.SystemClock.elapsedRealtime()
                     track(
                         activity,
                         AlertDialog.Builder(activity)

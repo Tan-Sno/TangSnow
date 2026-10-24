@@ -345,14 +345,39 @@ class HomeCustomizeActivity : AppCompatActivity() {
             .setView(body)
             .setNegativeButton(R.string.dlg_cancel, null)
             .setPositiveButton(R.string.dlg_ok) { _, _ ->
-                val ok = prefs.addHomeShortcut(
-                    nameInput.text.toString(),
-                    urlInput.text.toString(),
-                )
-                if (!ok) {
-                    toast(R.string.shortcut_invalid)
+                val name = nameInput.text.toString()
+                val url = urlInput.text.toString()
+                // 逐个原因给对应文案（与 EngineSettingsActivity.showAddDialog 同一模式）：
+                // `addHomeShortcut` 用一个 false 表达四种失败（名为空 / URL 非法 / 重复 / 超限），
+                // 一律报「无效」会把「重复」「超限」也指成格式错 —— 用户照着提示改不到点上
+                // （2026-10-24 审查 P3）。四个前置判定与 addHomeShortcut 的四条 return false
+                // 一一对应，末档兜底保留。
+                val ok = when {
+                    name.isBlank() -> {
+                        toast(R.string.shortcut_name_empty)
+                        false
+                    }
+                    PreferenceStore.normalizeUrl(url) == null -> {
+                        toast(R.string.shortcut_url_invalid)
+                        false
+                    }
+                    prefs.homeShortcuts.size >= PreferenceStore.MAX_HOME_SHORTCUTS -> {
+                        toast(R.string.shortcut_max)
+                        false
+                    }
+                    prefs.homeShortcuts.any {
+                        it.url == PreferenceStore.normalizeUrl(url)
+                    } -> {
+                        toast(R.string.shortcut_duplicated)
+                        false
+                    }
+                    !prefs.addHomeShortcut(name, url) -> {
+                        toast(R.string.shortcut_invalid)
+                        false
+                    }
+                    else -> true
                 }
-                refreshShortcuts()
+                if (ok) refreshShortcuts()
             }
             .create()
             .let { dialogs.track(it) }

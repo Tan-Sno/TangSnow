@@ -629,7 +629,10 @@ class WebPrompts(
                     if (parsed != null) formatChosenTime(parsed, hh, mm)
                     else LocalTime.of(hh, mm).format(DT_TIME_FMT)
                 )
-            }, lt.hour, lt.minute, true)
+                // 拨盘按系统 12/24 小时设置呈现（回调拿到的恒是 0-23 的 hour-of-day，回交值不受影响）；
+                // 此前硬编码 24 小时制，12 小时制区域用户看到与系统其余时间显示不一致的拨盘
+                // （2026-10-24 审查 P3）。
+            }, lt.hour, lt.minute, android.text.format.DateFormat.is24HourFormat(activity))
             timeDialog.setOnCancelListener { once(null) }
             tracked(timeDialog)
             return
@@ -655,7 +658,8 @@ class WebPrompts(
                             if (parsedDt != null) formatChosenDateTimeLocal(parsedDt, chosen, hh, mm)
                             else chosen.atTime(hh, mm).format(DT_DATETIME_FMT)
                         )
-                    }, lt.hour, lt.minute, true)
+                        // 同上方仅时间分支：跟随系统 12/24 小时设置（回交值恒 0-23，不受影响）。
+                    }, lt.hour, lt.minute, android.text.format.DateFormat.is24HourFormat(activity))
                     timeDialog.setOnCancelListener { once(null) }
                     tracked(timeDialog)
                 }

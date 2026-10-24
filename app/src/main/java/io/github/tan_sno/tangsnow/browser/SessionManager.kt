@@ -596,6 +596,12 @@ class BrowserSessionManager private constructor(
 
     /** 重套会话级可热改设置（onResume 调用；值未变化时跳过以省开销） */
     fun applyLiveSettings() {
+        // ⚠️ 内核未建成（warmUp 失败，MainActivity 正展示「内核不可用」对话框）时必须整体早退：
+        // 下方 runtime() 会再建一次内核，失败若是确定性的（warmUp 失败的同一成因），异常就从
+        // 调用点的生命周期回调逃逸成崩溃（2026-10-24 审查 P1）。该状态下 tabs 必为空（会话只在
+        // warmUp 成功后创建），下面的会话循环本就是空转；不推进 lastLiveKey，将来内核真建起来了
+        // 也会因 key 不匹配而完整重套。
+        if (GeckoHolder.runtime == null) return
         // 主题进变化守卫：颜色方案属运行时级**可热改**项（157 的 `setPreferredColorScheme`
         // 是实例方法，非 Builder 专有），主题一改就要重套，不能被「其余值都没变」挡掉。
         val key = "${prefs.javaScript}|${prefs.fontSize}|${prefs.theme.key}"

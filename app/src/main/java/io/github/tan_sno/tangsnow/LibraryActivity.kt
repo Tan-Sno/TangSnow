@@ -211,12 +211,22 @@ class LibraryActivity : AppCompatActivity() {
             // 关键词过滤（大小写不敏感，匹配「标题 + 网址 / 文件名」）。
             // 数据源本身很小 —— 历史上限 HISTORY_KEEP = 200，书签与下载记录更少 ——
             // 在内存里过滤即可；改仓库层的 SQL LIKE 还要连带改测试，收益不成比例。
+            // ⚠️ 下载页签的 sub 是**本地化状态文案**（「已完成 100%」）而非网址：拿它过滤会
+            // 出现搜「完」全表命中的噪音（2026-10-24 审查 P3）。下载行改搜原始 Item 的
+            // 文件名（title）与本地 URI（localUri；原始下载 URL 刻意不落记录，见 DownloadRepo），
+            // 历史/书签行维持「标题 + 网址」。
             val shown = if (query.isEmpty()) {
                 rows
             } else {
-                rows.filter {
-                    it.title.contains(query, ignoreCase = true) ||
-                        it.sub.contains(query, ignoreCase = true)
+                rows.filter { row ->
+                    val download = row.tag as? DownloadRepo.Item
+                    if (download == null) {
+                        row.title.contains(query, ignoreCase = true) ||
+                            row.sub.contains(query, ignoreCase = true)
+                    } else {
+                        row.title.contains(query, ignoreCase = true) ||
+                            download.localUri.orEmpty().contains(query, ignoreCase = true)
+                    }
                 }
             }
             adapter.submit(shown)
