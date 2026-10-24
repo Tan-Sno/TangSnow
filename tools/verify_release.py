@@ -1,5 +1,5 @@
-# AI生成
 #!/usr/bin/env python3
+# AI生成
 # -*- coding: utf-8 -*-
 # AI生成（标记必须在 shebang 之下；coding 声明占第 2 行是 PEP 263 认的窗口）
 """发布前校验：把「人工核对的那几件事」变成可重复、会失败的断言。

@@ -85,14 +85,18 @@ def banner(zh_title: str, en_title: str, version: str, updated: str) -> str:
     )
 
 
-def first_line_date(text: str) -> str:
-    """文本首行的日期值（去掉「更新日期：」/「Last updated:」这类标签本身）。"""
+def first_line_date(text: str) -> "str | None":
+    """文本首行的日期值（去掉「更新日期：」/「Last updated:」这类标签本身）。
+
+    未命中返回 **None**：此前返回 "（见正文）"（恒为真值），调用处的英文兜底
+    `or first_line_date(en_body)` 是死代码（2026-10-24 复核修正）。
+    """
     line = text.split("\n", 1)[0].strip()
     if "更新日期" in line:
         return line.split("：", 1)[-1].strip()
     if "Last updated" in line.lower():
         return line.split(":", 1)[-1].strip()
-    return "（见正文）"
+    return None
 
 
 def build_content(key: str, zh_title: str, en_title: str) -> str:
@@ -101,7 +105,7 @@ def build_content(key: str, zh_title: str, en_title: str) -> str:
     zh_body = extract(ZH, key)
     en_body = extract(EN, key)
     # 英文首行形如 "Last updated: 2026-09-16"，中文首行形如 "更新日期：…"
-    date_line = first_line_date(zh_body) or first_line_date(en_body)
+    date_line = first_line_date(zh_body) or first_line_date(en_body) or "（见正文）"
     content = banner(zh_title, en_title, ver, date_line)
     # 英文段在前：仓库对外文档以英文为默认语言（README 等亦然），法律文本是同一批
     # 对外文本，若中文段在前，英文读者要滚过整段中文才看到自己的语言。
