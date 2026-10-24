@@ -518,8 +518,14 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             if (alive() && sessionManager.activeTab === tab) {
                 setReloadButtonLoading(false)
                 hideProgress()
-                // 页面加载完成且当前可见时刷新缩略图
-                binding.root.postDelayed({ tabPreviewController.captureCurrentPreview() }, 200)
+                // 页面加载完成且当前可见时刷新缩略图。
+                // 200ms 后本实例可能已销毁：回调里先守卫再动作（与其余延迟回调同一口径）——
+                // captureCurrentPreview 内部虽有守卫，但守卫要贴在延迟回调的入口处，
+                // 否则将来往 lambda 里加的任何逻辑都裸奔在销毁之后。
+                binding.root.postDelayed({
+                    if (isFinishing || isDestroyed) return@postDelayed
+                    tabPreviewController.captureCurrentPreview()
+                }, 200)
             }
             // 加载结束 = 本次文档的 URL 与标题都已定型，是补写历史标题的唯一可靠时机
             if (alive()) backfillHistoryTitle(tab)
@@ -1337,6 +1343,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         }
         // 非空且不是 http(s) ⇒ 明确告知“这类链接浏览器打不开”，而不是悄悄拿去搜索
         val unsupportedScheme = scheme?.takeIf { !isWeb }
+        // 「用其它应用打开」只对**真能交出去**的 scheme 提供。`file:` 刻意不在其列：
+        // 本应用 targetSdk ≥ 24，startActivity 携带 file:// URI 必抛 FileUriExposedException，
+        // 被 openExternalUrl 的 runCatching 吞成「没有应用能处理」—— 按钮永远走不通，
+        // 属 100% 失败的死按钮，不如不提供（「复制」出口保留）。其余 scheme 交给系统后
+        // 走既有成功/失败路径如实反馈（无处理器时抛 ActivityNotFoundException），保留按钮。
+        val offerExternal = unsupportedScheme != null && unsupportedScheme != "file"
         AlertDialog.Builder(this)
             .setTitle(R.string.scan_result_title)
             .setMessage(
@@ -1347,7 +1359,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
             .setNegativeButton(R.string.dlg_cancel, null)
             .setNeutralButton(R.string.scan_copy) { _, _ -> copyToClipboardSafely(content, R.string.scan_copied) }
             .apply {
-                if (unsupportedScheme != null) {
+                if (offerExternal) {
                     setPositiveButton(R.string.scan_open_external) { _, _ -> openExternalUrl(content) }
                 }
             }
@@ -1587,8 +1599,12 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         binding.geckoView.setSession(tab.session)
         hideTabsPanel()
         syncViewWithTab(tab)
-        // 延迟一小段，待合成器挂上新会话后刷新该标签预览
-        binding.root.postDelayed({ tabPreviewController.captureCurrentPreview() }, 350)
+        // 延迟一小段，待合成器挂上新会话后刷新该标签预览。
+        // 350ms 后本实例可能已销毁：回调里先守卫再动作（与 onPageStop 那处同口径）。
+        binding.root.postDelayed({
+            if (isFinishing || isDestroyed) return@postDelayed
+            tabPreviewController.captureCurrentPreview()
+        }, 350)
     }
 
     private fun closeTab(tab: Tab, showPanel: Boolean = true) {
@@ -2611,7 +2627,7 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         cm.setPrimaryClip(ClipData.newPlainText("tangsnow_cleared", ""))
     }
 
-/**
+    /**
      * 桌面/移动版切换。
      * GeckoView 的 UA/视口模式应在会话创建时确定；对已显示会话中途修改会引发
      * 输入错乱（表现为“点不动”）。因此这里重建**所有**标签会话并按新模式重载，
@@ -2903,7 +2919,8 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
     /**
      * 统一的退出收口（[confirmExit] 与 [confirmExitByDoubleBack] 两条路径共用，
      * 避免「菜单退出清了数据、双击退出没清」这类分叉）：
-     *  - 开关关闭：原语义直接退出（会话快照由 onPause 正常落盘）；
+     *  - 开关关闭：原语义直接退出（快照在本函数内同步落盘；紧随 finishAffinity 的
+     *    onPause → saveState 被 shutdown() 的 shutDown 守卫拦下，不会重复写）；
      *  - 开关开启：「退出即不留痕」——复用 [ClearDataUseCase] 清除 Cookie与站点数据、
      *    缓存、历史与标签页会话快照后退出。清除结果**如实**反馈：失败/部分失败照样
      *    退出，但绝不说「已清除」（本仓库禁假反馈）。markPurged 置位后，紧随其后的
@@ -2937,7 +2954,9 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         exitClearSettled = false
         if (!prefs.exitClearBrowsingData) {
             sessionManager.saveState()
-            SessionStore.markPurged()
+            // （这里刻意**不** markPurged：本分支要**保住**刚存的快照，置位只会抑制下一次落盘；
+            //  而紧随 finishAffinity 的 onPause → saveState 已被上方 shutdown() 置位的 shutDown
+            //  守卫拦下，标志即便置位也无人消费 —— 原先那一行是清除分支语义的误植，已移除。）
             detachActiveSession()
             sessionManager.shutdown()
             // ⚠️ 本条流程**同步**做完了全部收尾 ⇒ 必须在这里就复位**进程级**标志（2026-10-02 外部审查 P1）。

@@ -498,8 +498,8 @@ class BrowserSessionManager private constructor(
         }
         tabs.clear()
         active = null
+        // newTab 已把 active 指向新标签（并记 lastNormalActiveId、抵消 purge），无需重复赋值
         val tab = newTab(isPrivate = false)
-        active = tab
         return tab
     }
 
@@ -1170,7 +1170,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** ButtonPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1192,7 +1191,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** TextPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1211,7 +1209,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** ChoicePrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1242,7 +1239,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** FilePrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1271,7 +1267,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** AuthPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1293,7 +1288,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** BeforeUnloadPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1314,7 +1308,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** ColorPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1334,7 +1327,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** DateTimePrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1361,7 +1353,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** PopupPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1393,7 +1384,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** RepostConfirmPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1413,7 +1403,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** RedirectPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1432,7 +1421,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** SharePrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1454,7 +1442,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
     /** FolderUploadPrompt 弹窗处理。守卫（后台/已关标签不打扰用户）见 [promptMayInterrupt]；弹窗本体由 [promptHandler] 呈现。 */
@@ -1474,7 +1461,6 @@ class BrowserSessionManager private constructor(
             }
         }
         return result
-    
     }
 
 

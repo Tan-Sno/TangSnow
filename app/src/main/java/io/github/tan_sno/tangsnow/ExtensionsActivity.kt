@@ -215,9 +215,10 @@ class ExtensionsActivity : AppCompatActivity() {
                     async { ExtensionCatalog.hydrate(entry) }
                 }.awaitAll()
             }
-            // 与 refreshInstalled 同款销毁守卫：回调可能在页面已销毁后才到
+            // 与 refreshInstalled 同款销毁守卫：回调可能在页面已销毁后才到。
+            // lifecycleScope 的续体必回主线程，直接刷新即可（原 runOnUiThread 属冗余包装）。
             if (isFinishing || isDestroyed) return@launch
-            runOnUiThread { catalogAdapter.notifyDataSetChanged() }
+            catalogAdapter.notifyDataSetChanged()
         }
     }
 
@@ -236,9 +237,9 @@ class ExtensionsActivity : AppCompatActivity() {
             supervisorScope {
                 entries.map { entry -> async { ExtensionCatalog.hydrate(entry) } }.awaitAll()
             }
-            // 与 hydrateCatalog 同款销毁守卫
+            // 与 hydrateCatalog 同款销毁守卫（续体必回主线程，直接刷新）
             if (isFinishing || isDestroyed) return@launch
-            runOnUiThread { catalogAdapter.notifyDataSetChanged() }
+            catalogAdapter.notifyDataSetChanged()
         }
     }
 
