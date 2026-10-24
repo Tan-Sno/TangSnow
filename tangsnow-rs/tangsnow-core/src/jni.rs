@@ -23,7 +23,10 @@ use jni::JNIEnv;
 /// 提取 Kotlin 传来的字符串；null → None。
 fn opt_str(env: &mut JNIEnv, s: &JString) -> Option<String> {
     if s.is_null() {
-        jlog("opt_str: input JString is null");
+        // null 是**正常业务值**而非故障（无 Content-Disposition 的下载、未回报 MIME 的
+        // Intent、空标签 URL 等高频路径都会传 null，见各 `*Impl` 的可空形参）—— 静默返
+        // None。此前这里按 ERROR 打 logcat，等于把 Kotlin 侧 L3 明令禁止的「正常也报错」
+        // 从后门引进来，真机高频刷屏（2026-10-24 审查 P3）。
         return None;
     }
     match env.get_string(s) {
@@ -189,6 +192,11 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_resolveI
         Err(_) => {
             let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
             jlog(&format!("resolveInfo: new_object_array failed, pending_ex={p}"));
+            // 与下方 new_string / set_array 分支同口径：降级返回前清掉未决异常
+            // （2026-10-24 审查补 —— 5f4fccb 只清了那几处，本分支漏网；当前返回前
+            // 只调过 exception_check（规范允许），未决异常会抛给 Java 由 guard 兜住，
+            // 故此前不构成 UB，但依赖「此函数不再追加 JNI 调用」这一隐含前提）。
+            let _ = env.exception_clear();
             return std::ptr::null_mut();
         }
     };

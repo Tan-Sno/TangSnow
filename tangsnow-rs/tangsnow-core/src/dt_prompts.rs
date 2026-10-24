@@ -226,19 +226,23 @@ pub fn format_chosen(
         } else {
             format!("{}:{}", two(hh), two(mm))
         }),
-        KIND_DATE => Some(format!("{}-{}-{}", y, two(m), two(d))),
-        KIND_MONTH => Some(format!("{}-{}", y, two(m))),
+        // 年份按 **4 位补零**（`{:04}`），对齐 Kotlin 侧 `yyyy` / weekBasedYear(minWidth=4)
+        // 的口径（WebPrompts 的 DT_DATE_FMT / DT_MONTH_FMT / DT_DATETIME_FMT / DT_WEEK_FMT
+        // 四处全部如此）：y < 1000 时裸输出会得到 `5-01-01`，页面会当成非法值丢掉
+        // （2026-10-24 审查 P3，W3 接线前的预置缺陷）。
+        KIND_DATE => Some(format!("{:04}-{}-{}", y, two(m), two(d))),
+        KIND_MONTH => Some(format!("{:04}-{}", y, two(m))),
         KIND_DATETIME => Some(if with_seconds {
-            format!("{}-{}-{}T{}:{}:00", y, two(m), two(d), two(hh), two(mm))
+            format!("{:04}-{}-{}T{}:{}:00", y, two(m), two(d), two(hh), two(mm))
         } else {
-            format!("{}-{}-{}T{}:{}", y, two(m), two(d), two(hh), two(mm))
+            format!("{:04}-{}-{}T{}:{}", y, two(m), two(d), two(hh), two(mm))
         }),
         KIND_WEEK => {
             let date = chrono::NaiveDate::from_ymd_opt(y, m as u32, d as u32)?;
             let iso = date.iso_week();
             // weekBasedYear 用 ISO 周年（与 %G 一致）；chrono 的 year() 是日历年，边界周会差一年
             Some(format!(
-                "{}-W{}",
+                "{:04}-W{}",
                 iso.year(),
                 two(iso.week() as i32)
             ))
