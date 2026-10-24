@@ -13,6 +13,7 @@ import io.github.tan_sno.tangsnow.data.Bookmark
 import io.github.tan_sno.tangsnow.data.repo.DownloadRepo
 import io.github.tan_sno.tangsnow.data.HistoryItem
 import io.github.tan_sno.tangsnow.databinding.ItemLibraryBinding
+import io.github.tan_sno.tangsnow.util.CodePoints
 import io.github.tan_sno.tangsnow.databinding.ItemTabBinding
 
 /** 资料库通用行（历史 / 书签 / 下载共用） */
@@ -142,7 +143,9 @@ class TabsAdapter(
             holder.binding.tabGlyph.isVisible = true
             val fallback = ctx.getString(io.github.tan_sno.tangsnow.R.string.app_name)
             val text = tab.title.ifBlank { tab.url ?: fallback }
-            holder.binding.tabGlyph.text = text.take(1).uppercase()
+            // take(1) 按 UTF-16 码元截取会把 emoji/扩展汉字劈成孤立代理（渲染成替换符），
+            // 必须按码点取首字符（CodePoints.takeCodePoints，2026-10-24 复核）。
+            holder.binding.tabGlyph.text = CodePoints.takeCodePoints(text, 1).uppercase()
             holder.binding.tabGlyph.backgroundTintList =
                 ColorStateList.valueOf(HomeTilesAdapter.colorFor(ctx, text))
         }

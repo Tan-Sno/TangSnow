@@ -333,7 +333,7 @@ android {
         //     `POLICY_VERSION = 23` 都**无需再动**（主机没变，不构成新的披露变化）。
         //     ⚠️ Gradle wrapper 9.6.0 → 9.8.0 有更新但**刻意未升**：与本次内核升级无关，且会动到
         //     `gradle-daemon-jvm.properties` 那套已验证的组合，留到专门做构建链升级那一轮再一起做。
-        //   测试 181 → **252**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
+        //   测试 181 → **255**（+5 类：`CrashLoggerRedactTest` / `SchemeGateTest` / `BitmapsCoverRectTest` /
         //   `内核版本与依赖目录一致` / `TestCountCommentTest`；再 +2 类：
         //   `GeckoVersionTextConsistencyTest` / `GeckoEgressOverrideConsistencyTest`；
         //   2026-10-01 为后者补了一条「必须是 YAML 形状」的断言 ⇒ +1；
@@ -342,6 +342,8 @@ android {
         //   `BrowserDbLimitGuardTest`（新类，3 例）⇒ +5；
         //   2026-10-03 新增 `TouchTargetSentinelTest`（新类，3 例：未豁免违规 / 豁免须有理由 /
         //   豁免表不得留已修好的条目）⇒ +3），
+        //   2026-10-24 复核轮 +3：`CrashLoggerRedactTest` 敏感键名×认证方案 1 例、
+        //   `LocaleManagerTest` 首启不重放跟随系统 1 例、`BookmarkSearchTest` 增补平面预筛 1 例，
         //   2026-10-03 另为 `data:` / `blob:` 维持进搜索、以及裸 `about:` 边界各补 1 例
         //   （这两条取舍此前**只有注释、没有断言**，等于没有门禁）⇒ +2），
         //   2026-10-15 为隐藏扩展名的格式控制字符补 2 例（Cf/Cc 按 Unicode 类别删除、
@@ -482,9 +484,11 @@ android {
         //   **两条线同号（有意）**：coreKotlin 与 coreRust 共用这一套 versionCode / versionName
         //   （applicationId 不同 ⇒ 两个独立应用、互不干扰，各自比较版本），首发 Rust 线也是 2.3.0。
         //   发布时靠身份与 tag 区分：正式版 `v2.3.0`、Rust 线 `v2.3.0-rust-preview`，且 Rust 的
-        //   GitHub release **必须标 prerelease** —— 应用内更新检查取 `/releases/latest`，而资产
-        //   挑选只按 `-<abi>-` 匹配、不看 flavor：Rust 包一旦成为 latest，停在旧版的正式版用户
-        //   会被告知「有新版本」，下到的却是包名带 `.rust` 的另一个应用。
+        //   GitHub release **必须标 prerelease** —— 应用内更新检查取 `/releases/latest`，
+        //   资产挑选**先按 flavor**（`app-<flavor>-` 前缀，2026-10-23 起，见 `UpdateChecker.pickAsset`）
+        //   再按 ABI ⇒ Rust 资产不会被正式版用户看到；保留 prerelease 纪律是为了两条线在
+        //   release 列表里始终清晰可分（2026-10-24 订正：此处原注释仍写「只按 ABI、不看 flavor」，
+        //   与 pickAsset 现行为不符）。
         versionCode = 42
         versionName = "2.3.0"
         // 仪器测试（2026-10-19 加回）：`app/src/androidTestCoreRust` 下有一道 JNI 边界断言

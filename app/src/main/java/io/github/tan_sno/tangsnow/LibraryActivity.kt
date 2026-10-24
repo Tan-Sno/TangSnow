@@ -181,17 +181,30 @@ class LibraryActivity : AppCompatActivity() {
         // 用快照才能保证「过滤用的词」与「这批数据」是同一时刻的。
         val query = keyword.trim()
         lifecycleScope.launch {
-            val rows: List<LibRow> = when (currentTab) {
-                TAB_HISTORY -> {
-                    HistoryRepo.list().map { LibraryAdapter.historyRow(it) }
+            // 数据库级故障（损坏 / EIO）在 BrowserDb 无兜底、会穿出协程直接崩溃（本页
+            // 别处如 clearCurrentTab 都有 catch 口径，此处同口径兜住并如实提示）。
+            val rows: List<LibRow> = try {
+                when (currentTab) {
+                    TAB_HISTORY -> {
+                        HistoryRepo.list().map { LibraryAdapter.historyRow(it) }
+                    }
+                    TAB_BOOKMARKS -> {
+                        BookmarkRepo.list().map { LibraryAdapter.bookmarkRow(it) }
+                    }
+                    else -> {
+                        DownloadRepo.list(this@LibraryActivity)
+                            .map { LibraryAdapter.downloadRow(it, this@LibraryActivity) }
+                    }
                 }
-                TAB_BOOKMARKS -> {
-                    BookmarkRepo.list().map { LibraryAdapter.bookmarkRow(it) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                if (seq == refreshSeq) {
+                    adapter.submit(emptyList())
+                    binding.emptyView.text = getString(R.string.library_load_failed)
+                    binding.emptyView.isVisible = true
                 }
-                else -> {
-                    DownloadRepo.list(this@LibraryActivity)
-                        .map { LibraryAdapter.downloadRow(it, this@LibraryActivity) }
-                }
+                return@launch
             }
             // 期间用户又切了页签：丢弃本次过期结果，避免错位覆盖
             if (seq != refreshSeq) return@launch
@@ -244,19 +257,27 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun removeRow(row: LibRow) {
         lifecycleScope.launch {
-            // 同上：按 tag 类型分派，避免「切页签后点旧行」被强转成错误类型而崩溃
-            when (val tag = row.tag) {
-                is DownloadRepo.Item -> {
-                    // 删除以「是否真的删掉」为准：失败时记录会**保留**（见 DownloadRepo.remove），
-                    // 必须如实告知 —— 不能让用户以为删掉了、条目却还在
-                    if (!DownloadRepo.remove(this@LibraryActivity, tag)) {
-                        toast(R.string.download_remove_failed)
-                        return@launch
+            // 同上：按 tag 类型分派，避免「切页签后点旧行」被强转成错误类型而崩溃。
+            // 数据库级故障同样兜住（口径与 clearCurrentTab 一致），不得穿出协程崩溃。
+            try {
+                when (val tag = row.tag) {
+                    is DownloadRepo.Item -> {
+                        // 删除以「是否真的删掉」为准：失败时记录会**保留**（见 DownloadRepo.remove），
+                        // 必须如实告知 —— 不能让用户以为删掉了、条目却还在
+                        if (!DownloadRepo.remove(this@LibraryActivity, tag)) {
+                            toast(R.string.download_remove_failed)
+                            return@launch
+                        }
                     }
+                    is Long -> HistoryRepo.delete(tag)
+                    is String -> BookmarkRepo.remove(tag)
+                    else -> return@launch
                 }
-                is Long -> HistoryRepo.delete(tag)
-                is String -> BookmarkRepo.remove(tag)
-                else -> return@launch
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                toast(R.string.library_remove_failed)
+                return@launch
             }
             refresh()
         }
@@ -342,13 +363,20 @@ class LibraryActivity : AppCompatActivity() {
     /** 导出：全部书签 → Netscape HTML → 公共「下载」目录（零存储权限，与存为 PDF 同路） */
     private fun exportBookmarks() {
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                val list = BookmarkRepo.list()
-                if (list.isEmpty()) return@withContext null
-                // W2 接缝：Rust 内核可用时由其导出（null = 不接管 ⇒ 回落共享实现）
-                list.size to writeBookmarksHtml(
-                    CoreImpl.bookmarkExport(list) ?: BookmarkHtml.export(list)
-                )
+            // 数据库/写盘故障兜住（口径与 clearCurrentTab 一致）：归入既有的 export_failed 分支
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    val list = BookmarkRepo.list()
+                    if (list.isEmpty()) return@withContext null
+                    // W2 接缝：Rust 内核可用时由其导出（null = 不接管 ⇒ 回落共享实现）
+                    list.size to writeBookmarksHtml(
+                        CoreImpl.bookmarkExport(list) ?: BookmarkHtml.export(list)
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                0 to false
             }
             if (isFinishing || isDestroyed) return@launch
             when {
@@ -382,19 +410,26 @@ class LibraryActivity : AppCompatActivity() {
     /** 导入：Netscape HTML → 解析 → 清洗（scheme 白名单/去重/上限）→ 逐条入库 */
     private fun importBookmarks(uri: android.net.Uri) {
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                val text = readImportText(uri) ?: return@withContext null
-                // 解析上限造成的截断同样要计入「跳过」：否则一个 2.5 万条的导出文件会显示
-                // 「已导入 1000 / 跳过 19000」，与实际内容不符（余下 5000 条连数都没数）。
-                // W2 接缝：Rust 可用时由其解析/清洗；null = 不接管 ⇒ 逐段回落共享实现
-                val (raw, truncated) =
-                    CoreImpl.bookmarkParse(text, System.currentTimeMillis())
-                        ?: BookmarkHtml.parseImportCounted(text)
-                val existing = BookmarkRepo.list().mapTo(HashSet()) { it.url }
-                val (entries, skipped) =
-                    CoreImpl.bookmarkSanitize(raw, existing) ?: BookmarkHtml.sanitize(raw, existing)
-                BookmarkRepo.addAll(entries.map { Triple(it.url, it.title, it.createdAtMs) })
-                entries.size to (skipped + truncated)
+            // 数据库/解析故障兜住（口径与 clearCurrentTab 一致）：归入既有的 import_failed 分支
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    val text = readImportText(uri) ?: return@withContext null
+                    // 解析上限造成的截断同样要计入「跳过」：否则一个 2.5 万条的导出文件会显示
+                    // 「已导入 1000 / 跳过 19000」，与实际内容不符（余下 5000 条连数都没数）。
+                    // W2 接缝：Rust 可用时由其解析/清洗；null = 不接管 ⇒ 逐段回落共享实现
+                    val (raw, truncated) =
+                        CoreImpl.bookmarkParse(text, System.currentTimeMillis())
+                            ?: BookmarkHtml.parseImportCounted(text)
+                    val existing = BookmarkRepo.list().mapTo(HashSet()) { it.url }
+                    val (entries, skipped) =
+                        CoreImpl.bookmarkSanitize(raw, existing) ?: BookmarkHtml.sanitize(raw, existing)
+                    BookmarkRepo.addAll(entries.map { Triple(it.url, it.title, it.createdAtMs) })
+                    entries.size to (skipped + truncated)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
             }
             if (isFinishing || isDestroyed) return@launch
             if (result == null) {

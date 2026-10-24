@@ -286,8 +286,12 @@ object DownloadRepo {
         while (i < raw.length) {
             val ch = raw[i]
             if (ch == '%' && i + 2 < raw.length) {
-                val hi = Character.digit(raw[i + 1], 16)
-                val lo = Character.digit(raw[i + 2], 16)
+                // RFC 3986 的 hex 数字符只有 ASCII。此前用 `Character.digit(c, 16)`，
+                // 它对 Unicode 十进制数字（全角 ４、阿拉伯-印度 ٤ 等）也返回数值 ⇒
+                // 与 Rust 侧（纯 ASCII）对同一响应产出不同的落盘文件名；收紧为 ASCII
+                //（2026-10-24 复核，两侧同口径）。
+                val hi = asciiHexValue(raw[i + 1])
+                val lo = asciiHexValue(raw[i + 2])
                 if (hi >= 0 && lo >= 0) {
                     out.write((hi shl 4) or lo)
                     i += 3
@@ -303,6 +307,14 @@ object DownloadRepo {
             i += Character.charCount(codePoint)
         }
         return String(out.toByteArray(), Charsets.UTF_8)
+    }
+
+    /** RFC 3986 hex 数字符（ASCII 0-9/a-f/A-F）→ 0..15；其余 -1（与 Rust 侧 digit 同口径） */
+    private fun asciiHexValue(c: Char): Int = when (c) {
+        in '0'..'9' -> c - '0'
+        in 'a'..'f' -> c - 'a' + 10
+        in 'A'..'F' -> c - 'A' + 10
+        else -> -1
     }
 
     /**

@@ -22,13 +22,12 @@ pub const AMO_HOST: &str = "addons.mozilla.org";
 ///
 /// `v2.1.0` → `2.1.0`；`2.1.0-beta1` → `2.1.0`；无法识别时返回空串。
 /// 对齐 Kotlin：`raw.trim().removePrefix("v").removePrefix("V")` 后做
-/// `^(\d+(?:\.\d+)*)` 的贪婪捕获 —— 即「各剥一次 v/V」（`vv1` 只剥一层）。
+/// `^(\d+(?:\.\d+)*)` 的贪婪捕获 —— 两个 removePrefix 是**链式**的：`vV1.0` 会被
+/// 连剥两层得 `1.0`（2026-10-24 修复：此前 or_else 二选一只剥一层，`vV…` 恒判旧版）。
 pub fn normalize_version(raw: &str) -> String {
     let trimmed = java_trim(raw);
-    let trimmed = trimmed
-        .strip_prefix('v')
-        .or_else(|| trimmed.strip_prefix('V'))
-        .unwrap_or(trimmed);
+    let trimmed = trimmed.strip_prefix('v').unwrap_or(trimmed);
+    let trimmed = trimmed.strip_prefix('V').unwrap_or(trimmed);
     // ^(\d+(?:\.\d+)*)：数字开头，其后是若干「.数字」段；遇非数字即止。
     let bytes = trimmed.as_bytes();
     let mut i = 0usize;

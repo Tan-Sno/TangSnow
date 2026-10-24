@@ -179,7 +179,9 @@ pub fn percent_decode(raw: &str) -> String {
                 Some((hi, lo))
             })();
             if let Some((hi, lo)) = hex2 {
-                // Kotlin `Character.digit(c, 16)`：'0'-'9' → 0-9，'a'-'f'/'A'-'F' → 10-15，其余 -1
+                // Kotlin 侧 2026-10-24 起也用纯 ASCII 判定（原 `Character.digit(c, 16)` 对
+                // Unicode 十进制数字同样返回数值，两侧对同一响应会产出不同文件名）：
+                // '0'-'9' → 0-9，'a'-'f'/'A'-'F' → 10-15，其余 -1。
                 let digit = |c: char| -> i32 {
                     match c {
                         '0'..='9' => c as u8 as i32 - b'0' as i32,

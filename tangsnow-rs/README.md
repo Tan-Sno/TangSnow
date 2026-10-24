@@ -86,7 +86,8 @@ GeckoView 的 API 面是 JVM（Java/Kotlin）的，浏览器引擎（Gecko）本
 两份跟踪副本就是"改一边忘一边"的口径），**唯一进仓、进构建的副本在
 `app/src/coreRust/jniLibs/<abi>/libtangsnow_core.so`**。产物形状：arm64-v8a 2.2M /
 armeabi-v7a 1.4M / x86_64 2.4M，opt-level=z + LTO + strip + panic=abort，**34** 个 JNI 符号
-以 `tan_1sno` 正确转义导出（2026-10-15 从产物里实测；原先这里写 18 —— 与 `STATUS.md`
+以 `tan_1sno` 正确转义导出（2026-10-15 从产物里实测；原先这里写 18 —— 与仓外归档 `STATUS.md`（notes-tangsnow，
+不在本仓）
 记的「.so 34 导出 vs Kotlin 31 `external`」也对不上）。
 
 ✅ **随包 `.so` 已与源码同代**（2026-10-21 用**本机** NDK r30 `30.0.16138531` 重编三 ABI：
@@ -163,7 +164,7 @@ bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core
 | 标题截断 | `take(200)` 按**码点**（2026-10-20 修正，原按 UTF-16 单元） | 按 char（码点） | **已抹平**：两侧同为 200 个码点；原先「Kotlin 侧切断代理对留下孤立代理、且两侧最多差一倍」的差异随修正消失 |
 | nbsp 处理 | `Character.isWhitespace(nbsp)=false` | 已用 `java_is_whitespace` 对齐 | 已抹平；正则 `\S` 类已按 Java ASCII 口径改写 |
 
-### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」。2026-10-22 把两侧放进**共享夹具**（`tests/fixtures/url_idna_cases.json`，57 条同口径语料）时又量出 3 条新分歧，追加为 ⑨⑩⑪；其中 **⑩⑪ 已于 2026-10-23 修掉**，现为 9 条）
+### IDN 分歧明细（2026-10-15 用 JBR 25.0.3 把主线 `UrlUtils.kt:74-92` 当 oracle 逐条量出；40 条语料共 9 处分歧 —— 下表 8 条为**保留的差异**，第 9 条（空标签）已修，见表格后「已修」。2026-10-22 把两侧放进**共享夹具**（`tests/fixtures/url_idna_cases.json`，57 条同口径语料）时又量出 3 条新分歧，追加为 ⑨⑩⑪；其中 **⑩⑪ 已于 2026-10-23 修掉**，**⑦（退化输入 `.`）已于 2026-10-24 修掉**（Kotlin 侧补上剥尾点后的空标签复检，两侧同拒），现为 8 条）
 
 | # | 输入 | 主线 (Java) | Rust | 性质 |
 |---|---|---|---|---|
@@ -173,11 +174,12 @@ bash tools/build-android.sh         # 产出 dist/jniLibs/<abi>/libtangsnow_core
 | 4 | `ＡＢ.CD` | `ab.CD` | `ab.cd` | 同上（大小写折叠差异，键相等性受影响） |
 | 5 | `a\u{200d}b.com` | `ab.com` | `<None>` | Java 抹掉零宽继续转，Rust 拒 |
 | 6 | `xn--.com`、`xn--xn--a.com` | 原样放行 | `<None>` | Rust 做 punycode 回环校验，Java 完全不验 |
-| 7 | `.`（单点） | `.` | `<None>` | 退化输入，Rust 拒 |
 | 8 | `\u{0378}.com`（未分配码位） | `xn--zva.com`（`ALLOW_UNASSIGNED` 放行） | `<None>` | 原表那句"未分配码位判定不同"指的就是这类，罕见但确实不同 |
 | 9 | `EXAMPLE.COM` | `EXAMPLE.COM` | `example.com` | Java 的 `IDN.toASCII` 对**纯 ASCII 标签**走快路径、**不做大小写折叠**（`examPLe.com` 同样原样保留）；UTS46 折叠 ⇒ 两侧转出的主机大小写不同（键相等性受影响） |
 
 **已修**：空标签（`a..b.com`、`.example.com`、`a...b`、`..`）此前 Rust **放过**，比浏览器和主线都宽松 —— 结果是同一条输入主线当搜索词、Rust flavor 当网址导航。现两侧一致拒，而**尾点**（`example.com.`）两边都保留。
+
+**已修（2026-10-24）**：表格里的 ⑦ —— 退化输入 `.`：Java 的 `IDN.toASCII` 原样返回 `.`，Kotlin 侧只查「含点、无空白」就放行，于是 coreKotlin 会导航到 `https://.`（DNS 错误页）而 Rust 拒、走搜索。现 Kotlin 侧 `toAsciiUrl` 补上「剥一个尾点后每个标签必须非空」的复检（与 Rust 同款），两侧一致拒、按搜索词处理；共享夹具已钉住。
 
 **已修（2026-10-23）**：IDN 分歧 ⑩ 与 ⑪ —— `．.com` / `｡.com`（全角/半角句点在映射后才产生的空标签，Rust 曾转出 `..com` 这种非法主机）与标签 64/128 字符（Rust 曾放行 DNS 非法标签）现都改为**映射后复检**：空标签一律拒、每个标签 ≤ 63 字符。判据与 Java 侧 `IDN.toASCII` 对齐，`tests/url_idna_parity.rs` 里那两条「冻结现值」的断言已改写为「与主线一致拒」，并补了 63 字符的边界放行（别把上限一起关掉）。
 

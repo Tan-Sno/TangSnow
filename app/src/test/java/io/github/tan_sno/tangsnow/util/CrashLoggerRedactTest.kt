@@ -138,6 +138,16 @@ class CrashLoggerRedactTest {
     }
 
     @Test
+    fun `敏感键名后跟认证方案时凭据仍被收敛`() {
+        // 顺序敏感的另一形态：键名本身含敏感词（token/session/…）时，若键值层先跑，
+        // 会把值槽里的方案词（Bearer/Basic）当"值"吃掉，认证方案层随即失配 ⇒
+        // 真凭据成了无主裸串落盘（2026-10-24 复核：两层嵌套顺序曾与 KDoc 要求相反）。
+        val out = CrashLogger.redact("token: Bearer eyJhbGciOiJIUzI1NiJ9.abc")
+        assertFalse("脱敏后不得含 JWT 片段", out.contains("eyJhbGci"))
+        assertFalse("方案词也不得残留", out.contains("Bearer"))
+    }
+
+    @Test
     fun `整体脱敏链幂等且不误伤裸路径`() {
         val text = "err /data/user/0/app/files/x.txt 与 https://a.com/b?token=s 与 token=t"
         val once = CrashLogger.redact(text)

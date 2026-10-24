@@ -59,8 +59,14 @@ object LocaleManager {
      *
      * 抽成纯函数（sdkInt 由调用方传入而非直接读 Build）以便 JVM 单测钉住真值表。
      */
-    internal fun needReapply(sdkInt: Int, tag: String, appliedTag: String?): Boolean =
-        sdkInt < Build.VERSION_CODES.TIRAMISU || tag != appliedTag
+    internal fun needReapply(sdkInt: Int, tag: String, appliedTag: String?): Boolean {
+        if (sdkInt < Build.VERSION_CODES.TIRAMISU) return true
+        // 本应用**从未**应用过任何语言、偏好也是「跟随系统」⇒ 系统级 per-app 语言可能是
+        // 用户在系统设置里预设的（清数据不清它），写空列表会把它抹成跟随系统 —— 不动
+        //（2026-10-24 复核：首次冷启动 `"" != null` 会命中重放，抹掉预设）。
+        if (appliedTag == null && tag == SYSTEM) return false
+        return tag != appliedTag
+    }
 
     /**
      * 直接按 [tag] 应用语言（用户在应用内显式选择时调用）。

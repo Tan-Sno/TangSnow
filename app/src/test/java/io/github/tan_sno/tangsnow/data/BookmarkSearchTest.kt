@@ -23,8 +23,10 @@ import org.junit.Test
  * ## 为什么能在 JVM 里测
  * 预筛模式与精确判定都是**纯函数**（不碰 Android、不碰 SQLite），
  * 故这里用一份「SQLite LIKE 语义」的最小实现当判据：
- * ASCII 大小写不敏感、`_` 恰好一个字符、`%` 任意序列、`\` 转义。
- * 语料刻意不含星平面字符 ⇒ UTF-16 码元与码点一致，不必处理代理对。
+ * ASCII 大小写不敏感、`_` 恰好一个码点、`%` 任意序列、`\` 转义。
+ * 判据按**码点**推进（SQLite 的 `_`/字面量都以 UTF-8 码点为单位）——
+ * 语料含星平面字符（🔒），按 UTF-16 码元自说自话会把它钉成假绿
+ * （2026-10-24 复核：旧判据恰好掩盖了实现按 Char 遍历生成孤立代理的漏召回）。
  */
 class BookmarkSearchTest {
 
@@ -79,18 +81,29 @@ class BookmarkSearchTest {
     }
 
     @Test
-    fun `模式宽度恒等于关键词字符数`() {
-        // '_' 恰好匹配一个字符 ⇒ 模式里「要匹配一个字符」的位数必须等于关键词的字符数，
-        // 否则原文区域根本对不上（这是预筛漏召回的另一个来源）。
-        // ⚠️ 不能直接比**字符串长度**：转义（`\%` / `\_` / `\\`）会让模式多出反斜杠。
+    fun `模式宽度恒等于关键词码点数`() {
+        // '_' 恰好匹配一个码点 ⇒ 模式里「要匹配一个码点」的项数必须等于关键词的码点数
+        //（SQLite LIKE 按 UTF-8 码点计数；用 UTF-16 码元数会把星平面关键词钉成假绿）。
+        // ⚠️ 不能直接比**模式串长度**：转义（`\%` / `\_` / `\\`）会让模式多出反斜杠。
         for (kw in CORPUS + KEYWORDS) {
             val pattern = BookmarkSearch.prefilterPattern(kw.lowercase()) ?: continue
             assertEquals(
                 "关键词「$kw」的模式宽度对不上：$pattern",
-                kw.length,
+                kw.codePointCount(0, kw.length),
                 matchedWidth(pattern),
             )
         }
+    }
+
+    @Test
+    fun `增补平面关键词用通配兜底而非孤立代理字面量`() {
+        // 星平面字符在 UTF-16 里是代理对：按 Char 遍历会把两个孤立代理当字面量拼进模式，
+        // 经 JNI 转码后与库中合法 UTF-8 永不相等 ⇒ 预筛恒不命中（2026-10-24 修复）。
+        assertEquals("%_%", BookmarkSearch.prefilterPattern("🔒"))
+        // 'k' 仍按 i/k 兜底通配（它可能来自 K(U+212A) 的折叠），只有星平面那一位是本用例重点
+        assertEquals("%_loc_%", BookmarkSearch.prefilterPattern("🔒lock"))
+        // BMP 的 ★ 无大小写概念，仍是字面量；只有星平面那一位通配
+        assertEquals("%_★%", BookmarkSearch.prefilterPattern("🔒★"))
     }
 
     @Test
@@ -179,10 +192,11 @@ class BookmarkSearchTest {
     }
 
     /**
-     * SQLite `LIKE` 语义的最小实现（ASCII 大小写不敏感、`_` 一个字符、`%` 任意序列、`\` 转义）。
+     * SQLite `LIKE` 语义的最小实现（ASCII 大小写不敏感、`_` 一个码点、`%` 任意序列、`\` 转义）。
      *
      * 只用于本测试当判据：真机上跑的是 SQLite，这里要的是**同一套**语义，
-     * 否则断言就成了自说自话。
+     * 否则断言就成了自说自话。文本按**码点**推进（SQLite LIKE 以 UTF-8 码点为单位），
+     * 模式里的字面量只会是 BMP（实现把星平面一律写成 `_`）⇒ 模式侧按 Char 推进即可。
      */
     private fun likeMatch(text: String, pattern: String): Boolean =
         likeMatch(text, 0, pattern, 0)
@@ -194,25 +208,32 @@ class BookmarkSearchTest {
             when (val pc = pattern[p]) {
                 '\\' -> {
                     if (p + 1 >= pattern.length) return false
-                    if (t >= text.length || !charEqualsFold(text[t], pattern[p + 1])) return false
+                    if (t >= text.length) return false
+                    val tc = text.codePointAt(t)
+                    if (!codePointEqualsFold(tc, pattern[p + 1].code)) return false
                     p += 2
-                    t += 1
+                    t += Character.charCount(tc)
                 }
                 '%' -> {
-                    for (k in t..text.length) {
+                    var k = t
+                    while (true) {
                         if (likeMatch(text, k, pattern, p + 1)) return true
+                        if (k >= text.length) break
+                        k += Character.charCount(text.codePointAt(k))
                     }
                     return false
                 }
                 '_' -> {
                     if (t >= text.length) return false
+                    t += Character.charCount(text.codePointAt(t))
                     p += 1
-                    t += 1
                 }
                 else -> {
-                    if (t >= text.length || !charEqualsFold(text[t], pc)) return false
+                    if (t >= text.length) return false
+                    val tc = text.codePointAt(t)
+                    if (!codePointEqualsFold(tc, pc.code)) return false
                     p += 1
-                    t += 1
+                    t += Character.charCount(tc)
                 }
             }
         }
@@ -220,6 +241,6 @@ class BookmarkSearchTest {
     }
 
     /** ASCII 大小写不敏感比较（SQLite 的 `LIKE` 只折叠 ASCII，其余字节精确） */
-    private fun charEqualsFold(a: Char, b: Char): Boolean =
-        a == b || (a in 'A'..'Z' && a + 32 == b) || (b in 'A'..'Z' && b + 32 == a)
+    private fun codePointEqualsFold(a: Int, b: Int): Boolean =
+        a == b || (a in 'A'.code..'Z'.code && a + 32 == b) || (b in 'A'.code..'Z'.code && b + 32 == a)
 }

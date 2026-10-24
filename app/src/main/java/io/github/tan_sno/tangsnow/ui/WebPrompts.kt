@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.text.InputType
+import android.webkit.MimeTypeMap
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -394,6 +395,28 @@ class WebPrompts(
         tracked(dialog)
     }
 
+    /**
+     * 把页面 `accept` 的 token 翻译成 DocumentsUI 能匹配的 MIME。
+     * HTML 规范允许 accept 混入**扩展名**（`.pdf` / `.doc`），而 [ActivityResultContracts.OpenDocument]
+     * 把数组塞进 `EXTRA_MIME_TYPES`，DocumentsUI 按 MIME 前缀严格匹配 —— 不含 `/` 的 token
+     * 永远匹配不上任何文档 ⇒ 选择器打开即空列表，上传不可用且无提示（2026-10-24 复核）。
+     * 处理：含 `/` 的原样；`.ext` 经 [MimeTypeMap] 映射，映射不到剔除；既不含 `/` 也不以点开头
+     * 的 token 规范里不合法，剔除（与 Chrome 同口径）；全部剔除后回退全类型通配。
+     */
+    private fun mimeTypesForPicker(raw: Array<String>): Array<String> {
+        val out = raw.mapNotNull { token0 ->
+            val token = token0.trim()
+            when {
+                token.isEmpty() -> null
+                token.contains('/') -> token
+                token.startsWith('.') -> MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(token.substring(1).lowercase(Locale.ROOT))
+                else -> null
+            }
+        }.distinct()
+        return if (out.isEmpty()) arrayOf("*/*") else out.toTypedArray()
+    }
+
     override fun onFilePrompt(
         mimeTypes: Array<String>,
         multiple: Boolean,
@@ -404,16 +427,12 @@ class WebPrompts(
         pendingFileDone = done
         val launch = runCatching {
             if (multiple) {
-                pickMultiFile.launch(
-                    if (mimeTypes.isEmpty()) arrayOf("*/*") else mimeTypes
-                )
+                pickMultiFile.launch(mimeTypesForPicker(mimeTypes))
             } else {
                 // 单选也要把**整个** `accept` 数组交给选择器（注释里不写 MIME 通配符字面量，
                 // 见构造参数处的说明）：只取第一个 MIME 会让「图片 + PDF」这类页面选不到 PDF，
                 // 而多选那条路本来传的就是整个数组 —— 两条路此前并不对称。
-                pickSingleFile.launch(
-                    if (mimeTypes.isEmpty()) arrayOf("*/*") else mimeTypes
-                )
+                pickSingleFile.launch(mimeTypesForPicker(mimeTypes))
             }
         }
         launch.onFailure { onPickedFiles(null) }

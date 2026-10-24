@@ -45,9 +45,12 @@ object UrlUtils {
      *  - 至少含一个点（视为有 TLD）
      *  - 标签由字母数字与短横线组成，首尾不允许是短横线
      *  - 不含空白
+     *  - 端口段限 1..65535（`\d{1,5}` 会放走 0 与 >65535；主流浏览器对超界端口一律按
+     *    搜索词处理，GeckoView 则只给出连接失败错误页 —— 与 Rust 侧 `url_utils::HOST_RE`
+     *    同口径（书写细节两侧各有惯例），改任一侧必同步另一侧与共享夹具）
      */
     private val HOST_PATTERN = Regex(
-        """^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+(?::\d{1,5})?(?:/\S*)?$"""
+        """^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|[1-9]\d{0,3}))?(?:/\S*)?$"""
     )
 
     private val SCHEME_PATTERN = Regex("""^[a-zA-Z][a-zA-Z0-9+.-]*://\S+$""")
@@ -58,7 +61,7 @@ object UrlUtils {
      * 日常入口，丢给搜索引擎等于功能缺失。此处按 http 处理（本机服务默认不启用 TLS）。
      */
     private val LOCALHOST_PATTERN = Regex(
-        """^(?:[A-Za-z0-9-]+\.)*localhost(?::\d{1,5})?(?:/\S*)?$""",
+        """^(?:[A-Za-z0-9-]+\.)*localhost(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|[1-9]\d{0,3}))?(?:/\S*)?$""",
         RegexOption.IGNORE_CASE
     )
 
@@ -68,7 +71,12 @@ object UrlUtils {
      * 是"地址"而非"搜索词"；按 http 处理更符合内网设备的实际情况。
      */
     private val LAN_HOST_PORT_PATTERN = Regex(
-        """^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?:\d{1,5}(?:/\S*)?$"""
+        """^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?:(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|[1-9]\d{0,3})(?:/\S*)?$"""
+    )
+
+    /** 端口段（`:n`，n ∈ 1..65535）：三个 host 正则与 [toAsciiUrl] 的 fallback 共用同一口径 */
+    private val PORT_SEGMENT = Regex(
+        """(?::(?:6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|[1-9]\d{0,3}))"""
     )
 
     /**
@@ -93,11 +101,20 @@ object UrlUtils {
         val rest = input.removePrefix(host)
         val hostOnly = host.substringBefore(':')
         val port = host.removePrefix(hostOnly)
+        // 端口越界（如 `example.com:99999`）会被三个 host 正则拒掉，却可能从本函数的
+        // fallback 溜进 looksLikeUri/resolveInfo ⇒ 按同一 1..65535 口径拒（2026-10-24 复核）。
+        if (port.isNotEmpty() && !PORT_SEGMENT.matches(port)) return null
         val ascii = runCatching {
             java.net.IDN.toASCII(hostOnly, java.net.IDN.ALLOW_UNASSIGNED)
         }.getOrNull() ?: return null
         // 转出的结果必须仍是合法域名形态（含点、无空白/控制符），避免把搜索词硬转
         if (!ascii.contains('.') || ascii.any { it.isWhitespace() || it.code < 0x20 }) return null
+        // 空标签复检（对齐 Rust `to_ascii_url`）：剥一个尾点后每个标签必须非空 ——
+        // 退化输入 `.` 经 IDN.toASCII 原样返回（实测），没有这道检查会被当成
+        // `https://.` 导航到 DNS 错误页，而 Rust 侧拒绝、走搜索（2026-10-24 复核，
+        // 原 README「已知口径差异」表里的这条分歧就此消除）。
+        val asciiBody = ascii.removeSuffix(".")
+        if (asciiBody.isEmpty() || asciiBody.split('.').any { it.isEmpty() }) return null
         return ascii + port + rest
     }
 

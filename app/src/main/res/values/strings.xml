@@ -170,6 +170,8 @@
          故 hint 不写死具体字段，只写「搜索」，避免误导 -->
     <string name="library_search_hint">搜索</string>
     <string name="library_no_match">没有匹配的条目</string>
+    <string name="library_load_failed">读取数据失败，请重试</string>
+    <string name="library_remove_failed">删除失败，请重试</string>
     <string name="download_state_success">已完成</string>
     <string name="download_state_running">下载中 %1$d%%</string>
     <string name="download_state_failed">失败</string>

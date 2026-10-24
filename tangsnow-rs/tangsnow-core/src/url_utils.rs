@@ -15,10 +15,17 @@ static HOST_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?",
         r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+",
-        r"(?::[0-9]{1,5})?",
+        r"(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?",
         r#"(?:/[^ \t\n\x0B\x0C\r]*)?$"#,
     ))
     .unwrap()
+});
+
+/// 端口段（`:n`，n ∈ 1..65535）：与三个 host 正则、`to_ascii_url` 的 fallback 共用同一口径
+///（2026-10-24：`[0-9]{1,5}` 会放走 0 与 >65535，两侧正则与校验同步收紧）。
+static PORT_SEGMENT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))$")
+        .unwrap()
 });
 
 static SCHEME_RE: LazyLock<Regex> =
@@ -33,7 +40,7 @@ static LOCALHOST_RE: LazyLock<Regex> = LazyLock::new(|| {
     // "pattern can match invalid UTF-8"（bench_smoke 抓到）——故路径那一段用 `(?u:…)`
     // 局部把 Unicode 打开：既保留「`/` 后可含 CJK」的原语义，又不许匹配非法字节。
     Regex::new(
-        r"(?i-u)^(?:[A-Za-z0-9-]+\.)*localhost(?::[0-9]{1,5})?(?:/(?u:[^ \t\n\x0B\x0C\r]*))?$",
+        r"(?i-u)^(?:[A-Za-z0-9-]+\.)*localhost(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?(?:/(?u:[^ \t\n\x0B\x0C\r]*))?$",
     )
     .unwrap()
 });
@@ -41,7 +48,7 @@ static LOCALHOST_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// 单标签主机 + 端口（如 `nas:5000`）：不含点会被 HOST_RE 判非域名，但有明确端口，
 /// 是「地址」而非「搜索词」。
 static LAN_HOST_PORT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?:[0-9]{1,5}(?:/[^ \t\n\x0B\x0C\r]*)?$")
+    Regex::new(r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?:(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3})(?:/[^ \t\n\x0B\x0C\r]*)?$")
         .unwrap()
 });
 
@@ -67,7 +74,7 @@ pub struct Resolved {
 
 /// Kotlin `String.startsWith(prefix, ignoreCase = true)`。
 fn starts_with_ci(s: &str, prefix: &str) -> bool {
-    s.as_bytes().len() >= prefix.len()
+    s.len() >= prefix.len()
         && s.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
 }
 
@@ -99,12 +106,19 @@ pub fn to_ascii_url(input: &str) -> Option<String> {
     let rest = &input[host.len()..]; // Kotlin removePrefix(host)
     let host_only = host.split(':').next().unwrap();
     let port = &host[host_only.len()..];
+    // 端口越界（如 `example.com:99999`）会被三个 host 正则拒掉，却可能从本函数的
+    // fallback 溜进 looks_like_uri/resolve_info ⇒ 与 Kotlin 侧同口径（1..65535）拒
+    //（2026-10-24 复核，两侧同步）。
+    if !port.is_empty() && !PORT_SEGMENT_RE.is_match(port) {
+        return None;
+    }
     // 空标签口径以**主线 `IDN.toASCII` 的实测行为**为准（2026-10-15 用 JBR 25.0.3 逐条量过）：
     // 开头或中间的空白标签抛 IllegalArgumentException（Kotlin 侧 runCatching → null），
     // 但**尾点被容忍**（`example.com.` 原样通过；`idna` 自己就保留这个根点，别再补一次——
     // 补了会输出 `example.com..`）。此前 Rust 把 `a..b.com` 直接放过，比浏览器和主线都宽松：
     // 那条主机会被"当网址导航"，而主线把它当搜索词。
-    // 唯一有意分歧：退化输入 `.` 这里拒（Java 返回 "."），已记入 README「已知口径差异」表。
+    // 退化输入 `.`：Java 的 `IDN.toASCII` 会原样返回 "."，Kotlin 侧 2026-10-24 起在同位
+    // 置加了剥尾点后的空标签复检（同款逻辑），两侧一致拒 —— 原「已知口径差异」⑦ 已消除。
     let trimmed_host = host_only.strip_suffix('.').unwrap_or(host_only);
     if trimmed_host.split('.').any(|label| label.is_empty()) {
         return None;

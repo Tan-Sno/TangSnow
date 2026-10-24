@@ -128,6 +128,9 @@ class HomeCustomizeActivity : AppCompatActivity() {
 
     // ------------------------------------------------------------- 自定义图片背景
 
+    /** 选图请求序号：只允许最新一次请求落地（见 [applyPickedImage] 的复核） */
+    private var pickImageSeq = 0
+
     private fun launchImagePicker() {
         pickImageLauncher.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -138,12 +141,22 @@ class HomeCustomizeActivity : AppCompatActivity() {
         // 改为「复制为应用内副本」：与照片选择器的授权模型无关，100% 跨重启有效。
         // 仅复制成功才写偏好；失败时保持原风格并有失败提示。
         lifecycleScope.launch {
+            // 请求序号：复制可能耗时（大图/慢存储），期间用户可再次选图或清除 ——
+            // 落地前复核，过期请求只清理自己的副本（2026-10-24 复核的 check-then-act 竞态）。
+            val seq = ++pickImageSeq
             // 主线程先取好：替换成功后要删掉的就是这个旧副本
             val previous = prefs.homeImageUri
             val copied = withContext(Dispatchers.IO) { copyImageToInternal(uri) }
             if (isFinishing || isDestroyed) {
                 // 宿主已销毁：这份副本无人认领（偏好不会写、之后也没人会再删它）⇒ 就地删除。
                 // ⚠️ 不能用生命周期作用域版：此刻它可能正在取消，那样的清理根本跑不到。
+                HomeImageFile.deleteOnBackgroundThread(this@HomeCustomizeActivity, copied?.toString())
+                return@launch
+            }
+            if (seq != pickImageSeq || prefs.homeImageUri != previous) {
+                // 复制期间用户又动了偏好（再次选图 → 更新的请求会落地并清理它自己的 previous；
+                // 清除图片 → 偏好已被置空）。本请求过期：写回会把用户的操作静默推翻，
+                // 且先前那次落地写入的副本将成永久孤儿（清理出口只认偏好当前指向）。
                 HomeImageFile.deleteOnBackgroundThread(this@HomeCustomizeActivity, copied?.toString())
                 return@launch
             }

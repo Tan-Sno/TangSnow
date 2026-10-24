@@ -87,64 +87,54 @@ class ScanImageActivity : CaptureActivity() {
     private fun decodeAndFinish(uri: android.net.Uri) {
         // 用协程而非裸 Thread：随本页销毁自动取消（见 scope），不再需要 runOnUiThread 手工回主线程
         scope.launch {
-            val text = withContext(Dispatchers.IO) { decode(uri) }
+            val outcome = withContext(Dispatchers.IO) { decode(uri) }
             if (isFinishing || isDestroyed) return@launch
-            if (text == null) {
-                // 如实归因：内存不足 ≠ 图读不出来 ≠ 图里没有码 —— 三者给三种提示
-                toast(
-                    when {
-                        lastDecodeOutOfMemory -> R.string.scan_image_too_large
-                        lastDecodeUnreadable -> R.string.scan_image_unreadable
-                        else -> R.string.scan_no_qr_found
-                    }
-                )
-            } else {
-                returnResult(text)
+            // 如实归因：内存不足 ≠ 图读不出来 ≠ 图里没有码 —— 三者给三种提示。
+            // 归因随**本次调用**的结果对象走（不再用共享 @Volatile 标志跨线程传，
+            // 连续两次识别并发时不会互相冲掉归因，2026-10-24 复核）。
+            when (outcome) {
+                is DecodeOutcome.Ok -> returnResult(outcome.text)
+                DecodeOutcome.OutOfMemory -> toast(R.string.scan_image_too_large)
+                DecodeOutcome.Unreadable -> toast(R.string.scan_image_unreadable)
+                null -> toast(R.string.scan_no_qr_found)
             }
         }
     }
 
     /**
-     * 上一次 [decode] 是否因**内存不足**失败。
-     * 用途：把「图像过大导致内存不足」与「图里没有二维码」分开提示（2026-10-01 CR-014）——
-     * 此前 `catch (_: Throwable)` 把 `OutOfMemoryError` 也吞成「未找到二维码」，
-     * 用户会以为是图里没有码而反复换图重试。**仅在本页内使用**（IO 线程写、主线程读 ⇒ @Volatile）。
+     * [decode] 的结果：把旧实现里两个 `@Volatile` 归因标志与二义的 `null` 收进类型 ——
+     * 标志是**单份**实例字段且在 `decode` 开头复位，两次相册识别并发时（第一次仍在解码、
+     * 用户又选了第二张），后一次的复位会把前一次的归因冲掉，提示语张冠李戴。
+     * `null` = 载入成功但图里没有码（正常否定，不是错误）。
      */
-    @Volatile
-    private var lastDecodeOutOfMemory = false
+    private sealed interface DecodeOutcome {
+        data class Ok(val text: String) : DecodeOutcome
+        /** 图片载入阶段内存不足 ⇒ 提示「图过大」（2026-10-01 CR-014） */
+        data object OutOfMemory : DecodeOutcome
+        /** 流打不开（文件已删）/ 损坏 / 格式不受支持 ⇒ 提示「读不出图」（外部审查 P4-17） */
+        data object Unreadable : DecodeOutcome
+    }
 
-    /**
-     * 上一次 [decode] 是否**读不出图**（文件损坏 / 格式不受支持）。
-     * 与 [lastDecodeOutOfMemory] 同型：`decode` 的 `null` 是二义的（读不出图 vs 读出来了但没码），
-     * 不分清楚就会把「图片损坏」报成「图里没有码」，用户反复换图重试（2026-10-02 外部审查 P4-17）。
-     */
-    @Volatile
-    private var lastDecodeUnreadable = false
-
-    private fun decode(uri: android.net.Uri): String? {
-        lastDecodeOutOfMemory = false
-        lastDecodeUnreadable = false
+    private fun decode(uri: android.net.Uri): DecodeOutcome? {
         // 第一步：把**图片载入**与**码点解码**分开——载入失败（流打不开 / 损坏 / 格式不支持）
         // 属「读不出图」；载入成功但 zxing 不认属「图里没有码」。此前混在一个宽 catch 里，
         // `openInputStream` 抛的 FileNotFound 等会被误报成「图里没有码」（外部审查 P4）。
         val bmp = try {
             io.github.tan_sno.tangsnow.util.Bitmaps.decodeSampled(contentResolver, uri, 1600, 1600)
-        } catch (e: OutOfMemoryError) {
-            lastDecodeOutOfMemory = true
-            return null
+        } catch (_: OutOfMemoryError) {
+            return DecodeOutcome.OutOfMemory
         } catch (_: Throwable) {
             // 流打不开（云端文档未落地 / 文件已被删）/ 解码器拒绝
-            lastDecodeUnreadable = true
-            return null
+            return DecodeOutcome.Unreadable
         }
         if (bmp == null) {
             // 读不出图（损坏 / 格式不受支持）：与「读出来了但没码」分开归因
-            lastDecodeUnreadable = true
-            return null
+            return DecodeOutcome.Unreadable
         }
         // CR-010：位图用完必须回收 —— 1600×1600 的 ARGB_8888 约 10 MB，此前靠 GC 才释放，
         // 内存峰值被无谓抬高。`try/finally` 保证任何早退路径（宽高非法、解码失败）都回收到。
-        return try {
+        // 第二步：码点解码。OOM 单独归因；其余异常=「图里没有码」（正常否定，非 Unreadable）。
+        val text: String? = try {
             val w = bmp.width
             val h = bmp.height
             if (w <= 0 || h <= 0) {
@@ -168,17 +158,17 @@ class ScanImageActivity : CaptureActivity() {
                 ).text
             }
         } catch (_: OutOfMemoryError) {
-            lastDecodeOutOfMemory = true
-            null
+            return DecodeOutcome.OutOfMemory
         } catch (_: Throwable) {
             // 载入成功但认不出码（含 zxing 的 NotFoundException 等）=「图里没有码」，
-            // **不**置 unreadable——那会把正常否定误报成「图片损坏」
+            // **不**归为 Unreadable——那会把正常否定误报成「图片损坏」
             null
         } finally {
             // CR-010：位图用完立刻回收（1600² ARGB_8888 ≈ 10 MB），不靠 GC；
             // try/finally 保证任何早退路径（宽高非法、解码抛异常）都会回收。
             runCatching { bmp.recycle() }
         }
+        return text?.let { DecodeOutcome.Ok(it) }
     }
 
     private fun returnResult(text: String) {

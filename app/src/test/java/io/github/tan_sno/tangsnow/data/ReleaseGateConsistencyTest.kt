@@ -473,7 +473,10 @@ class ReleaseGateConsistencyTest {
             "docs", ".github/PULL_REQUEST_TEMPLATE.md", ".github/workflows/ci.yml",
             "tangsnow-rs/README.md", "tangsnow-rs/自建验证指南.md",
         )
-        val bare = Regex(""":app:(?:lint|test|assemble|bundle|package)(?:Debug|Release)(?![A-Za-z])""")
+        // ⚠️ 不带 `(?![A-Za-z])` 前瞻：它会放走 `:app:testDebugUnitTest`（Debug 后跟字母 U）——
+        // 恰是本用例 KDoc 点名要拦的 ambiguous 名（2026-10-24 复核）。带 flavor 的任务名
+        // 动词后紧跟的是 `Core`（flavor 段首字母），本就不会命中 `(?:Debug|Release)`。
+        val bare = Regex(""":app:(?:lint|test|assemble|bundle|package)(?:Debug|Release)""")
         val offenders = mutableListOf<String>()
         var gradlewLines = 0
         for (rel in scanned) {

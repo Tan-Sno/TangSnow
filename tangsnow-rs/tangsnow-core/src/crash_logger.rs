@@ -19,8 +19,15 @@ static CRASH_NAME_STAMP: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Kotlin `Regex("""([a-z][a-z0-9+.\-]*)://(\S+)""", IGNORE_CASE)`——`\S` 按库惯例写成
 /// ASCII 空白补集（Java 默认 `\S` 语义，nbsp 等非 ASCII 字符计入 URL）。
+/// 开头 `(?i-u)`：Java `IGNORE_CASE` 只折叠 ASCII（`ſ` 不等于 `s`），裸 `(?i)`
+/// 的 Unicode 折叠会让 `httpſ://user:pw@…` 在 Rust 侧被脱敏、Kotlin 侧原样落盘 ——
+/// 与 `url_utils::URL_IN_TEXT_RE` 同一坑，见 regression_2026_10_17。
+/// rest 段用 `(?u:…)` 壳**包住捕获组**：`-u` 下裸取反类会退化成字节类（可匹配非法
+/// UTF-8，`Regex::new` 直接拒），壳把字符级 Unicode 开回来；壳内必须是捕获组 ——
+/// `redact_urls` 取 `caps[2]`，两个捕获组都不能少。
+/// 该字面量受 `CrossLanguageLiteralParityTest` 的归一比对钉住（剥 `(?i-u)` 与 `(?u:)` 壳）。
 static URL_IN_TEXT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)([a-z][a-z0-9+.\-]*)://([^ \t\n\x0B\x0C\r]+)").unwrap());
+    LazyLock::new(|| Regex::new(r"(?i-u)([a-z][a-z0-9+.\-]*)://(?u:([^ \t\n\x0B\x0C\r]+))").unwrap());
 
 /// 崩溃日志**文件名** → 展示时间戳：`crash-20261001-121500-123.txt` → `2026-10-01 12:15:00`。
 ///
@@ -51,7 +58,7 @@ pub fn redact_urls(text: &str) -> String {
             // 先截 authority（第一个 '/'|'?'|'#' 之前），再剥 userinfo：
             // userinfo 的 `@` 只在 authority 里合法；顺序反了会把 host 连路径前缀误剥。
             let authority_end = rest
-                .find(|c| c == '/' || c == '?' || c == '#')
+                .find(['/', '?', '#'])
                 .unwrap_or(rest.len());
             let authority = &rest[..authority_end];
             // Kotlin substringAfterLast('@')：无 `@` 时返回原串

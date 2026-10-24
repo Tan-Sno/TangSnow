@@ -169,6 +169,8 @@
          on two tabs but a status on the downloads tab, so naming a field would mislead. -->
     <string name="library_search_hint">Search</string>
     <string name="library_no_match">No matching items</string>
+    <string name="library_load_failed">Couldn\'t load data. Please try again.</string>
+    <string name="library_remove_failed">Couldn\'t remove the item. Please try again.</string>
     <string name="download_state_success">Completed</string>
     <string name="download_state_running">Downloading %1$d%%</string>
     <string name="download_state_failed">Failed</string>

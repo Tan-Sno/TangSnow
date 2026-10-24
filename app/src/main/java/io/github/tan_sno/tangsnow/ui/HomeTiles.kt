@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.tan_sno.tangsnow.R
 import io.github.tan_sno.tangsnow.data.HomeShortcut
 import io.github.tan_sno.tangsnow.databinding.ItemHomeTileBinding
+import io.github.tan_sno.tangsnow.util.CodePoints
 
 /** 首页快捷方式网格适配器 */
 class HomeTilesAdapter(
@@ -67,7 +68,8 @@ class HomeTilesAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
-        holder.binding.tileAvatar.text = item.name.take(1).uppercase()
+        // 同 Adapters.tabGlyph：按码点取首字符，避免劈开代理对（2026-10-24 复核）。
+        holder.binding.tileAvatar.text = CodePoints.takeCodePoints(item.name, 1).uppercase()
         holder.binding.tileAvatar.backgroundTintList =
             ColorStateList.valueOf(colorFor(holder.itemView.context, item.name))
         holder.binding.tileLabel.text = item.name

@@ -178,9 +178,9 @@ object CrashLogger {
      * 故不会被碰 —— 见 `CrashLoggerRedactTest` 的「含敏感词的类名与普通词不被误伤」用例。
      */
     internal fun redactCredentials(text: String): String =
-        AUTH_SCHEME.replace(CREDENTIAL_PAIRS.replace(text) { m -> "${m.groupValues[1]}${m.groupValues[2]}…" }) { m ->
-            "${m.groupValues[1]}${m.groupValues[2]}…"
-        }
+        CREDENTIAL_PAIRS.replace(
+            AUTH_SCHEME.replace(text) { m -> "${m.groupValues[1]}${m.groupValues[2]}…" },
+        ) { m -> "${m.groupValues[1]}${m.groupValues[2]}…" }
 
     /**
      * `键名 :|= 值` 形态（值吃到空白为止）—— 键名是**含敏感词的标识符**，不是固定词表。

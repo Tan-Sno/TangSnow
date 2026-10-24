@@ -222,23 +222,10 @@ class ExtInstallCoordinator(
      * 为什么要有这个标记：[settle]（作业摘除）与主线程投递之间隔着一次主循环派发，宿主
      * `onResume` 的孤儿自愈若恰在窗口里跑，会把已成功/已失败的安装误判成「被中断」。
      * 投递前登记、投递后（含取消/异常）解除，自愈侧跳过 delivering 的键。
-     */
-    private val deliveringKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
-
-    /**
-     * **一次性投递闸**（2026-10-02 外部审查 P2；此前 KDoc 声称有、代码里并没有）：同一次安装尝试里，
-     * `deliverOnMain` 只在**第一次**真正执行 `deliver`，之后同 key 的投递直接丢弃 —— 这堵的是
-     * "`cb.onSuccess` 抛异常穿出 `deliverOnMain`、落到外层 catch 再投一次 `onFailure`"那条路。
      *
-     * ⚠️ `deliveringKeys` **不能**兼任：它在投完就 `finally` 摘除（语义是"正在投递给它"，
-     * 供 `isDelivering` 给自愈侧用），拦不住第二次。
-     * ⚠️ **清理点在 `install()` 的登记处**，不在这里、也**不在 `settle()`**：超时分支是"先 settle
-     * 再投递"（`:183` 在前）⇒ 若在 settle 里清闸，那次投递会重新把闸加上、此后再无人清 ⇒
-     * **同一 key 的下一次重试会被永久吞掉**（比没有闸更糟）。语义因此是「**每次安装尝试**恰好投递一次」，
-     * 与 `onDone` 的 KDoc 一致。
+     * ⚠️ 两个集合都在 **companion**（进程级，见下方声明处的说明）—— 放在实例字段时，
+     * 双实例场景下新实例的 `isDelivering` 恒为空，恰好放行这个窗口（2026-10-24 复核）。
      */
-    private val deliveredKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
-
     private suspend fun deliverOnMain(key: String, deliver: suspend () -> Unit) {
         if (!deliveredKeys.add(key)) return
         deliveringKeys.add(key)
@@ -521,6 +508,32 @@ class ExtInstallCoordinator(
          * 提到进程级后，重建的新实例仍能看见在途作业，判定不再失真。
          */
         private val activeJobs = ConcurrentHashMap<String, Job>()
+
+        /**
+         * 「结果投递中」标记（进程级）。语义见 [deliverOnMain] 的 KDoc。
+         *
+         * 与 [activeJobs] 同理必须进程级：它防的是「settle 已摘除作业、投递还没到主线程」
+         * 的窗口，而这个窗口对**任何**实例的孤儿自愈都成立 —— 实例级标记在双实例场景下
+         * 新实例恒为空，等于没防（2026-10-24 复核）。
+         */
+        private val deliveringKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+        /**
+         * **一次性投递闸**（2026-10-02 外部审查 P2；此前 KDoc 声称有、代码里并没有）：同一次安装尝试里，
+         * `deliverOnMain` 只在**第一次**真正执行 `deliver`，之后同 key 的投递直接丢弃 —— 这堵的是
+         * "`cb.onSuccess` 抛异常穿出 `deliverOnMain`、落到外层 catch 再投一次 `onFailure`"那条路。
+         *
+         * ⚠️ `deliveringKeys` **不能**兼任：它在投完就 `finally` 摘除（语义是"正在投递给它"，
+         * 供 `isDelivering` 给自愈侧用），拦不住第二次。
+         * ⚠️ **清理点在 `install()` 的登记处**，不在这里、也**不在 `settle()`**：超时分支是"先 settle
+         * 再投递"（`:183` 在前）⇒ 若在 settle 里清闸，那次投递会重新把闸加上、此后再无人清 ⇒
+         * **同一 key 的下一次重试会被永久吞掉**（比没有闸更糟）。语义因此是「**每次安装尝试**恰好投递一次」，
+         * 与 `onDone` 的 KDoc 一致。
+         *
+         * 同样进程级：闸是按 key 的安装语义（catalogKey 与导入路径键在同一进程内全局唯一），
+         * 与实例无关。
+         */
+        private val deliveredKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
         /** 自建下载的缓存目录与临时包前缀（与本地导入的 `import-` 前缀区分开） */
         private const val CACHE_DIR = "exts"

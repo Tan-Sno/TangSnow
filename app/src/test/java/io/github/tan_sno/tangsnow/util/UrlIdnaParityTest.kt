@@ -107,8 +107,8 @@ class UrlIdnaParityTest {
             "全角句号在标签中间按分隔符处理",
             "全角句号（FF0E）在标签中间按分隔符处理",
             "IPv6 字面量不是域名",
-            "端口不校验数字",
-            "多个冒号原样保留",
+            "非数字端口同拒（2026-10-24 收紧：端口段必须 1..65535，与三个 host 正则一致）",
+            "多个冒号同拒（非合法端口段，2026-10-24 收紧）",
         )) {
             val c = case(id)
             assertEquals(
@@ -217,8 +217,11 @@ class UrlIdnaParityTest {
     }
 
     @Test
-    fun `有意分歧_退化输入单点_java原样返回`() {
-        assertEquals(".", UrlUtils.toAsciiUrl("."))
+    fun `退化输入单点_两侧同拒`() {
+        // 2026-10-24 起 Kotlin 侧补上「剥尾点后空标签复检」：Java 的 IDN.toASCII 原样返回
+        // "."，但没有复检就会导航到 https://.（DNS 错误页）；Rust 侧一直拒。
+        // 原「已知口径差异」表 ⑦ 就此消除，两侧一致按搜索词处理（共享夹具已钉）。
+        assertNull(UrlUtils.toAsciiUrl("."))
     }
 
     @Test

@@ -192,23 +192,36 @@ pub extern "system" fn Java_io_github_tan_1sno_tangsnow_core_CoreNative_resolveI
             return std::ptr::null_mut();
         }
     };
-    let url = env.new_string(&r.url).ok();
-    let flag = env.new_string(if r.is_search { "1" } else { "0" }).ok();
-    if let (Some(u), Some(f)) = (url, flag) {
-        // set 失败（多半因线程上挂着 pending exception）绝不能留半填充数组：
-        // Kotlin 侧 r[0] 穿进 Resolved 的非空主构造就是 NPE（真机闪退实锤路径）。
-        // 任一元素写失败 → 整体回 null，让 Kotlin 走 searchUrl 降级链。
-        let ok0 = env.set_object_array_element(&arr, 0, u).is_ok();
-        let ok1 = env.set_object_array_element(&arr, 1, f).is_ok();
-        if !(ok0 && ok1) {
+    // ⚠️ 任一个 new_string 失败（OOM 等）都会在**本线程**留下未决异常：必须立即 clear 并
+    // 返回 null，**不得**带着未决异常继续调第二个 new_string / set_object_array_element
+    //（JNI 规范属未定义行为；与 opt_str / ret_str 的失败分支同口径。2026-10-24 复核，
+    // 此前只有 set_array 与 else 分支清了异常，首个 new_string 失败是漏网的 UB 面）。
+    let url = match env.new_string(&r.url) {
+        Ok(s) => s,
+        Err(_) => {
             let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
-            jlog(&format!("resolveInfo: set_array failed(ok0={ok0},ok1={ok1}), pending_ex={p}"));
+            jlog(&format!("resolveInfo: new_string(url) failed, pending_ex={p}"));
             let _ = env.exception_clear();
             return std::ptr::null_mut();
         }
-    } else {
+    };
+    let flag = match env.new_string(if r.is_search { "1" } else { "0" }) {
+        Ok(s) => s,
+        Err(_) => {
+            let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
+            jlog(&format!("resolveInfo: new_string(flag) failed, pending_ex={p}"));
+            let _ = env.exception_clear();
+            return std::ptr::null_mut();
+        }
+    };
+    // set 失败（多半因线程上挂着 pending exception）绝不能留半填充数组：
+    // Kotlin 侧 r[0] 穿进 Resolved 的非空主构造就是 NPE（真机闪退实锤路径）。
+    // 任一元素写失败 → 整体回 null，让 Kotlin 走 searchUrl 降级链。
+    let ok0 = env.set_object_array_element(&arr, 0, &url).is_ok();
+    let ok1 = env.set_object_array_element(&arr, 1, &flag).is_ok();
+    if !(ok0 && ok1) {
         let p = if env.exception_check().unwrap_or(false) { "yes" } else { "no" };
-        jlog(&format!("resolveInfo: new_string failed, pending_ex={p}"));
+        jlog(&format!("resolveInfo: set_array failed(ok0={ok0},ok1={ok1}), pending_ex={p}"));
         let _ = env.exception_clear();
         return std::ptr::null_mut();
     }

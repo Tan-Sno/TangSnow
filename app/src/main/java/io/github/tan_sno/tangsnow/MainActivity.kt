@@ -913,7 +913,17 @@ class MainActivity : AppCompatActivity(), ExtensionPrompts.ExtensionUi {
         // 下 A 真销毁会把 **B 排队**的下载确认全部关流、计数清零 ⇒ B 的补弹什么都弹不出来，
         // 连「N 个下载被忽略」那句如实提示也没了。同文件里处理器解绑与内核关停都已按
         // 「引用比对 / 宿主计数」收口，只有这处漏了。
-        if (!isChangingConfigurations && !sessionManager.hasOtherHost()) {
+        // ⚠️ 补 isInitialized 守卫：同意门禁路径（onCreate 里 finish + return）的实例从未走到
+        // sessionManager 初始化，非配置变更时这里会抛 UninitializedPropertyAccessException ——
+        // 默认浏览器场景下「未同意窗口期点任意链接」即整进程崩溃（2026-10-24 复核）。
+        // ⚠️ 未初始化实例**跳过清理**而不当 true 处理：队列是 companion **进程级**的，本实例
+        // 从未参与过下载流程、无法判断其他宿主是否在排队 —— 放着不动永远安全（当前
+        // needsConsent 单调 ⇒ 门禁实例存活时不可能有已初始化宿主、队列必空；留这条防线
+        // 是防未来出现「运行中重新需要同意」之类的变化）。
+        if (::sessionManager.isInitialized &&
+            !isChangingConfigurations &&
+            !sessionManager.hasOtherHost()
+        ) {
             pendingDownloadConfirms.forEach { abandonDownload(it.response) }
             pendingDownloadConfirms.clear()
             // 被放弃的那几条永远不会被 flush 报告了：计数一并清零。不清的话，进程仍存活时

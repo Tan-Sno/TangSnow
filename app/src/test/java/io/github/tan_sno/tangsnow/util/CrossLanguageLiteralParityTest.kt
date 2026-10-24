@@ -189,8 +189,10 @@ class CrossLanguageLiteralParityTest {
         }
         assertTrue(
             "Rust 侧两条都必须带行内大小写不敏感标志 —— 与 Kotlin 的 IGNORE_CASE 同开同关。" +
-                "提链接那条 2026-10-17 起是 `(?i-u)`（只折叠 ASCII），脱敏那条仍是 `(?i)`。",
-            rsShare.startsWith("(?i-u)") && rsRedact.startsWith("(?i)"),
+                "两条都已收紧为 `(?i-u)`（只折叠 ASCII）：提链接那条 2026-10-17 收紧，" +
+                "脱敏那条 2026-10-24 收紧（裸 `(?i)` 的 Unicode 折叠会让 `httpſ://user:pw@…` 在 " +
+                "coreRust 被脱敏、coreKotlin 原样落盘 —— 同一输入两条线的隐私行为相反）。",
+            rsShare.startsWith("(?i-u)") && rsRedact.startsWith("(?i-u)"),
         )
         // 2026-10-17：提链接那条的 `(?i)` 收紧成 `(?i-u)`。Java 的 IGNORE_CASE（未开 UNICODE_CASE）
         // 只折叠 ASCII，而 Rust `(?i)` 默认走 Unicode 简单折叠 ⇒ 旧口径会把 `httpſ://`（U+017F 折成 s）
@@ -209,12 +211,14 @@ class CrossLanguageLiteralParityTest {
             //  · `(?i-u)`：`-u` 把大小写折叠限制在 ASCII（Java IGNORE_CASE 未开 UNICODE_CASE 的口径）；
             //    少了它，Rust `(?i)` 会把 `ſ`↔`s` 也折叠 ⇒ `httpſ://` 被当成 `https://`。
             //  · `(?u:…)`：`-u` 下取反类会退化成字节类、可匹配非法 UTF-8 ⇒ `Regex::new` 直接拒，
-            //    故取反类必须局部把 Unicode 开回来。
+            //    故取反类必须局部把 Unicode 开回来。壳内允许**嵌套一层圆括号**（捕获组）——
+            //    2026-10-24 起崩溃脱敏那条的 rest 段写成 `(?u:([^…]+))`（壳既开 Unicode 又保住
+            //    `redact_urls` 要用的 caps[2]）。
             // 这两者**必须存在**，由本测试后面的两条断言钉住。
             .removePrefix("(?i-u)")
             .removePrefix("(?i)")
             // 先把 `(?u:…)` 壳剥掉（与下面的 `\S` 代回互不依赖，顺序无关）。
-            .replace(Regex("""\(\?u:([^()]*)\)"""), "\$1")
+            .replace(Regex("""\(\?u:((?:[^()]|\([^()]*\))*)\)"""), "\$1")
             .replace(nonWs, "\\S")
 
     @Test

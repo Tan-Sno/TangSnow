@@ -110,4 +110,19 @@ class LocaleManagerTest {
             )
         }
     }
+
+    @Test
+    fun `API 33 及以上从未应用过且偏好是跟随系统时不重放`() {
+        // 首次冷启动（appliedTag=null）+ 偏好「跟随系统」：写空列表会把用户在系统设置里
+        // 预设的 per-app 语言抹掉 ⇒ 必须不动（2026-10-24 修复钉住的回归）。
+        for (sdk in listOf(33, 34, 37)) {
+            assertFalse(
+                "API $sdk 上首次启动不该重放跟随系统",
+                LocaleManager.needReapply(sdk, tag = "", appliedTag = null),
+            )
+        }
+        // 但用户在应用内显式切回「跟随系统」（appliedTag 非空）时仍要写空列表 ——
+        // 那是本应用自己的干预，不是抹预设。
+        assertTrue(LocaleManager.needReapply(33, tag = "", appliedTag = "zh"))
+    }
 }

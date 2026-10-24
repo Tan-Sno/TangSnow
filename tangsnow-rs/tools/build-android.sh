@@ -1,5 +1,5 @@
-# AI生成
 #!/usr/bin/env bash
+# AI生成
 # AI生成
 # 构建 tangsnow-core 的 Android .so（三个 ABI），输出到 dist/jniLibs/。
 # （2026-10-15：dist/jniLibs 已 gitignore，这里只是**重编落点**；唯一进仓、进构建的副本
@@ -100,10 +100,11 @@ _add_remap() {
   REMAP="$REMAP --remap-path-prefix=$n=~"
 }
 # ① 用户目录（覆盖 %USERPROFILE%\.cargo 与 %USERPROFILE%\.rustup）；② CARGO_HOME 若被改到别处；
-# ③ 仓库根 —— 本脚本已 `cd` 进 `tangsnow-rs/tangsnow-core`，故仓库根就是 `../../..`。
+# ③ 仓库根 —— 本脚本已 `cd` 进 `tangsnow-rs/tangsnow-core`，故仓库根是 `../..`
+#    （`../../..` 是仓库根的父目录：2026-10-24 复核修正，原值把重映射范围放大了一级）。
 _add_remap "${USERPROFILE:-$HOME}"
 _add_remap "${CARGO_HOME:-}"
-_add_remap "$(cd ../../.. && pwd)"
+_add_remap "$(cd ../.. && pwd)"
 
 # 16KB 页对齐（Android 15+ 新设备的硬要求）：
 # NDK r27 链接器默认 max-page-size=4096，产出的 so 在 16KB 页内核的设备上
