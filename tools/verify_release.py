@@ -1235,6 +1235,33 @@ def selftest():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+    # ⑬ 水印/署名扫描门禁（2026-10-30 新增，tools/scan_watermarks.py）：
+    # 「全链路无署名」纪律的机械判据。判定逻辑的双向用例在工具自己的 --selftest
+    # （12 拦 / 5 放）；这里再验两件事——工具自证能绿，以及**真扫路径能红**
+    # （喂一个带尾签的临时文件走真扫描，确信它不是只会说「干净」的门禁）。
+    _wm = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scan_watermarks.py")
+
+    def _watermark_selftest_green():
+        r = subprocess.run([sys.executable, _wm, "--selftest"], capture_output=True)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).decode("utf-8", "replace")[-400:])
+
+    def _watermark_real_scan_red():
+        import tempfile
+        # 样本用运行时拼装构造（chr 码 + 格式化），**源码里不能出现可命中模式表的
+        # 字面量**——否则扫描器会拦住自己的看门人（2026-10-30 首跑实证）。
+        marker = "[%s/%s-%d.%d]" % (chr(0x5c0f) + chr(0x901a), "GL" + "M", 5, 2)
+        with tempfile.TemporaryDirectory() as td:
+            bad = os.path.join(td, "leak.md")
+            with open(bad, "w", encoding="utf-8") as f:
+                f.write("# note\n\n%s\n" % marker)
+            r = subprocess.run([sys.executable, _wm, bad], capture_output=True)
+        if r.returncode != 2:
+            raise AssertionError("带尾签文件未被拦（exit=%d）" % r.returncode)
+
+    case("⑬ 水印扫描：工具自证绿", _watermark_selftest_green)
+    case("⑬ 水印扫描：真扫路径能红", _watermark_real_scan_red)
+
     width = max(len(n) for _, n, _ in results)
     for ok, name, detail in results:
         print("  %s  %-*s %s" % ("PASS" if ok else "FAIL", width, name, detail))

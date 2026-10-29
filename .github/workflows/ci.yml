@@ -38,6 +38,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 水印/署名门禁（2026-10-30 新增）：「全链路无署名」纪律的机械判据，四类模式
+      # （作者/模型标识、生成标记、git 尾签、尾签括号）+ 隐形字符，扫跟踪文件与
+      # git 元数据。放最前：不依赖 JDK/Gradle，失败时零成本快速失败。
+      # 背景：2026-10-29 清理轮人工覆盖了主仓、仓外壳仓漏网三处——人工轮必有缺口，
+      # 防复发只能靠会红的门禁（外部写入者曾往源文件首行插生成标记，前科两起）。
+      - name: Watermark / signature scan
+        run: python3 tools/scan_watermarks.py
+
       # 对外法律文档（docs/PRIVACY.md / docs/TERMS.md）是应用内法律文本的**导出物**
       # （tools/export_legal_docs.py 从 app/src/main/res/values*/strings.xml 生成）。
       # 应用内那份永远是对的（用户看到的是它）⇒ 改了 strings.xml 却忘了重导出时，
