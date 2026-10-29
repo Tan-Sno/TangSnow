@@ -1,5 +1,5 @@
 [versions]
-agp = "9.4.1"
+agp = "9.5.0"
 # AGP 9.x 内置 Kotlin 运行时依赖 KGP；显式升 KGP 即可让内置 Kotlin 编译器跟随升级。
 # 原先该版本硬编码在根 buildscript 的 classpath 里，升级要改两处 —— 收口到本文件。
 kotlin = "2.4.10"

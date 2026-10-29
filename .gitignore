@@ -18,6 +18,7 @@
 /.idea/runConfigurations.xml
 /.idea/deploymentTargetSelector.xml
 /.idea/AndroidProjectSystem.xml
+/.idea/doNotAskNotifications.xml
 .DS_Store
 /build
 /captures
