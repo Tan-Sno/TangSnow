@@ -80,9 +80,14 @@ PATTERNS = [
     (r'co-authored-by', 'C git 尾签'),
     (r'signed-off-by', 'C git 尾签'),
     (r'\[…\]', 'D 尾签括号'),
+]
+# 大小写敏感的正则：`[AI…]` 尾签按约定全大写；IGNORECASE 会让上游代码的
+# C++ 数组索引 `[aIndex]` 撞上 `[AI` 形态（2026-11-01 gecko-build 假阳性实录）。
+PATTERNS_CASESensitive = [
     (r'\[(?:小通|GLM|AI|模型)[^\]]{0,40}\]', 'D 尾签括号'),
 ]
 COMPILED = [(re.compile(p, re.IGNORECASE), label) for p, label in PATTERNS]
+COMPILED += [(re.compile(p), label) for p, label in PATTERNS_CASESensitive]
 
 # E 隐形字符。U+2060 的 `apk` 豁免见 _scan_line。
 INVISIBLE = {'\u200b': 'ZWSP', '\u200c': 'ZWNJ', '\u200d': 'ZWJ',
